@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "parcel": "^2.14.4",
+    "typescript": "^5.8.3"
+  }
+}

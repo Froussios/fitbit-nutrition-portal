@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "sourceMap": true,
+    "rootDir": ".",
+    "outDir": "out/",
+    "types": ["node"],
+    "target": "ESNext",
+    "resolveJsonModule": true
+  },
+  "exclude": ["./static"]
+}
