@@ -1,6 +1,6 @@
 # Food Diary: architecture
 
-Status: proof of concept (milestone 0), revised 1 November 2026.
+Status: MVP = proof of concept (milestone M0), revised 1 November 2026.
 Input: the research brief *Food Diary App — Research Brief* (claude.ai artifact R564ZbBksjMt7uTPWngVyq).
 
 ## 1. Goal and ground rules
@@ -13,8 +13,8 @@ food definitions come from existing food databases.
   there and nowhere else. Syncing that log with other platforms is Google Health's job, not the app's.
 * **No custom backend.** Everything runs in the browser as a static site. Where that is not possible, the
   trade-off is written down in [DECISIONS.md](DECISIONS.md) instead of quietly adding a server.
-* **Proof-of-concept scope:** sign in, log simple entries, show today's diary. Meals, food search,
-  offline use and long-lived sessions come in later milestones.
+* **MVP = proof of concept:** sign in, write minimal entries, show the day. Food search, offline use,
+  long-lived sessions and meals are post-MVP milestones (see [ROADMAP.md](ROADMAP.md)).
 
 ## 2. Verified facts
 
@@ -177,5 +177,5 @@ These are maintained separately, so they stay in sync with the GitHub issues:
 
 * [DECISIONS.md](DECISIONS.md): recorded decisions (DR-01…) and open ones (D1 long-lived sessions,
   D3 food data mirror). D2 (live updates) is decided as polling: DR-08.
-* [ROADMAP.md](ROADMAP.md): MVP definition and targets, milestones M0–M4 with their issues, spikes, and
+* [ROADMAP.md](ROADMAP.md): the MVP (M0) and its targets, post-MVP milestones M1–M4 with their issues, spikes, and
   work saved for later.

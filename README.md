@@ -3,7 +3,7 @@
 A food diary that runs entirely in the browser and stores every entry in the user's own
 **Google Health** account (the successor of the Fitbit Web API). There is no backend and no database.
 
-This is milestone 0, a proof of concept:
+This is the MVP, a proof of concept (milestone M0):
 
 1. Sign in with Google and grant Google Health nutrition access (read and write).
 2. Log an entry from a small catalogue of local fake foods (written as Open Food Facts records) or from a
@@ -12,7 +12,7 @@ This is milestone 0, a proof of concept:
    totals. Entries made by this app can be deleted.
 
 * Design and verified API facts: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-* Milestones, MVP targets and work saved for later: [docs/ROADMAP.md](docs/ROADMAP.md)
+* MVP targets, post-MVP milestones and work saved for later: [docs/ROADMAP.md](docs/ROADMAP.md)
   (tracked in [GitHub issues](https://github.com/Froussios/fitbit-nutrition-portal/issues/1))
 * Decision log: [docs/DECISIONS.md](docs/DECISIONS.md)
 

@@ -10,7 +10,6 @@ labelled `decision`; when one closes, its outcome is added here. Supporting fact
 |---|---|---|---|---|
 | D1 | How to provide long-lived sessions | M3 | [#22](https://github.com/Froussios/fitbit-nutrition-portal/issues/22) | Stateless token broker (option A2) plus OAuth app in Production |
 | D3 | Design of the food data mirror | M1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) | Static index built by a scheduled job and served from a CDN |
-| — | Confirm the MVP targets | — | [#1](https://github.com/Froussios/fitbit-nutrition-portal/issues/1) | As proposed in ROADMAP.md |
 
 ## Decided
 
@@ -65,7 +64,7 @@ interactive search.
 
 ### DR-09 Authentication: Google Identity Services token model for now
 **Decision.** Short-lived access tokens from a Google popup, kept in `sessionStorage`; the user clicks
-Continue about hourly. Long-lived sessions are deferred to M3 (D1).
+Continue about hourly. Long-lived sessions are deferred to M3, after the MVP (D1).
 **Why.** Refresh tokens need the client secret for web clients, even with PKCE (V8), so they need a server
 or a policy-breaking shortcut. Not worth it before the product is usable.
 
@@ -76,6 +75,8 @@ without it.
 **Why.** Every Google OAuth client belongs to a Cloud project; there is no other way to reach Google
 Health data from the web.
 
-### DR-11 Meals are out of the proof-of-concept scope
-**Decision.** Custom meals are milestone M4, part of the MVP but not the PoC.
-**Why.** Owner decision; meals depend on real food data (M1).
+### DR-11 The MVP is the proof of concept
+**Decision.** The MVP is M0: sign in, write minimal entries, display the day. Food search (M1), daily-driver
+features (M2), long-lived sessions (M3) and custom meals (M4) are post-MVP milestones.
+**Why.** Owner decision: prove the Google Health API round trip first; meals also depend on real food
+data (M1).
