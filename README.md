@@ -18,6 +18,8 @@ This is the MVP, a proof of concept (milestone M0):
 
 ## Google Cloud setup (once, by the developer)
 
+Step-by-step checklist with troubleshooting: [issue #30](https://github.com/Froussios/fitbit-nutrition-portal/issues/30). Summary:
+
 The app needs one Google Cloud project and OAuth client. This is how Google identifies the app; users
 never create one, they just sign in with their Google account. The Google Health API has no sandbox, so
 use a separate project for development.

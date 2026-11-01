@@ -27,8 +27,8 @@ day**. Everything after it is a post-MVP milestone.
 | Devices | Works in a current browser on phone and desktop |
 | Infrastructure | A static site on GitHub Pages, no backend |
 
-Tracked in [M0 #2](https://github.com/Froussios/fitbit-nutrition-portal/issues/2). Remaining work: [#8](https://github.com/Froussios/fitbit-nutrition-portal/issues/8) (check against a real Google account) and
-[#11](https://github.com/Froussios/fitbit-nutrition-portal/issues/11) (deploy). The PoC already goes beyond the minimum (units and portions, custom foods, deleting
+Tracked in [M0 #2](https://github.com/Froussios/fitbit-nutrition-portal/issues/2). Remaining work: [#30](https://github.com/Froussios/fitbit-nutrition-portal/issues/30) (Google Cloud setup), then [#8](https://github.com/Froussios/fitbit-nutrition-portal/issues/8) (check
+against a real Google account) and [#11](https://github.com/Froussios/fitbit-nutrition-portal/issues/11) (deploy). The PoC already goes beyond the minimum (units and portions, custom foods, deleting
 own entries); those are kept but are not MVP criteria.
 
 ## Post-MVP milestones
