@@ -8,8 +8,8 @@ This is milestone 0, a proof of concept:
 1. Sign in with Google and grant Google Health nutrition access (read and write).
 2. Log an entry from a small catalogue of local fake foods (written as Open Food Facts records) or from a
    custom food, in g, ml, household measures or portions.
-3. See today's whole nutrition diary, including entries from the Google Health app and Health Connect,
-   with totals. Entries made by this app can be deleted.
+3. See today's whole Google Health nutrition diary, whichever app logged each entry, with amounts and
+   totals. Entries made by this app can be deleted.
 
 The design, the API facts it relies on and the open trade-offs are in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -88,9 +88,8 @@ docs/        architecture and decisions
 
 ## Known limitations (see the architecture doc)
 
-* Access tokens last about an hour. Long-lived sessions need refresh tokens, which Google only issues
-  through the client secret, so they need a small token broker (open decision D1). Click **Continue** when
-  asked.
+* Access tokens last about an hour; click **Continue** when asked. Long-lived sessions are planned for a
+  later milestone (they need refresh tokens, which Google only issues through the client secret).
 * The app never queries the public Open Food Facts API (its rate limits are too low). Food search will use
   a mirror; for now the catalogue is local fake data.
 * Only entries made by this app can be deleted (the write scope covers only the app's own data).

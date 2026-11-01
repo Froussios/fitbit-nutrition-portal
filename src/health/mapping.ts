@@ -2,7 +2,7 @@ import { foodLabel, nutrientsForAmount, type FoodItem, type FoodRef } from "../c
 import { idFromName, parseEntryId } from "../core/ids";
 import { NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "../core/nutrients";
 import { utcOffsetDuration } from "../core/time";
-import { formatNumber, PORTION_PREFIX, toBaseAmount, unitDef, type BaseUnit } from "../core/units";
+import { formatNumber, metricAmount, type BaseUnit } from "../core/units";
 import type { DataPoint, MealType, NutrientQuantity, NutritionLog } from "./types";
 
 export const NUTRITION_LOG_PARENT = "users/me/dataTypes/nutrition-log";
@@ -39,8 +39,9 @@ const round = (v: number, digits: number) => Math.round(v * 10 ** digits) / 10 *
  */
 export function buildNutritionLogPoint(draft: LogDraft, opts: BuildOptions): DataPoint {
   const { food, quantity, unit } = draft;
-  const baseAmount = toBaseAmount(food, quantity, unit);
   const profile = nutrientsForAmount(food, quantity, unit);
+  const metric = metricAmount(food, quantity, unit);
+  const servingUnit = opts.servingUnits?.[metric.unit];
 
   const end = new Date(draft.time.getTime() + ENTRY_DURATION_MS);
   const log: NutritionLog = {
@@ -50,23 +51,16 @@ export function buildNutritionLogPoint(draft: LogDraft, opts: BuildOptions): Dat
       startUtcOffset: utcOffsetDuration(draft.time),
       endUtcOffset: utcOffsetDuration(end),
     },
-    // The amount goes into the name because Health Connect keeps no serving size.
-    foodDisplayName: `${foodLabel(food)} (${amountLabel(food, quantity, unit, baseAmount)})`,
+    // The amount belongs in `serving`; it goes into the name only when the API's unit could not be resolved.
+    foodDisplayName: servingUnit ? foodLabel(food) : `${foodLabel(food)} (${formatNumber(metric.amount)} ${metric.unit})`,
     mealType: draft.mealType,
     energy: { kcal: round(profile.energyKcal, 1), userProvidedUnit: "KILOCALORIE" },
     ...profileToLogFields(profile),
   };
 
-  const servingUnit = opts.servingUnits?.[food.basis];
-  if (servingUnit) log.serving = { foodMeasurementUnit: servingUnit, amount: round(baseAmount, 2) };
+  if (servingUnit) log.serving = { foodMeasurementUnit: servingUnit, amount: round(metric.amount, 2) };
 
   return { name: `${NUTRITION_LOG_PARENT}/dataPoints/${opts.id}`, nutritionLog: log };
-}
-
-/** "250 g" as typed for plain units; portions resolve to the base amount ("40 g", not "1 × 1/2 cup (40 g)"). */
-function amountLabel(food: FoodItem, quantity: number, unit: string, baseAmount: number): string {
-  if (unit.startsWith(PORTION_PREFIX)) return `${formatNumber(baseAmount)} ${food.basis}`;
-  return `${formatNumber(quantity)} ${unitDef(unit)?.key ?? unit}`;
 }
 
 function profileToLogFields(profile: NutrientProfile): Pick<NutritionLog, "totalFat" | "totalCarbohydrate" | "nutrients"> {
@@ -84,19 +78,21 @@ function profileToLogFields(profile: NutrientProfile): Pick<NutritionLog, "total
   return out;
 }
 
-/** A diary row as the UI shows it, from any source (this app, Google Health app, Health Connect). */
+/** A diary row as the UI shows it, from any writer (this app, the Google Health app, other API clients). */
 export interface DiaryEntry {
   readonly name: string;
   readonly id: string;
   readonly start: Date;
   readonly mealType: MealType;
   readonly displayName: string;
+  /** The serving, e.g. "40 g" or "1 cup", when the entry has one. */
+  readonly amount?: string;
   readonly profile: NutrientProfile;
   /** Food reference, when the entry was written by this app. */
   readonly ref?: FoodRef;
   /** Written by this app, so it may be deleted or edited with the write scope. */
   readonly own: boolean;
-  /** Who wrote it, for entries from other apps ("Health Connect", "com.example.app"...). */
+  /** Who wrote it, for entries from other apps ("Google Health app", "com.example.app"...). */
   readonly sourceLabel?: string;
 }
 
@@ -130,10 +126,24 @@ function sourceLabel(point: DataPoint): string | undefined {
   return platform ? (PLATFORM_LABELS[platform] ?? platform) : undefined;
 }
 
-/**
- * @param ownClientId this app's OAuth client ID; entries recorded with it are ours.
- */
-export function toDiaryEntry(point: DataPoint, ownClientId?: string): DiaryEntry | undefined {
+export interface DiaryContext {
+  /** This app's OAuth client ID; entries recorded with it are ours. */
+  readonly ownClientId?: string;
+  /** food-measurement-unit resource name → display name, for servings that arrive without one. */
+  readonly unitNames?: ReadonlyMap<string, string>;
+}
+
+const UNIT_ABBREVIATIONS: Record<string, string> = { gram: "g", grams: "g", milliliter: "ml", millilitre: "ml", milliliters: "ml" };
+
+function servingText(log: NutritionLog, unitNames?: ReadonlyMap<string, string>): string | undefined {
+  const s = log.serving;
+  if (!s || s.amount === undefined) return undefined;
+  const name = (s.foodMeasurementUnitDisplayName ?? unitNames?.get(s.foodMeasurementUnit) ?? "").trim();
+  return `${formatNumber(s.amount)} ${UNIT_ABBREVIATIONS[name.toLowerCase()] ?? name}`.trim();
+}
+
+export function toDiaryEntry(point: DataPoint, ctx: DiaryContext = {}): DiaryEntry | undefined {
+  const { ownClientId } = ctx;
   const log = point.nutritionLog;
   if (!log || !point.name) return undefined;
 
@@ -153,12 +163,14 @@ export function toDiaryEntry(point: DataPoint, ownClientId?: string): DiaryEntry
   const own = writer !== undefined ? writer === ownClientId : parseEntryId(id) !== undefined;
   const ref = own ? parseEntryId(id)?.ref : undefined;
   const label = own ? undefined : sourceLabel(point);
+  const amount = servingText(log, ctx.unitNames);
   const entry: DiaryEntry = {
     name: point.name,
     id,
     start: new Date(log.interval.startTime),
     mealType: log.mealType ?? "MEAL_TYPE_UNSPECIFIED",
     displayName: log.foodDisplayName ?? "(unnamed food)",
+    ...(amount ? { amount } : {}),
     profile: { energyKcal: log.energy?.kcal ?? 0, nutrients },
     own,
     ...(ref ? { ref } : {}),
@@ -168,14 +180,18 @@ export function toDiaryEntry(point: DataPoint, ownClientId?: string): DiaryEntry
 }
 
 /** Entries in chronological order (the API returns newest first). */
-export function toDiaryEntries(points: readonly DataPoint[], ownClientId?: string): DiaryEntry[] {
+export function toDiaryEntries(points: readonly DataPoint[], ctx: DiaryContext = {}): DiaryEntry[] {
   return points
-    .map((p) => toDiaryEntry(p, ownClientId))
+    .map((p) => toDiaryEntry(p, ctx))
     .filter((e): e is DiaryEntry => e !== undefined)
     .sort((a, b) => a.start.getTime() - b.start.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /** Finds the gram and millilitre units among the API's food-measurement-unit points. */
+export function unitNamesOf(points: readonly DataPoint[]): Map<string, string> {
+  return new Map(points.flatMap((p) => (p.name && p.foodMeasurementUnit ? [[p.name, p.foodMeasurementUnit.displayName] as const] : [])));
+}
+
 export function findServingUnits(points: readonly DataPoint[]): Partial<Record<BaseUnit, string>> {
   const out: Partial<Record<BaseUnit, string>> = {};
   for (const p of points) {

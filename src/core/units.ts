@@ -101,6 +101,25 @@ export function toBaseAmount(food: Measurable, quantity: number, unit: string): 
   return from === "volume" ? amount * density : amount / density;
 }
 
+/**
+ * The amount in grams or millilitres, keeping the kind of unit the user chose
+ * (250 g of milk stays 250 g; no density conversion). Used for the API's serving.
+ */
+export function metricAmount(food: Measurable, quantity: number, unit: string): { amount: number; unit: BaseUnit } {
+  if (!Number.isFinite(quantity) || quantity < 0) {
+    throw new UnitConversionError(`Invalid quantity: ${quantity}`);
+  }
+  if (unit.startsWith(PORTION_PREFIX)) {
+    const name = unit.slice(PORTION_PREFIX.length);
+    const portion = food.portions.find((p) => p.name === name);
+    if (!portion) throw new UnitConversionError(`Unknown portion: ${name}`);
+    return { amount: quantity * portion.amount, unit: portion.unit };
+  }
+  const def = unitDef(unit);
+  if (!def) throw new UnitConversionError(`Unknown unit: ${unit}`);
+  return { amount: quantity * def.toBase, unit: def.dimension === "mass" ? "g" : "ml" };
+}
+
 /** Units the user may pick for a food: same dimension always, the other one only with a density. */
 export function selectableUnits(food: Measurable): UnitDef[] {
   const dim = dimensionOf(food.basis);

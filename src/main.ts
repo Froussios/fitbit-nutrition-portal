@@ -8,7 +8,7 @@ import type { FoodItem } from "./core/food";
 import { LocalFoodCatalog, type FoodCatalog } from "./food/catalog";
 import { SAMPLE_FOODS } from "./food/sample-foods";
 import { HealthApiError, HealthClient } from "./health/client";
-import { buildNutritionLogPoint, findServingUnits, toDiaryEntries, type DiaryEntry, type LogDraft } from "./health/mapping";
+import { buildNutritionLogPoint, findServingUnits, toDiaryEntries, unitNamesOf, type DiaryEntry, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
@@ -23,6 +23,7 @@ class App {
   private readonly auth: GoogleAuth;
   private readonly api: HealthClient;
   private servingUnits: Partial<Record<BaseUnit, string>> = {};
+  private unitNames = new Map<string, string>();
   /** Points written this session that a list call has not returned yet (the API may lag). */
   private readonly pending = new Map<string, DataPoint>();
   private entries: DiaryEntry[] = [];
@@ -85,7 +86,9 @@ class App {
     }
     // Serving units are optional: without them entries carry no `serving` field.
     try {
-      this.servingUnits = findServingUnits(await this.api.listFoodMeasurementUnits());
+      const units = await this.api.listFoodMeasurementUnits();
+      this.servingUnits = findServingUnits(units);
+      this.unitNames = unitNamesOf(units);
     } catch (e) {
       console.info("food-measurement-unit list not available; logging without serving.", e);
     }
@@ -104,7 +107,7 @@ class App {
       for (const p of points) if (p.name) this.pending.delete(idFromName(p.name));
       const today = civilDate(new Date());
       const pending = [...this.pending.values()].filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === today);
-      this.entries = toDiaryEntries([...points, ...pending], this.clientId);
+      this.entries = toDiaryEntries([...points, ...pending], { ownClientId: this.clientId, unitNames: this.unitNames });
     } catch (e) {
       this.listError = errorMessage(e);
       this.handleError(e, false);
@@ -211,7 +214,7 @@ class App {
           el(
             "p",
             { class: "hint" },
-            "Everything in your Google Health nutrition diary for today, including entries from the Google Health app and apps syncing through Health Connect. " +
+            "Everything in your Google Health nutrition diary for today, whichever app logged it. " +
               "Only entries made by this app can be deleted here.",
           ),
         ),

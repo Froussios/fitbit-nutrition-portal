@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PORTION_PREFIX, selectableUnits, toBaseAmount, UnitConversionError, type Measurable } from "../src/core/units";
+import { metricAmount, PORTION_PREFIX, selectableUnits, toBaseAmount, UnitConversionError, type Measurable } from "../src/core/units";
 
 const oats: Measurable = { basis: "g", portions: [{ name: "1/2 cup (40 g)", amount: 40, unit: "g" }] };
 const milk: Measurable = { basis: "ml", portions: [], densityGPerMl: 1.03 };
@@ -37,5 +37,14 @@ describe("selectableUnits", () => {
   it("offers both dimensions with a density", () => {
     const dims = new Set(selectableUnits(milk).map((u) => u.dimension));
     expect(dims).toEqual(new Set(["mass", "volume"]));
+  });
+});
+
+describe("metricAmount", () => {
+  it("keeps the dimension the user chose", () => {
+    expect(metricAmount(milk, 250, "g")).toEqual({ amount: 250, unit: "g" });
+    expect(metricAmount(milk, 2, "cup")).toEqual({ amount: 500, unit: "ml" });
+    expect(metricAmount(cola, 1, `${PORTION_PREFIX}can`)).toEqual({ amount: 375, unit: "ml" });
+    expect(() => metricAmount(cola, 1, "furlong")).toThrow(UnitConversionError);
   });
 });

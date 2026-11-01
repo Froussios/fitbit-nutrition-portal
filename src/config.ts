@@ -7,7 +7,7 @@
  * (VITE_GOOGLE_CLIENT_ID); the setup screen is a fallback for development.
  */
 
-/** Read the whole nutrition diary (all sources: Google Health app, Health Connect, other apps). */
+/** Read the whole nutrition diary (all sources: the Google Health app, devices, other apps). */
 export const NUTRITION_READ_SCOPE = "https://www.googleapis.com/auth/googlehealth.nutrition.readonly";
 /** Create entries, and edit or delete the entries this app created. */
 export const NUTRITION_WRITE_SCOPE = "https://www.googleapis.com/auth/googlehealth.nutrition.writeonly";

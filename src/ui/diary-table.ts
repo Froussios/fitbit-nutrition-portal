@@ -24,7 +24,7 @@ export function renderDiaryTable({ entries, pendingIds, onDelete }: DiaryTableOp
   }
 
   const total = sumProfiles(entries.map((e) => e.profile));
-  const head = ["Time", "Meal", "Food", "kcal", "kJ", "Protein", "Carbs", "Fat", "Source", ""];
+  const head = ["Time", "Meal", "Food", "Amount", "kcal", "kJ", "Protein", "Carbs", "Fat", "Logged by", ""];
 
   return el(
     "div",
@@ -32,7 +32,7 @@ export function renderDiaryTable({ entries, pendingIds, onDelete }: DiaryTableOp
     el(
       "table",
       {},
-      el("thead", {}, el("tr", {}, ...head.map((h, i) => el("th", { scope: "col", class: i >= 3 && i <= 7 ? "num" : undefined }, h)))),
+      el("thead", {}, el("tr", {}, ...head.map((h, i) => el("th", { scope: "col", class: i >= 3 && i <= 8 ? "num" : undefined }, h)))),
       el(
         "tbody",
         {},
@@ -43,6 +43,7 @@ export function renderDiaryTable({ entries, pendingIds, onDelete }: DiaryTableOp
             el("td", {}, fmtTime(e.start)),
             el("td", {}, mealLabel(e.mealType)),
             el("td", {}, e.displayName, pendingIds.has(e.id) && el("span", { class: "tag" }, "syncing")),
+            el("td", { class: "num" }, e.amount ?? "–"),
             el("td", { class: "num" }, fmtKcal(e.profile.energyKcal)),
             el("td", { class: "num" }, fmtKj(e.profile.energyKcal)),
             el("td", { class: "num" }, fmtGrams(e.profile.nutrients.protein)),
@@ -65,7 +66,7 @@ export function renderDiaryTable({ entries, pendingIds, onDelete }: DiaryTableOp
         el(
           "tr",
           {},
-          el("th", { scope: "row", colspan: 3 }, `Total (${entries.length} ${entries.length === 1 ? "entry" : "entries"})`),
+          el("th", { scope: "row", colspan: 4 }, `Total (${entries.length} ${entries.length === 1 ? "entry" : "entries"})`),
           el("td", { class: "num" }, fmtKcal(total.energyKcal)),
           el("td", { class: "num" }, fmtKj(total.energyKcal)),
           el("td", { class: "num" }, fmtGrams(total.nutrients.protein)),

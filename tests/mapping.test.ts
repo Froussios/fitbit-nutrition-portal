@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PORTION_PREFIX } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { buildNutritionLogPoint, findServingUnits, toDiaryEntries, toDiaryEntry } from "../src/health/mapping";
+import { buildNutritionLogPoint, findServingUnits, toDiaryEntries, toDiaryEntry, unitNamesOf } from "../src/health/mapping";
 import type { DataPoint } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
@@ -43,6 +43,27 @@ describe("buildNutritionLogPoint", () => {
       { id: "e-test-0002-smp", servingUnits: { g: "users/me/dataTypes/food-measurement-unit/dataPoints/147" } },
     );
     expect(p.nutritionLog!.serving).toEqual({ foodMeasurementUnit: "users/me/dataTypes/food-measurement-unit/dataPoints/147", amount: 55 });
+    // With a serving, the amount is not repeated in the name.
+    expect(p.nutritionLog!.foodDisplayName).toBe("Rolled oats");
+  });
+
+  it("keeps the kind of unit the user chose for the serving", () => {
+    const milk = SAMPLE_FOODS.find((f) => f.ref.id === "milk-full-cream")!;
+    const units = { g: "units/gram", ml: "units/ml" };
+    const byMass = buildNutritionLogPoint({ food: milk, quantity: 250, unit: "g", mealType: "SNACK", time }, { id: "e-test-0004-smp", servingUnits: units });
+    expect(byMass.nutritionLog!.serving).toEqual({ foodMeasurementUnit: "units/gram", amount: 250 });
+    const byCup = buildNutritionLogPoint({ food: milk, quantity: 1, unit: "cup", mealType: "SNACK", time }, { id: "e-test-0005-smp", servingUnits: units });
+    expect(byCup.nutritionLog!.serving).toEqual({ foodMeasurementUnit: "units/ml", amount: 250 });
+  });
+
+  it("shows the serving in the diary entry", () => {
+    const p = buildNutritionLogPoint(
+      { food: oats, quantity: 55, unit: "g", mealType: "SNACK", time },
+      { id: "e-test-0006-smp", servingUnits: { g: "units/gram" } },
+    );
+    expect(toDiaryEntry(p, { unitNames: new Map([["units/gram", "gram"]]) })!.amount).toBe("55 g");
+    const fromApi = { ...p, nutritionLog: { ...p.nutritionLog!, serving: { foodMeasurementUnit: "units/9", amount: 2, foodMeasurementUnitDisplayName: "cup" } } };
+    expect(toDiaryEntry(fromApi)!.amount).toBe("2 cup");
   });
 
   it("round-trips into a diary entry", () => {
@@ -70,7 +91,7 @@ describe("toDiaryEntries", () => {
   const ours = buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", mealType: "BREAKFAST", time }, { id: "e-mgx-ab12-smp-oats" });
 
   it("sorts chronologically and keeps entries from other sources", () => {
-    const list = toDiaryEntries([other, ours, { name: "x" }], "our-client");
+    const list = toDiaryEntries([other, ours, { name: "x" }], { ownClientId: "our-client" });
     expect(list.map((e) => e.displayName)).toEqual(["Rolled oats (40 g)", "Flat white"]);
     expect(list[0]!.own).toBe(true);
     expect(list[1]!.own).toBe(false);
@@ -89,8 +110,8 @@ describe("entry ownership", () => {
   });
 
   it("trusts the recorded OAuth client over the ID format", () => {
-    expect(toDiaryEntry(point("our-client"), "our-client")!.own).toBe(true);
-    const foreign = toDiaryEntry(point("someone-else"), "our-client")!;
+    expect(toDiaryEntry(point("our-client"), { ownClientId: "our-client" })!.own).toBe(true);
+    const foreign = toDiaryEntry(point("someone-else"), { ownClientId: "our-client" })!;
     expect(foreign.own).toBe(false);
     expect(foreign.ref).toBeUndefined();
     expect(foreign.sourceLabel).toBe("Google Health API app");
@@ -98,11 +119,15 @@ describe("entry ownership", () => {
 
   it("names the Google Health app", () => {
     const p: DataPoint = { ...point(""), name: "users/me/dataTypes/nutrition-log/dataPoints/8812345", dataSource: { application: { packageName: "com.google.fitbit" } } };
-    expect(toDiaryEntry(p, "our-client")!.sourceLabel).toBe("Google Health app");
+    expect(toDiaryEntry(p, { ownClientId: "our-client" })!.sourceLabel).toBe("Google Health app");
   });
 });
 
 describe("findServingUnits", () => {
+  it("maps unit resource names to display names", () => {
+    expect(unitNamesOf([{ name: "u/2", foodMeasurementUnit: { displayName: "gram" } }, { name: "u/3" }])).toEqual(new Map([["u/2", "gram"]]));
+  });
+
   it("picks gram and millilitre units", () => {
     const units = findServingUnits([
       { name: "u/1", foodMeasurementUnit: { displayName: "cup" } },
