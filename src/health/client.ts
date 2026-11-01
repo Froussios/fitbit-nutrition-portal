@@ -1,5 +1,8 @@
 import type { DataPoint, Identity, ListDataPointsResponse, Operation } from "./types";
 import { nutritionDayFilter } from "../core/time";
+import { describeError, logger, truncate } from "../debug/log";
+
+const log = logger("health-api");
 
 export const HEALTH_API_BASE = "https://health.googleapis.com/v4";
 
@@ -29,11 +32,16 @@ type Query = Record<string, string | number | undefined>;
  * The API sends CORS headers for any origin, so no proxy is needed.
  */
 export class HealthClient {
+  private readonly fetchImpl: typeof fetch;
+
   constructor(
     private readonly getToken: TokenProvider,
-    private readonly fetchImpl: typeof fetch = (...a) => fetch(...a),
+    fetchImpl: typeof fetch = (...a) => fetch(...a),
     private readonly base: string = HEALTH_API_BASE,
-  ) {}
+    timeoutMs = 20_000,
+  ) {
+    this.fetchImpl = withTimeout(fetchImpl, timeoutMs);
+  }
 
   getIdentity(): Promise<Identity> {
     return this.request("GET", "users/me/identity");
@@ -85,18 +93,78 @@ export class HealthClient {
       });
     };
 
-    let res = await send(false);
-    if (res.status === 401) res = await send(true); // token expired or revoked: one retry
+    const call = `${method} ${path}`;
+    const query = Object.fromEntries(url.searchParams);
+    const details = {
+      ...(Object.keys(query).length ? { query } : {}),
+      ...(opts.body !== undefined ? { body: opts.body } : {}),
+    };
+    log.debug(`→ ${call}`, Object.keys(details).length ? details : undefined);
+    const started = performance.now();
 
-    const text = await res.text();
-    const json: unknown = text ? JSON.parse(text) : {};
-    if (!res.ok) throw toError(res.status, json);
+    let res: Response;
+    let text: string;
+    try {
+      res = await send(false);
+      if (res.status === 401) {
+        log.warn(`${call}: 401, the access token was rejected; asking for a new sign-in`, { body: truncate(await res.text()) });
+        res = await send(true); // token expired or revoked: one retry
+      }
+      text = await res.text();
+    } catch (e) {
+      log.error(`✗ ${call} failed after ${Math.round(performance.now() - started)} ms`, describeError(e));
+      throw e;
+    }
+    const ms = Math.round(performance.now() - started);
+
+    let json: unknown;
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      log.error(`✗ ${call}: HTTP ${res.status} in ${ms} ms, response is not JSON`, { contentType: res.headers.get("content-type"), body: truncate(text) });
+      // Proxies and some Google front ends answer errors with HTML.
+      if (!res.ok) throw new HealthApiError(`HTTP ${res.status} from ${call}: ${text.slice(0, 200)}`, res.status);
+      throw new HealthApiError(`Unreadable response from ${call}`, res.status);
+    }
+    if (!res.ok) {
+      log.error(`✗ ${call}: HTTP ${res.status} in ${ms} ms`, json);
+      throw toError(res.status, json, call);
+    }
+    log.info(`← ${call}: HTTP ${res.status} in ${ms} ms`, summarize(json));
     return json as T;
   }
 }
 
-function toError(httpStatus: number, json: unknown): HealthApiError {
+/** Keeps successful responses readable in the log: counts for lists, the full object otherwise. */
+function summarize(json: unknown): unknown {
+  const page = json as { dataPoints?: unknown[]; nextPageToken?: string };
+  if (Array.isArray(page.dataPoints)) {
+    return { dataPoints: page.dataPoints.length, nextPageToken: page.nextPageToken || undefined, first: page.dataPoints[0] };
+  }
+  return json;
+}
+
+/** fetch with a timeout, so a request that never answers surfaces as an error instead of hanging the UI. */
+function withTimeout(fetchImpl: typeof fetch, ms: number): typeof fetch {
+  return async (input, init) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    try {
+      return await fetchImpl(input, { ...init, signal: controller.signal });
+    } catch (e) {
+      if (controller.signal.aborted) throw new HealthApiError(`Google Health did not answer within ${ms / 1000} s.`, 0, "TIMEOUT");
+      // fetch rejects with a bare TypeError on network and CORS failures.
+      throw new HealthApiError(`Could not reach Google Health (${e instanceof Error ? e.message : String(e)}).`, 0, "NETWORK");
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+}
+
+function toError(httpStatus: number, json: unknown, call: string): HealthApiError {
   const err = (json as { error?: { message?: string; status?: string; details?: { reason?: string }[] } }).error;
   const reasons = (err?.details ?? []).flatMap((d) => (d.reason ? [d.reason] : []));
-  return new HealthApiError(err?.message ?? `HTTP ${httpStatus}`, httpStatus, err?.status, reasons);
+  const code = [err?.status, ...reasons].filter(Boolean).join(", ");
+  const message = `${err?.message ?? "Request failed"} (HTTP ${httpStatus}${code ? `, ${code}` : ""}; ${call})`;
+  return new HealthApiError(message, httpStatus, err?.status, reasons);
 }

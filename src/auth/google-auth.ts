@@ -7,6 +7,9 @@
  * without showing the consent screen again.
  */
 
+import { logger } from "../debug/log";
+
+const log = logger("auth");
 const GIS_SRC = "https://accounts.google.com/gsi/client";
 const STORAGE_KEY = "foodDiary.token";
 /** Treat tokens as expired a little early so in-flight requests don't fail. */
@@ -31,12 +34,17 @@ let gisLoading: Promise<void> | undefined;
 export function loadGoogleIdentityServices(): Promise<void> {
   if (window.google?.accounts?.oauth2) return Promise.resolve();
   gisLoading ??= new Promise<void>((resolve, reject) => {
+    log.debug(`Loading Google Identity Services from ${GIS_SRC}`);
     const s = document.createElement("script");
     s.src = GIS_SRC;
     s.async = true;
-    s.onload = () => resolve();
+    s.onload = () => {
+      log.info("Google Identity Services loaded");
+      resolve();
+    };
     s.onerror = () => {
       gisLoading = undefined;
+      log.error(`Could not load ${GIS_SRC} (network error or blocked by an extension)`);
       reject(new Error("Could not load Google sign-in. Check your connection or content blockers."));
     };
     document.head.append(s);
@@ -57,6 +65,13 @@ export class GoogleAuth {
     private readonly requiredScopes: readonly string[] = scopes,
   ) {
     this.token = this.restore();
+    if (this.token) {
+      log.info("Restored access token from this tab's session", {
+        expiresAt: new Date(this.token.expiresAt).toISOString(),
+        valid: this.isSignedIn,
+        scopes: this.grantedScopes,
+      });
+    }
   }
 
   get isSignedIn(): boolean {
@@ -80,16 +95,23 @@ export class GoogleAuth {
   /** Must run inside a user gesture (click), or the popup is blocked. */
   async signIn(prompt: "" | "consent" | "select_account" = ""): Promise<void> {
     await loadGoogleIdentityServices();
-    this.client ??= google.accounts.oauth2.initTokenClient({
-      client_id: this.clientId,
-      scope: this.scopes.join(" "),
-      callback: (r) => this.handleToken(r),
-      error_callback: (e) => this.settle(new Error(popupErrorMessage(e.type))),
-    });
+    if (!this.client) {
+      log.info("Creating token client", { clientId: this.clientId, scopes: this.scopes, origin: location.origin });
+      this.client = google.accounts.oauth2.initTokenClient({
+        client_id: this.clientId,
+        scope: this.scopes.join(" "),
+        callback: (r) => this.handleToken(r),
+        error_callback: (e) => {
+          log.error(`Sign-in popup error: ${e.type}`, e);
+          this.settle(new Error(popupErrorMessage(e.type)));
+        },
+      });
+    }
     const done = new Promise<void>((resolve, reject) => {
       this.pending?.reject(new Error("Sign-in superseded by a new attempt."));
       this.pending = { resolve, reject };
     });
+    log.info(`Requesting access token (prompt: "${prompt}")`);
     this.client.requestAccessToken({ prompt });
     return done;
   }
@@ -97,6 +119,7 @@ export class GoogleAuth {
   /** Returns a valid access token, or throws SignInRequiredError (the UI then asks for a click). */
   async getAccessToken(opts: { forceRefresh?: boolean } = {}): Promise<string> {
     if (opts.forceRefresh && this.token) {
+      log.warn("Access token rejected by the API; marking it expired");
       this.token = { ...this.token, expiresAt: 0 };
       this.persist();
       this.emit();
@@ -106,6 +129,7 @@ export class GoogleAuth {
   }
 
   signOut(): void {
+    log.info("Signing out and revoking the access token");
     const t = this.token?.accessToken;
     this.token = undefined;
     this.persist();
@@ -115,10 +139,17 @@ export class GoogleAuth {
 
   private handleToken(r: google.accounts.oauth2.TokenResponse): void {
     if (r.error) {
+      log.error(`Token response error: ${r.error}`, { error: r.error, description: r.error_description, uri: r.error_uri });
       this.settle(new Error(r.error_description || r.error));
       return;
     }
     const missing = this.requiredScopes.filter((s) => !google.accounts.oauth2.hasGrantedAllScopes(r, s));
+    // Never log r.access_token.
+    log.info("Access token received", {
+      expiresInSeconds: Number(r.expires_in),
+      grantedScopes: r.scope.split(" "),
+      missingRequiredScopes: missing,
+    });
     if (missing.length) {
       this.settle(new Error("Google Health nutrition access was not granted. Sign in again and tick the nutrition permission."));
       return;

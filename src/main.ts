@@ -13,11 +13,30 @@ import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
 import { createLogForm } from "./ui/log-form";
+import { createDebugPanel } from "./ui/debug-panel";
+import { describeError, installGlobalErrorHandlers, logger } from "./debug/log";
 
 /** Refetch interval while the tab is visible: the client-only stand-in for webhook pushes. */
 const POLL_MS = 5 * 60_000;
 
 const root = document.getElementById("app")!;
+const appLog = logger("app");
+installGlobalErrorHandlers();
+
+/** Session details the App adds to the debug log header (never tokens). */
+let sessionInfo: () => Record<string, string> = () => ({});
+
+/** Shown at the bottom of every screen while we debug the proof of concept. */
+const debugPanel = createDebugPanel(() => ({
+  app: `Food Diary (${import.meta.env.MODE} build)`,
+  time: new Date().toString(),
+  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  origin: location.origin,
+  clientId: getClientId() ?? "(none)",
+  clientIdSource: isClientIdBuiltIn() ? "build (VITE_GOOGLE_CLIENT_ID)" : "setup screen (localStorage)",
+  userAgent: navigator.userAgent,
+  ...sessionInfo(),
+}));
 
 class App {
   private readonly auth: GoogleAuth;
@@ -32,6 +51,8 @@ class App {
   private loading = false;
   private listError = "";
   private ready = false;
+  /** Why connecting to Google Health failed; shown with a Retry button instead of "Connecting…". */
+  private connectError = "";
 
   private readonly form: HTMLElement;
   private readonly diary = el("div", { class: "diary" });
@@ -46,6 +67,12 @@ class App {
     this.auth = new GoogleAuth(clientId, SCOPES, [NUTRITION_WRITE_SCOPE]);
     this.api = new HealthClient((o) => this.auth.getAccessToken(o));
     this.auth.onChange(() => this.render());
+    sessionInfo = () => ({
+      signedIn: String(this.auth.isSignedIn),
+      grantedScopes: this.auth.grantedScopes.join(" ") || "(none)",
+      servingUnits: JSON.stringify(this.servingUnits),
+    });
+    appLog.info("App started", { clientId, origin: location.origin, requestedScopes: SCOPES, restoredSession: this.auth.isSignedIn });
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible" && this.auth.isSignedIn) void this.loadToday();
@@ -64,6 +91,7 @@ class App {
       await this.auth.signIn(prompt);
       await this.afterSignIn();
     } catch (e) {
+      appLog.error("Sign-in failed", describeError(e));
       this.signInError = errorMessage(e);
       this.render();
     }
@@ -71,15 +99,25 @@ class App {
 
   private async afterSignIn() {
     this.notice = "";
+    this.connectError = "";
+    this.ready = false;
+    this.render();
+    appLog.info("Connecting: checking the Google Health identity");
     try {
-      await this.api.getIdentity();
+      const identity = await this.api.getIdentity();
+      appLog.info("Google Health account is linked", { healthUserId: identity.healthUserId ?? "(not returned)" });
     } catch (e) {
-      if (e instanceof HealthApiError && e.accountNotLinked) {
-        this.notice =
-          "Your Google account is not linked to Google Health yet. Install the Google Health app, sign in there once, then press Refresh.";
-      } else return this.handleError(e);
+      if (e instanceof SignInRequiredError) return this.handleError(e);
+      appLog.error("Identity check failed; showing the connection error", describeError(e));
+      this.connectError =
+        e instanceof HealthApiError && e.accountNotLinked
+          ? "Your Google account is not linked to Google Health yet. Open the Google Health app on your phone, sign in there once, then press Retry."
+          : errorMessage(e);
+      this.render();
+      return;
     }
     if (!this.auth.grantedScopes.includes(NUTRITION_READ_SCOPE)) {
+      appLog.warn("Read scope not granted; only this app's own entries will be listed", { granted: this.auth.grantedScopes });
       this.notice =
         "Read access to your nutrition diary was not granted, so only entries made by this app are shown. " +
         "Sign out and sign in again, and tick the permission to see your nutrition data, to see everything.";
@@ -89,8 +127,15 @@ class App {
       const units = await this.api.listFoodMeasurementUnits();
       this.servingUnits = findServingUnits(units);
       this.unitNames = unitNamesOf(units);
+      appLog.info(`Food measurement units: ${units.length} listed`, {
+        gramAndMillilitre: this.servingUnits,
+        names: [...this.unitNames.values()].slice(0, 30),
+      });
+      if (!this.servingUnits.g || !this.servingUnits.ml) {
+        appLog.warn("Gram or millilitre unit not found; affected entries put the amount in the name instead of `serving`");
+      }
     } catch (e) {
-      console.info("food-measurement-unit list not available; logging without serving.", e);
+      appLog.warn("food-measurement-unit list not available; logging without `serving`", describeError(e));
     }
     this.ready = true;
     this.render();
@@ -103,12 +148,19 @@ class App {
     this.listError = "";
     this.renderDiary();
     try {
-      const points = await this.api.listNutritionLogs(civilDate(new Date()));
-      for (const p of points) if (p.name) this.pending.delete(idFromName(p.name));
       const today = civilDate(new Date());
+      const points = await this.api.listNutritionLogs(today);
+      for (const p of points) if (p.name) this.pending.delete(idFromName(p.name));
       const pending = [...this.pending.values()].filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === today);
       this.entries = toDiaryEntries([...points, ...pending], { ownClientId: this.clientId, unitNames: this.unitNames });
+      const unparsed = points.length - this.entries.length + pending.length;
+      appLog.info(`Diary for ${today}: ${points.length} from the API, ${pending.length} pending`, {
+        own: this.entries.filter((e) => e.own).length,
+        others: this.entries.filter((e) => !e.own).map((e) => e.sourceLabel ?? "(unknown writer)"),
+        ...(unparsed > 0 ? { skippedWithoutNutritionLog: unparsed } : {}),
+      });
     } catch (e) {
+      appLog.error("Loading the diary failed", describeError(e));
       this.listError = errorMessage(e);
       this.handleError(e, false);
     } finally {
@@ -119,12 +171,24 @@ class App {
 
   private async log(draft: LogDraft) {
     const id = newEntryId(draft.food.ref);
-    const point = buildNutritionLogPoint(draft, { id, servingUnits: this.servingUnits });
+    let point: DataPoint;
+    try {
+      point = buildNutritionLogPoint(draft, { id, servingUnits: this.servingUnits });
+    } catch (e) {
+      appLog.error("Could not build the entry", { food: draft.food.ref, quantity: draft.quantity, unit: draft.unit, error: describeError(e) });
+      throw e;
+    }
+    appLog.info(`Logging ${draft.food.name}`, { id, quantity: draft.quantity, unit: draft.unit, mealType: draft.mealType });
     try {
       const op = await this.api.createNutritionLog(point);
-      if (op.error) throw new Error(op.error.message ?? "Google Health rejected the entry.");
+      if (op.error) {
+        appLog.error("Create returned an operation error", op.error);
+        throw new Error(op.error.message ?? "Google Health rejected the entry.");
+      }
+      if (!op.done) appLog.warn("Create returned an operation that is not done yet", { name: op.name });
       this.pending.set(id, op.response?.nutritionLog ? { ...point, ...op.response } : point);
     } catch (e) {
+      appLog.error("Logging the entry failed", describeError(e));
       this.handleError(e, false);
       throw e;
     }
@@ -133,12 +197,14 @@ class App {
 
   private async remove(entry: DiaryEntry) {
     if (!confirm(`Delete "${entry.displayName}" from Google Health?`)) return;
+    appLog.info(`Deleting ${entry.name}`);
     try {
       await this.api.deleteNutritionLogs([entry.name]);
       this.pending.delete(entry.id);
       this.entries = this.entries.filter((e) => e.id !== entry.id);
       this.renderDiary();
     } catch (e) {
+      appLog.error("Deleting the entry failed", describeError(e));
       this.handleError(e);
     }
     await this.loadToday();
@@ -146,11 +212,11 @@ class App {
 
   private handleError(e: unknown, rerender = true) {
     if (e instanceof SignInRequiredError) {
+      appLog.warn("Access token missing or expired; asking the user to sign in again");
       this.ready = false;
       this.render();
       return;
     }
-    console.error(e);
     if (rerender) {
       this.notice = errorMessage(e);
       this.render();
@@ -190,6 +256,7 @@ class App {
           el("button", { type: "button", class: "primary", onclick: () => void this.signIn() }, expired ? "Continue" : "Sign in with Google"),
           this.signInError && el("p", { class: "status error" }, this.signInError),
         ),
+        debugPanel,
       );
       return;
     }
@@ -198,7 +265,7 @@ class App {
       root,
       header,
       this.notice && el("p", { class: "notice" }, this.notice),
-      this.ready ? this.form : el("p", { class: "status" }, "Connecting to Google Health…"),
+      this.ready ? this.form : this.connectError ? this.renderConnectError() : el("p", { class: "status" }, "Connecting to Google Health…"),
       this.ready &&
         el(
           "section",
@@ -218,8 +285,25 @@ class App {
               "Only entries made by this app can be deleted here.",
           ),
         ),
+      debugPanel,
     );
     this.renderDiary();
+  }
+
+  private renderConnectError(): HTMLElement {
+    return el(
+      "section",
+      { class: "card" },
+      el("h2", {}, "Could not connect to Google Health"),
+      el("p", { class: "status error" }, this.connectError),
+      el(
+        "div",
+        { class: "actions" },
+        el("button", { type: "button", class: "primary", onclick: () => void this.afterSignIn() }, "Retry"),
+        el("button", { type: "button", onclick: () => this.auth.signOut() }, "Sign out"),
+      ),
+      el("p", { class: "hint" }, "Details are in the Debug log below (Copy log to share it). Common causes are listed in issue #30."),
+    );
   }
 
   private renderDiary() {
@@ -276,7 +360,8 @@ function renderSetup(canCancel = false) {
     }
     location.reload();
   });
-  replaceChildren(root, el("header", { class: "top" }, el("h1", {}, "Food Diary")), form);
+  appLog.info("No client ID built in; showing developer setup");
+  replaceChildren(root, el("header", { class: "top" }, el("h1", {}, "Food Diary")), form, debugPanel);
 }
 
 const catalog: FoodCatalog = new LocalFoodCatalog(SAMPLE_FOODS);
