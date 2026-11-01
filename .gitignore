@@ -1,7 +1,5 @@
-**/.parcel-cache
-**/node_modules
-**/build/
-**/dist/
-**/out/
-.DS_store
-function/static
+node_modules/
+dist/
+.env.local
+.env.*.local
+.DS_Store

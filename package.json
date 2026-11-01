@@ -1,31 +1,20 @@
 {
-  "version": "0.0.12",
-  "config": {
-    "function_name": "TODO-function-name",
-    "project": "TODO-project-id",
-    "region": "australia-southeast1"
-  },
+  "name": "food-diary",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Client-side food diary backed by the Google Health API (proof of concept).",
+  "type": "module",
   "scripts": {
-    "prebuild": "yarn --cwd=static install",
-    "build": "yarn tsc && yarn tsc -p static && cd static && yarn parcel build static/index.html --dist-dir=../out/static  --public-url ./",
-    "postbuild": "cp package.json out/ && cp yarn.lock out/",
-    "clear": "rm -rf out .parcel-cache static/build static/dist",
-    "preserve": "yarn build",
-    "serve": "node out/function.js --local",
-    "gcp-build": "cat /dev/null",
-    "predeploy": "yarn build && yarn version --patch",
-    "deploy": "gcloud functions deploy ${npm_package_config_function_name} --region=${npm_package_config_region} --project=${npm_package_config_project} --source=out/ --trigger-http --runtime=nodejs22 --memory=256Mi --gen2 --allow-unauthenticated",
-    "postdeploy": "echo https://${npm_package_config_region}-${npm_package_config_project}.cloudfunctions.net/${npm_package_config_function_name}/index.html"
-  },
-  "dependencies": {
-    "@google-cloud/functions-framework": "^3.3.0",
-    "@material/web": "^2.3.0",
-    "express": "^5.1.0",
-    "lit": "^3.3.0"
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "@types/node": "^20.12.7",
-    "parcel": "^2.14.4",
-    "typescript": "^5.8.3"
+    "@types/google.accounts": "^0.0.18",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
   }
 }
