@@ -11,8 +11,10 @@ This is milestone 0, a proof of concept:
 3. See today's whole Google Health nutrition diary, whichever app logged each entry, with amounts and
    totals. Entries made by this app can be deleted.
 
-The design, the API facts it relies on and the open trade-offs are in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+* Design and verified API facts: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+* Milestones, MVP targets and work saved for later: [docs/ROADMAP.md](docs/ROADMAP.md)
+  (tracked in [GitHub issues](https://github.com/Froussios/fitbit-nutrition-portal/issues/1))
+* Decision log: [docs/DECISIONS.md](docs/DECISIONS.md)
 
 ## Google Cloud setup (once, by the developer)
 

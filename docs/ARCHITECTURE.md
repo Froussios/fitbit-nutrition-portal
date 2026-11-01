@@ -12,7 +12,7 @@ food definitions come from existing food databases.
 * **The Google Health API is the only integration.** The app reads and writes the user's nutrition log
   there and nowhere else. Syncing that log with other platforms is Google Health's job, not the app's.
 * **No custom backend.** Everything runs in the browser as a static site. Where that is not possible, the
-  trade-off is written down in [section 7](#7-open-decisions) instead of quietly adding a server.
+  trade-off is written down in [DECISIONS.md](DECISIONS.md) instead of quietly adding a server.
 * **Proof-of-concept scope:** sign in, log simple entries, show today's diary. Meals, food search,
   offline use and long-lived sessions come in later milestones.
 
@@ -141,7 +141,7 @@ Two more constraints apply to every option:
 | A1. Client secret shipped in the static app (code + PKCE from the browser; the token endpoint allows CORS) | Yes, in Production status | Breaks Google's rule that web-client secrets stay confidential. Anyone can copy the secret and pose as the app's client. Refresh tokens sit in browser storage. Would fail the security assessment needed above 100 users. |
 | A2. Stateless token broker: one serverless function with `/token` (code → tokens) and `/refresh`. It holds the secret and stores nothing; the refresh token stays with the browser (an encrypted HttpOnly cookie is safest). | Yes, in Production status | A deployed function, so a small exception to "no backend", but with no database and no user data at rest. |
 
-Current leaning: A2 plus Production status. The auth layer (`src/auth/`) is the only code this decision
+Current leaning: A2 plus Production status ([decision D1](https://github.com/Froussios/fitbit-nutrition-portal/issues/22)). The auth layer (`src/auth/`) is the only code this decision
 touches: the Health client asks a token provider for a token and does not care how it was obtained.
 
 ### 5.3 Why a Google Cloud project is needed
@@ -171,40 +171,11 @@ The app **never queries the public Open Food Facts API**. Its read limits (about
   queried over HTTP range requests. That means build-time compute but no running server. Contributions
   back to Open Food Facts are a separate concern for that milestone.
 
-## 7. Open decisions
+## 7. Decisions, milestones and spikes
 
-| # | Topic | Options | Status |
-|---|---|---|---|
-| D1 | Long-lived login (section 5.2) | A0, A1 or A2 | Deferred to M3; leaning A2 |
-| D2 | Live updates between devices | Poll, or a webhook relay | Poll (current: on tab focus and every 5 minutes while visible) |
-| D3 | Food data mirror | Static index on a CDN, or a hosted search service | Decide in M1 |
+These are maintained separately, so they stay in sync with the GitHub issues:
 
-**Why push needs a server (D2).** Google delivers webhooks to one HTTPS URL for the whole project (V10).
-That endpoint must run code: it answers the verification check with the shared secret, then for every
-notification it works out which user changed and forwards a signal to that user's open browsers.
-Browsers cannot receive incoming requests, so forwarding goes through Web Push or Firebase Cloud
-Messaging, and both need a server-held signing key (and Web Push also stores subscriptions). A generic
-relay cannot pass the verification step. All push would buy is updating another open copy of the app
-sooner, and polling on focus already shows fresh data whenever the user looks, at one list call per poll
-(far below 300 requests/min/user).
-
-## 8. Milestones
-
-| Milestone | Scope | Backend? |
-|---|---|---|
-| **M0: PoC (this)** | Sign in, log an entry from fake foods or a custom food, today's full diary with amounts and totals, delete own entries. | No |
-| M1: food search | Food data mirror behind `FoodCatalog` (D3), barcode lookup, recent foods. | Static build job |
-| M2: daily driver | Installable PWA, offline write queue, edit (delete and recreate), day navigation, kJ/kcal setting. | No |
-| M3: long-lived sessions | Decide D1, spike B, move the OAuth app to Production. | Token broker, if A2 |
-| Later | Custom meals. | — |
-
-## 9. Spikes
-
-| Spike | Status |
-|---|---|
-| CORS on the Google Health API | **Done: allowed (V1).** |
-| A: real account, read scope | Confirm that all-sources returns Google Health app entries, that `dataSource.application` is filled in as V4 expects, and that the gram and ml `food-measurement-unit` entries can be listed. |
-| What `food` list returns | Open; possible now with the read scope. |
-| Reusing a deleted ID | Open; the PoC's delete button makes it easy to test. |
-| B: unverified Production app (M3) | Confirm whether refresh tokens still expire after 7 days (V9). |
-| Webhooks for nutrition-log | Only if D2 changes (V10). |
+* [DECISIONS.md](DECISIONS.md): recorded decisions (DR-01…) and open ones (D1 long-lived sessions,
+  D3 food data mirror). D2 (live updates) is decided as polling: DR-08.
+* [ROADMAP.md](ROADMAP.md): MVP definition and targets, milestones M0–M4 with their issues, spikes, and
+  work saved for later.
