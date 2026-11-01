@@ -70,8 +70,9 @@ client ID instead.
 **GitHub Pages** on pushes to `main`. To enable it:
 
 1. Repository **Settings → Pages → Source: GitHub Actions**.
-2. Set the repository variable `GOOGLE_CLIENT_ID` (Settings → Secrets and variables → Actions →
-   Variables) so the client ID is built in.
+2. Set `GOOGLE_CLIENT_ID` as a repository secret or variable (Settings → Secrets and variables →
+   Actions) so the client ID is built in. It ends up in the published JavaScript either way: the client
+   ID is a public identifier, not a credential.
 3. Add the Pages origin to the OAuth client's Authorized JavaScript origins.
 
 Any static host works. The build uses relative paths, so it can live under a sub-path.
