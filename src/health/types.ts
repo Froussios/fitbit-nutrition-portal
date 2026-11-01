@@ -83,7 +83,14 @@ export interface FoodMeasurementUnit {
 
 export interface DataSource {
   readonly platform?: string;
-  readonly application?: { packageName?: string; webClientId?: string; displayName?: string; [k: string]: unknown };
+  readonly application?: {
+    /** Android package or iOS bundle ID of the app that wrote the data, e.g. com.google.fitbit. */
+    packageName?: string;
+    /** Google OAuth client ID of the web app that wrote the data. */
+    googleWebClientId?: string;
+    /** Legacy Fitbit Web API client ID. */
+    webClientId?: string;
+  };
   recordingMethod?: "RECORDING_METHOD_UNSPECIFIED" | "MANUAL" | "PASSIVELY_MEASURED" | "DERIVED" | "ACTIVELY_MEASURED" | "UNKNOWN";
 }
 

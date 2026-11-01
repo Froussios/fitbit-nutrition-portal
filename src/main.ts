@@ -1,10 +1,12 @@
 import "./styles.css";
 import { GoogleAuth, SignInRequiredError } from "./auth/google-auth";
-import { getClientId, getExtraScopes, isClientIdBuiltIn, NUTRITION_SCOPE, requestedScopes, setClientId, setExtraScopes } from "./config";
+import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE, SCOPES, setClientId } from "./config";
 import { idFromName, newEntryId } from "./core/ids";
 import { civilDate } from "./core/time";
 import type { BaseUnit } from "./core/units";
-import { SAMPLE_FOODS } from "./data/sample-foods";
+import type { FoodItem } from "./core/food";
+import { LocalFoodCatalog, type FoodCatalog } from "./food/catalog";
+import { SAMPLE_FOODS } from "./food/sample-foods";
 import { HealthApiError, HealthClient } from "./health/client";
 import { buildNutritionLogPoint, findServingUnits, toDiaryEntries, type DiaryEntry, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
@@ -30,12 +32,17 @@ class App {
   private listError = "";
   private ready = false;
 
-  private readonly form = createLogForm(SAMPLE_FOODS, (d) => this.log(d));
+  private readonly form: HTMLElement;
   private readonly diary = el("div", { class: "diary" });
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
 
-  constructor(clientId: string) {
-    this.auth = new GoogleAuth(clientId, requestedScopes(), [NUTRITION_SCOPE]);
+  constructor(
+    private readonly clientId: string,
+    foods: readonly FoodItem[],
+  ) {
+    this.form = createLogForm(foods, (d) => this.log(d));
+    // Logging needs the write scope; the read scope (whole diary) is asked for but optional.
+    this.auth = new GoogleAuth(clientId, SCOPES, [NUTRITION_WRITE_SCOPE]);
     this.api = new HealthClient((o) => this.auth.getAccessToken(o));
     this.auth.onChange(() => this.render());
 
@@ -71,6 +78,11 @@ class App {
           "Your Google account is not linked to Google Health yet. Install the Google Health app, sign in there once, then press Refresh.";
       } else return this.handleError(e);
     }
+    if (!this.auth.grantedScopes.includes(NUTRITION_READ_SCOPE)) {
+      this.notice =
+        "Read access to your nutrition diary was not granted, so only entries made by this app are shown. " +
+        "Sign out and sign in again, and tick the permission to see your nutrition data, to see everything.";
+    }
     // Serving units are optional: without them entries carry no `serving` field.
     try {
       this.servingUnits = findServingUnits(await this.api.listFoodMeasurementUnits());
@@ -92,7 +104,7 @@ class App {
       for (const p of points) if (p.name) this.pending.delete(idFromName(p.name));
       const today = civilDate(new Date());
       const pending = [...this.pending.values()].filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === today);
-      this.entries = toDiaryEntries([...points, ...pending]);
+      this.entries = toDiaryEntries([...points, ...pending], this.clientId);
     } catch (e) {
       this.listError = errorMessage(e);
       this.handleError(e, false);
@@ -199,8 +211,8 @@ class App {
           el(
             "p",
             { class: "hint" },
-            "Google Health only grants this app write access to nutrition, so this list shows the entries this app logged. " +
-              "Entries from the Google Health app or other apps are not visible here.",
+            "Everything in your Google Health nutrition diary for today, including entries from the Google Health app and apps syncing through Health Connect. " +
+              "Only entries made by this app can be deleted here.",
           ),
         ),
     );
@@ -217,6 +229,10 @@ class App {
   }
 }
 
+/**
+ * Developer fallback when no client ID was built in (VITE_GOOGLE_CLIENT_ID).
+ * End users never see this: a deployment ships with the app's client ID.
+ */
 function renderSetup(canCancel = false) {
   const clientId = el("input", {
     id: "client-id",
@@ -227,21 +243,19 @@ function renderSetup(canCancel = false) {
     autocomplete: "off",
     spellcheck: "false",
   });
-  const scopes = el("input", { id: "extra-scopes", type: "text", value: getExtraScopes().join(" "), autocomplete: "off", spellcheck: "false" });
   const form = el(
     "form",
     { class: "card setup" },
-    el("h2", {}, "Set up"),
+    el("h2", {}, "Developer setup"),
     el(
       "p",
       {},
-      "This app runs entirely in your browser and talks to the Google Health API with your own Google Cloud OAuth client. " +
-        "Create a Web application client, add this page's origin (",
+      "This build has no OAuth client ID. Set VITE_GOOGLE_CLIENT_ID at build time, or paste the app's Web client ID here for local testing. " +
+        "This page's origin (",
       el("code", {}, location.origin),
-      ") to its Authorized JavaScript origins, and paste its client ID here. See the README for the full steps.",
+      ") must be one of the client's Authorized JavaScript origins. See the README.",
     ),
     el("label", { class: "field", for: "client-id" }, el("span", {}, "OAuth client ID"), clientId),
-    el("details", {}, el("summary", {}, "Advanced"), el("label", { class: "field", for: "extra-scopes" }, el("span", {}, "Extra OAuth scopes (space separated, for experiments)"), scopes)),
     el(
       "div",
       { class: "actions" },
@@ -252,7 +266,6 @@ function renderSetup(canCancel = false) {
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
     setClientId(clientId.value);
-    setExtraScopes(scopes.value);
     try {
       sessionStorage.clear();
     } catch {
@@ -263,6 +276,7 @@ function renderSetup(canCancel = false) {
   replaceChildren(root, el("header", { class: "top" }, el("h1", {}, "Food Diary")), form);
 }
 
+const catalog: FoodCatalog = new LocalFoodCatalog(SAMPLE_FOODS);
 const clientId = getClientId();
-if (clientId) new App(clientId);
+if (clientId) void catalog.search("").then((foods) => new App(clientId, foods));
 else renderSetup();

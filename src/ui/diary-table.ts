@@ -14,8 +14,8 @@ const SOURCE_LABELS: Record<string, string> = {
   off: "Open Food Facts",
   ausnut: "AUSNUT",
   usda: "USDA",
-  sample: "Sample",
-  manual: "Custom",
+  sample: "sample food",
+  manual: "custom food",
 };
 
 export function renderDiaryTable({ entries, pendingIds, onDelete }: DiaryTableOptions): HTMLElement {
@@ -48,11 +48,13 @@ export function renderDiaryTable({ entries, pendingIds, onDelete }: DiaryTableOp
             el("td", { class: "num" }, fmtGrams(e.profile.nutrients.protein)),
             el("td", { class: "num" }, fmtGrams(e.profile.nutrients.carbohydrates)),
             el("td", { class: "num" }, fmtGrams(e.profile.nutrients.fat)),
-            el("td", {}, e.ref ? (SOURCE_LABELS[e.ref.source] ?? e.ref.source) : (e.platform ?? "Other app")),
+            el("td", {}, e.own ? `This app${e.ref ? ` · ${SOURCE_LABELS[e.ref.source] ?? e.ref.source}` : ""}` : (e.sourceLabel ?? "Other app")),
             el(
               "td",
               {},
-              el("button", { type: "button", class: "icon", title: "Delete entry", "aria-label": `Delete ${e.displayName}`, onclick: () => onDelete(e) }, "✕"),
+              // The write scope only covers entries this app created.
+              e.own &&
+                el("button", { type: "button", class: "icon", title: "Delete entry", "aria-label": `Delete ${e.displayName}`, onclick: () => onDelete(e) }, "✕"),
             ),
           ),
         ),

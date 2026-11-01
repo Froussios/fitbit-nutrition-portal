@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { nutrientsForAmount } from "../src/core/food";
 import { fromOffProduct, offBasis, OffNormalizationError } from "../src/core/off";
 import { PORTION_PREFIX } from "../src/core/units";
-import { SAMPLE_FOODS } from "../src/data/sample-foods";
+import { SAMPLE_FOODS } from "../src/food/sample-foods";
 
 describe("fromOffProduct", () => {
   it("reads per-100 g values and the serving portion", () => {
@@ -67,5 +67,16 @@ describe("sample catalogue", () => {
     const p = nutrientsForAmount(burger, 1, PORTION_PREFIX + burger.portions[0]!.name);
     expect(p.energyKcal).toBeCloseTo(525);
     expect(p.nutrients.protein).toBeCloseTo(26);
+  });
+});
+
+describe("LocalFoodCatalog", () => {
+  it("searches by every word and finds by reference", async () => {
+    const { LocalFoodCatalog } = await import("../src/food/catalog");
+    const c = new LocalFoodCatalog(SAMPLE_FOODS);
+    expect((await c.search("")).length).toBe(SAMPLE_FOODS.length);
+    expect((await c.search("sample BURGER")).map((f) => f.ref.id)).toEqual(["burger-classic"]);
+    expect(await c.get({ source: "sample", id: "oats" })).toBe(SAMPLE_FOODS.find((f) => f.ref.id === "oats"));
+    expect(await c.get({ source: "off", id: "oats" })).toBeUndefined();
   });
 });

@@ -3,7 +3,8 @@ import { kjToKcal, NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProf
 import type { BaseUnit, Portion } from "./units";
 
 /**
- * The subset of an Open Food Facts product (API v2/v3) that the app reads.
+ * The subset of an Open Food Facts product record that the app reads. Same
+ * shape in the API and in the data dumps a mirror would be built from.
  * https://openfoodfacts.github.io/openfoodfacts-server/api/
  */
 export interface OffProduct {

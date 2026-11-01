@@ -94,7 +94,10 @@ export interface DiaryEntry {
   readonly profile: NutrientProfile;
   /** Food reference, when the entry was written by this app. */
   readonly ref?: FoodRef;
-  readonly platform?: string;
+  /** Written by this app, so it may be deleted or edited with the write scope. */
+  readonly own: boolean;
+  /** Who wrote it, for entries from other apps ("Health Connect", "com.example.app"...). */
+  readonly sourceLabel?: string;
 }
 
 const NUTRIENT_BY_GOOGLE = new Map<string, NutrientKey>(
@@ -104,7 +107,33 @@ const NUTRIENT_BY_GOOGLE = new Map<string, NutrientKey>(
   }),
 );
 
-export function toDiaryEntry(point: DataPoint): DiaryEntry | undefined {
+const KNOWN_PACKAGES: Record<string, string> = {
+  "com.google.fitbit": "Google Health app",
+  "com.fitbit.FitbitMobile": "Google Health app",
+};
+
+const PLATFORM_LABELS: Record<string, string> = {
+  FITBIT: "Fitbit",
+  HEALTH_CONNECT: "Health Connect",
+  HEALTH_KIT: "Apple Health",
+  FIT: "Google Fit",
+  FITBIT_WEB_API: "Fitbit Web API app",
+  GOOGLE_WEB_API: "Google Health API app",
+  GOOGLE_PARTNER_INTEGRATION: "Partner app",
+};
+
+function sourceLabel(point: DataPoint): string | undefined {
+  const app = point.dataSource?.application;
+  const pkg = app?.packageName;
+  if (pkg) return KNOWN_PACKAGES[pkg] ?? pkg;
+  const platform = point.dataSource?.platform;
+  return platform ? (PLATFORM_LABELS[platform] ?? platform) : undefined;
+}
+
+/**
+ * @param ownClientId this app's OAuth client ID; entries recorded with it are ours.
+ */
+export function toDiaryEntry(point: DataPoint, ownClientId?: string): DiaryEntry | undefined {
   const log = point.nutritionLog;
   if (!log || !point.name) return undefined;
 
@@ -119,7 +148,11 @@ export function toDiaryEntry(point: DataPoint): DiaryEntry | undefined {
   }
 
   const id = idFromName(point.name);
-  const ref = parseEntryId(id)?.ref;
+  const writer = point.dataSource?.application?.googleWebClientId;
+  // Our ID format is the fallback for points read back before dataSource is filled in.
+  const own = writer !== undefined ? writer === ownClientId : parseEntryId(id) !== undefined;
+  const ref = own ? parseEntryId(id)?.ref : undefined;
+  const label = own ? undefined : sourceLabel(point);
   const entry: DiaryEntry = {
     name: point.name,
     id,
@@ -127,16 +160,17 @@ export function toDiaryEntry(point: DataPoint): DiaryEntry | undefined {
     mealType: log.mealType ?? "MEAL_TYPE_UNSPECIFIED",
     displayName: log.foodDisplayName ?? "(unnamed food)",
     profile: { energyKcal: log.energy?.kcal ?? 0, nutrients },
+    own,
     ...(ref ? { ref } : {}),
-    ...(point.dataSource?.platform ? { platform: point.dataSource.platform } : {}),
+    ...(label ? { sourceLabel: label } : {}),
   };
   return entry;
 }
 
 /** Entries in chronological order (the API returns newest first). */
-export function toDiaryEntries(points: readonly DataPoint[]): DiaryEntry[] {
+export function toDiaryEntries(points: readonly DataPoint[], ownClientId?: string): DiaryEntry[] {
   return points
-    .map(toDiaryEntry)
+    .map((p) => toDiaryEntry(p, ownClientId))
     .filter((e): e is DiaryEntry => e !== undefined)
     .sort((a, b) => a.start.getTime() - b.start.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }

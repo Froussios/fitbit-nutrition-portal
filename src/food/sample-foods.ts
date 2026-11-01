@@ -4,10 +4,11 @@ import { fromOffProduct, type OffProduct } from "../core/off";
 /**
  * Proof-of-concept catalogue.
  *
- * The values are arbitrary (rounded, plausible) and NOT taken from any real
- * product. They are written in the Open Food Facts product format on purpose,
- * so they go through the same normaliser that real OFF results will use in
- * milestone 1. The codes are not barcodes and use the "sample" source.
+ * Local fake data: the values are arbitrary (rounded, plausible) and NOT taken
+ * from any real product. They are written in the Open Food Facts product format
+ * on purpose, so they go through the same normaliser that records from the
+ * future Open Food Facts mirror will use. The codes are not barcodes and use
+ * the "sample" source.
  */
 const SAMPLE_PRODUCTS: OffProduct[] = [
   {

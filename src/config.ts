@@ -1,56 +1,44 @@
 /**
- * Runtime configuration. The OAuth client ID is public (it identifies the app,
- * not a secret), so it can be baked in at build time or typed in on the setup screen.
+ * Runtime configuration.
+ *
+ * The OAuth client ID identifies this app to Google. It is public (not a
+ * secret) and belongs to the app's single Google Cloud project, so end users
+ * never create one. It is normally baked in at build time
+ * (VITE_GOOGLE_CLIENT_ID); the setup screen is a fallback for development.
  */
 
-/** The only nutrition scope the API publishes (discovery revision 20261030). */
-export const NUTRITION_SCOPE = "https://www.googleapis.com/auth/googlehealth.nutrition.writeonly";
+/** Read the whole nutrition diary (all sources: Google Health app, Health Connect, other apps). */
+export const NUTRITION_READ_SCOPE = "https://www.googleapis.com/auth/googlehealth.nutrition.readonly";
+/** Create entries, and edit or delete the entries this app created. */
+export const NUTRITION_WRITE_SCOPE = "https://www.googleapis.com/auth/googlehealth.nutrition.writeonly";
+
+export const SCOPES = [NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE] as const;
 
 const CLIENT_ID_KEY = "foodDiary.clientId";
-const EXTRA_SCOPES_KEY = "foodDiary.extraScopes";
 
-function storageGet(key: string): string | undefined {
+function builtInClientId(): string | undefined {
+  return (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() || undefined;
+}
+
+export function getClientId(): string | undefined {
+  const built = builtInClientId();
+  if (built) return built;
   try {
-    return localStorage.getItem(key) ?? undefined;
+    return localStorage.getItem(CLIENT_ID_KEY) || undefined;
   } catch {
     return undefined;
   }
 }
 
-function storageSet(key: string, value: string | undefined): void {
-  try {
-    if (value) localStorage.setItem(key, value);
-    else localStorage.removeItem(key);
-  } catch {
-    // Storage blocked (private mode): the setting lasts for this page only.
-  }
-}
-
-export function getClientId(): string | undefined {
-  const built = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim();
-  return built || storageGet(CLIENT_ID_KEY) || undefined;
-}
-
 export function isClientIdBuiltIn(): boolean {
-  return Boolean((import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim());
+  return builtInClientId() !== undefined;
 }
 
-export function setClientId(id: string | undefined): void {
-  storageSet(CLIENT_ID_KEY, id?.trim());
-}
-
-/**
- * Extra scopes to request, space separated. Used for spikes, for example a
- * read scope if Google publishes one. An unknown scope makes sign-in fail.
- */
-export function getExtraScopes(): string[] {
-  return (storageGet(EXTRA_SCOPES_KEY) ?? "").split(/\s+/).filter(Boolean);
-}
-
-export function setExtraScopes(scopes: string): void {
-  storageSet(EXTRA_SCOPES_KEY, scopes.trim());
-}
-
-export function requestedScopes(): string[] {
-  return [NUTRITION_SCOPE, ...getExtraScopes().filter((s) => s !== NUTRITION_SCOPE)];
+export function setClientId(id: string): void {
+  try {
+    if (id.trim()) localStorage.setItem(CLIENT_ID_KEY, id.trim());
+    else localStorage.removeItem(CLIENT_ID_KEY);
+  } catch {
+    // Storage blocked: nothing to persist.
+  }
 }

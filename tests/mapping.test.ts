@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PORTION_PREFIX } from "../src/core/units";
-import { SAMPLE_FOODS } from "../src/data/sample-foods";
+import { SAMPLE_FOODS } from "../src/food/sample-foods";
 import { buildNutritionLogPoint, findServingUnits, toDiaryEntries, toDiaryEntry } from "../src/health/mapping";
 import type { DataPoint } from "../src/health/types";
 
@@ -70,12 +70,35 @@ describe("toDiaryEntries", () => {
   const ours = buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", mealType: "BREAKFAST", time }, { id: "e-mgx-ab12-smp-oats" });
 
   it("sorts chronologically and keeps entries from other sources", () => {
-    const list = toDiaryEntries([other, ours, { name: "x" }]);
+    const list = toDiaryEntries([other, ours, { name: "x" }], "our-client");
     expect(list.map((e) => e.displayName)).toEqual(["Rolled oats (40 g)", "Flat white"]);
+    expect(list[0]!.own).toBe(true);
+    expect(list[1]!.own).toBe(false);
     expect(list[1]!.ref).toBeUndefined();
-    expect(list[1]!.platform).toBe("HEALTH_CONNECT");
+    expect(list[1]!.sourceLabel).toBe("Health Connect");
     expect(list[1]!.mealType).toBe("MEAL_TYPE_UNSPECIFIED");
     expect(list[1]!.profile.nutrients.carbohydrates).toBe(9);
+  });
+});
+
+describe("entry ownership", () => {
+  const point = (clientId: string, packageName?: string): DataPoint => ({
+    name: "users/me/dataTypes/nutrition-log/dataPoints/e-mgx-ab12-smp-oats",
+    dataSource: { platform: "GOOGLE_WEB_API", application: { googleWebClientId: clientId, ...(packageName ? { packageName } : {}) } },
+    nutritionLog: { interval: { startTime: "2026-10-31T21:00:00Z", endTime: "2026-10-31T21:01:00Z", startUtcOffset: "39600s", endUtcOffset: "39600s" } },
+  });
+
+  it("trusts the recorded OAuth client over the ID format", () => {
+    expect(toDiaryEntry(point("our-client"), "our-client")!.own).toBe(true);
+    const foreign = toDiaryEntry(point("someone-else"), "our-client")!;
+    expect(foreign.own).toBe(false);
+    expect(foreign.ref).toBeUndefined();
+    expect(foreign.sourceLabel).toBe("Google Health API app");
+  });
+
+  it("names the Google Health app", () => {
+    const p: DataPoint = { ...point(""), name: "users/me/dataTypes/nutrition-log/dataPoints/8812345", dataSource: { application: { packageName: "com.google.fitbit" } } };
+    expect(toDiaryEntry(p, "our-client")!.sourceLabel).toBe("Google Health app");
   });
 });
 
