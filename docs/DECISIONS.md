@@ -9,7 +9,7 @@ labelled `decision`; when one closes, its outcome is added here. Supporting fact
 | ID | Question | Milestone | Issue | Current leaning |
 |---|---|---|---|---|
 | D1 | How to provide long-lived sessions | M3 | [#22](https://github.com/Froussios/fitbit-nutrition-portal/issues/22) | Stateless token broker (option A2) plus OAuth app in Production |
-| D3 | Design of the food data mirror | M1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) | Self-hosted Meilisearch on a small VM in Sydney, rebuilt weekly from the Open Food Facts export by a GitHub Action; a DR-01 exception. The owner requires fuzzy search over the dataset (2 Nov 2026), which rules out static shards and SQLite over range requests. See [FOOD_SEARCH.md](FOOD_SEARCH.md#5-hosting-r7-decision-d3). |
+| D3 | Design of the food data mirror | M1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) | Meilisearch on a home server, published with Tailscale Funnel and rebuilt weekly on the same box from the Open Food Facts export; a DR-01 exception. Owner requirements (2 Nov 2026): fuzzy search over the dataset, which rules out static shards and SQLite over range requests; and no monthly bill, which rules out a paid VM or search SaaS. Fallback host: Oracle Cloud Always Free. See [FOOD_SEARCH.md](FOOD_SEARCH.md#5-hosting-r7-decision-d3). |
 
 ## Decided
 

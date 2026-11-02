@@ -164,11 +164,12 @@ The app **never queries the public Open Food Facts API**. Its read limits (about
 `FoodCatalog` (`search`, `get`):
 
 * **M0:** `LocalFoodCatalog` over a handful of fake records written in the Open Food Facts format.
-* **M1:** fuzzy search-as-you-type over Open Food Facts, served by a self-hosted search engine
-  (Meilisearch on a small VM in Sydney) that a weekly GitHub Action rebuilds from the Open Food Facts
+* **M1:** fuzzy search-as-you-type over Open Food Facts, served by a search engine (Meilisearch) on a
+  home server, published with Tailscale Funnel and rebuilt weekly on the same box from the Open Food Facts
   export (ODbL allows this, with attribution and share-alike on the database). Static indexes on a CDN
-  were considered and rejected because they cannot do typo-tolerant search over the dataset. The service
-  holds only public data, so it is a recorded, stateless exception to "no backend" (decision D3). Generic
+  were rejected because they cannot do typo-tolerant search over the dataset, and paid hosting because
+  the service must cost nothing a month. The service holds only public data, so it is a recorded,
+  stateless exception to "no backend" (decision D3). Generic
   foods (AUSNUT / OpenNutrition) come later (DR-12). Full design: [FOOD_SEARCH.md](FOOD_SEARCH.md).
 
 ## 7. Decisions, milestones and spikes
