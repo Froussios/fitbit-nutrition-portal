@@ -8,7 +8,7 @@ import type { FoodItem } from "./core/food";
 import { LocalFoodCatalog, type FoodCatalog } from "./food/catalog";
 import { SAMPLE_FOODS } from "./food/sample-foods";
 import { HealthApiError, HealthClient } from "./health/client";
-import { buildNutritionLogPoint, findServingUnits, toDiaryEntries, type DiaryEntry, type LogDraft } from "./health/mapping";
+import { buildNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, type DiaryEntry, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
@@ -178,7 +178,12 @@ class App {
     try {
       const today = civilDate(new Date());
       const points = await this.api.listNutritionLogs(today);
-      for (const p of points) if (p.name) this.pending.delete(idFromName(p.name));
+      const matched = reconcilePending(this.pending, points);
+      for (const key of [...matched.listedById, ...matched.listedByContent]) this.pending.delete(key);
+      if (matched.listedByContent.length) {
+        appLog.warn("The API listed new entries under different IDs than this app sent; matched them by content", matched.listedByContent);
+      }
+      if (matched.stillPending.length) appLog.info("Entries written but not listed by the API yet", matched.stillPending);
       const pending = [...this.pending.values()].filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === today);
       this.entries = toDiaryEntries([...points, ...pending], { ownClientId: this.clientId, unitNames: this.unitNames });
       const unparsed = points.length - this.entries.length + pending.length;
@@ -214,7 +219,12 @@ class App {
         throw new Error(op.error.message ?? "Google Health rejected the entry.");
       }
       if (!op.done) appLog.warn("Create returned an operation that is not done yet", { name: op.name });
-      this.pending.set(id, op.response?.nutritionLog ? { ...point, ...op.response } : point);
+      const created: DataPoint = op.response?.nutritionLog ? { ...point, ...op.response } : point;
+      if (created.name && idFromName(created.name) !== id) {
+        appLog.warn("The API stored the entry under its own ID, not the one this app sent", { sent: point.name, stored: created.name });
+      }
+      // Key by the stored ID so the next listing replaces the pending row.
+      this.pending.set(idFromName(created.name ?? point.name!), created);
     } catch (e) {
       appLog.error("Logging the entry failed", describeError(e));
       this.handleError(e, false);

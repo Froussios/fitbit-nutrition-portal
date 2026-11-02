@@ -179,6 +179,38 @@ export function toDiaryEntry(point: DataPoint, ctx: DiaryContext = {}): DiaryEnt
   return entry;
 }
 
+/**
+ * Identifies the same nutrition log in our request and in the API's copy by
+ * content (start second, name, rounded energy), for when the API stores it
+ * under a different ID than the one we asked for.
+ */
+export function entryFingerprint(point: DataPoint): string | undefined {
+  const log = point.nutritionLog;
+  if (!log) return undefined;
+  const start = Date.parse(log.interval.startTime);
+  if (Number.isNaN(start)) return undefined;
+  return `${Math.floor(start / 1000)}|${(log.foodDisplayName ?? "").trim().toLowerCase()}|${Math.round(log.energy?.kcal ?? 0)}`;
+}
+
+/**
+ * Splits locally pending points (written but maybe not yet listed) into those
+ * the listing already contains, by ID or by content, and those still pending.
+ */
+export function reconcilePending(
+  pending: ReadonlyMap<string, DataPoint>,
+  listed: readonly DataPoint[],
+): { listedById: string[]; listedByContent: string[]; stillPending: string[] } {
+  const ids = new Set(listed.flatMap((p) => (p.name ? [idFromName(p.name)] : [])));
+  const prints = new Set(listed.map(entryFingerprint).filter((f): f is string => f !== undefined));
+  const result = { listedById: [] as string[], listedByContent: [] as string[], stillPending: [] as string[] };
+  for (const [key, point] of pending) {
+    if (ids.has(key)) result.listedById.push(key);
+    else if (prints.has(entryFingerprint(point) ?? "")) result.listedByContent.push(key);
+    else result.stillPending.push(key);
+  }
+  return result;
+}
+
 /** Entries in chronological order (the API returns newest first). */
 export function toDiaryEntries(points: readonly DataPoint[], ctx: DiaryContext = {}): DiaryEntry[] {
   return points

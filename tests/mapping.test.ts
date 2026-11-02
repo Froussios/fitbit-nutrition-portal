@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PORTION_PREFIX } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { buildNutritionLogPoint, findServingUnits, toDiaryEntries, toDiaryEntry, unitNamesOf } from "../src/health/mapping";
+import { buildNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, unitNamesOf } from "../src/health/mapping";
 import type { DataPoint } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
@@ -135,5 +135,29 @@ describe("findServingUnits", () => {
       { name: "u/3", foodMeasurementUnit: { displayName: "milliliter" } },
     ]);
     expect(units).toEqual({ g: "u/2", ml: "u/3" });
+  });
+});
+
+describe("reconcilePending", () => {
+  const sent = buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", mealType: "BREAKFAST", time }, { id: "e-mgx-ab12-smp-oats" });
+  const pending = new Map([["e-mgx-ab12-smp-oats", sent]]);
+
+  it("matches by ID", () => {
+    expect(reconcilePending(pending, [{ ...sent, name: "users/4772/dataTypes/nutrition-log/dataPoints/e-mgx-ab12-smp-oats" }]).listedById).toEqual([
+      "e-mgx-ab12-smp-oats",
+    ]);
+  });
+
+  it("matches by content when the API assigned its own ID and reformatted the time", () => {
+    const stored: DataPoint = {
+      name: "users/4772/dataTypes/nutrition-log/dataPoints/8812345",
+      nutritionLog: { ...sent.nutritionLog!, interval: { ...sent.nutritionLog!.interval, startTime: "2026-10-31T20:30:00Z" }, energy: { kcal: 149.2 } },
+    };
+    expect(reconcilePending(pending, [stored])).toEqual({ listedById: [], listedByContent: ["e-mgx-ab12-smp-oats"], stillPending: [] });
+  });
+
+  it("keeps entries the listing does not contain yet", () => {
+    const other: DataPoint = { ...sent, name: "x/1", nutritionLog: { ...sent.nutritionLog!, foodDisplayName: "Banana" } };
+    expect(reconcilePending(pending, [other]).stillPending).toEqual(["e-mgx-ab12-smp-oats"]);
   });
 });
