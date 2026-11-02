@@ -1,24 +1,17 @@
 name: Food index
 
-# Builds the static food index (public/food-index/) from the Open Food Facts
-# export and commits it to the branch, where the CI workflow deploys it to
-# GitHub Pages with the app. See docs/FOOD_SEARCH.md section 7.
+# Builds the static food index from the Open Food Facts export and reports its
+# counts and sizes. See docs/FOOD_SEARCH.md section 7.
 #
-# Runs by hand, and when the builder or the code that shapes the index changes.
+# Publishing is not wired up yet: the index must NOT be committed to git, where
+# every rebuild would stay in the history for good. Where it will live (release
+# asset, Cloudflare Pages, R2) is being decided. Runs by hand only.
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "pipeline/**"
-      - "src/core/off.ts"
-      - "src/core/tokens.ts"
-      - "src/core/food-summary.ts"
-      - "src/food/index-format.ts"
-      - ".github/workflows/food-index.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: food-index-${{ github.ref }}
@@ -50,13 +43,3 @@ jobs:
             | node --max-old-space-size=5632 --import tsx pipeline/build-index.ts \
                 --out public/food-index --source-url "$EXPORT_URL" --last-modified "$LAST_MODIFIED" \
             | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Commit the index
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A public/food-index
-          if git diff --cached --quiet; then echo "The index did not change"; exit 0; fi
-          git commit -q -m "Update the food index from the Open Food Facts export"
-          git pull -q --rebase origin "$GITHUB_REF_NAME"
-          git push origin "HEAD:$GITHUB_REF_NAME"
