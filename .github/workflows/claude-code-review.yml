@@ -2,11 +2,12 @@ name: Claude Code Review
 
 # Reviews PRs from people with write access (in practice, the owner) with the
 # pr-review skill (.claude/skills/pr-review/SKILL.md) when they become ready
-# for review, and again after a push that follows a blocking verdict. A
-# "no blocking issues" verdict approves the reviewed commit; any later push
-# withdraws that approval (mark the PR draft and ready again for a fresh
-# review). Other PRs, including all PRs from forks, skip every job, so they
-# start no runner, use no Claude quota and are never approved.
+# for review, and again after a push that follows a blocking verdict or no
+# verdict at all (an earlier review was cancelled or failed). A "no blocking
+# issues" verdict approves the reviewed commit; any later push withdraws that
+# approval (mark the PR draft and ready again for a fresh review). Other PRs,
+# including all PRs from forks, skip every job, so they start no runner, use
+# no Claude quota and are never approved.
 
 on:
   pull_request:
@@ -46,16 +47,17 @@ jobs:
               -f message="New commits since this approval." -f event=DISMISS >/dev/null \
               || echo "::warning::Could not withdraw approval $id"
           done
-          # Re-review only if the latest verdict was blocking.
+          # Re-review unless the latest verdict found no blocking issues. No
+          # verdict means no review has finished yet, e.g. a push cancelled it.
           verdict=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
             --jq '.[] | select(.user.login == "claude[bot]") | .body
                   | capture("\\*\\*Verdict:\\*\\* (?<v>blocking|no blocking issues)")?
                   | .v' | tail -n 1)
           echo "Latest verdict: ${verdict:-none}"
-          if [ "$verdict" = blocking ]; then
-            echo "review=true" >> "$GITHUB_OUTPUT"
-          else
+          if [ "$verdict" = "no blocking issues" ]; then
             echo "review=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "review=true" >> "$GITHUB_OUTPUT"
           fi
 
   claude-review:
@@ -72,7 +74,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
           persist-credentials: false
