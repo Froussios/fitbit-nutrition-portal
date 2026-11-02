@@ -47,7 +47,7 @@ flowchart LR
   end
   HC -- "Bearer token, CORS" --> GHAPI["Google Health API v4<br/>nutrition-log = the diary"]
   FC --> Fake["M0: local fake data"]
-  FC -. "M1" .-> Search["Food search service<br/>Meilisearch over the OFF export"]
+  FC -. "M1" .-> Index["Static food index<br/>(slimmed OFF export, GitHub Pages)"]
 ```
 
 | Layer | Folder | Notes |
@@ -164,12 +164,11 @@ The app **never queries the public Open Food Facts API**. Its read limits (about
 `FoodCatalog` (`search`, `get`):
 
 * **M0:** `LocalFoodCatalog` over a handful of fake records written in the Open Food Facts format.
-* **M1:** fuzzy search-as-you-type over Open Food Facts, served by a search engine (Meilisearch) on a
-  home server, published with Tailscale Funnel and rebuilt weekly on the same box from the Open Food Facts
-  export (ODbL allows this, with attribution and share-alike on the database). Static indexes on a CDN
-  were rejected because they cannot do typo-tolerant search over the dataset, and paid hosting because
-  the service must cost nothing a month. The service holds only public data, so it is a recorded,
-  stateless exception to "no backend" (decision D3). Generic
+* **M1:** search-as-you-type over Open Food Facts using exact words in any order, ranked by how much of
+  the product name the query covers (DR-13). A weekly GitHub Action slims the Open Food Facts export
+  (dead rows and unused fields dropped), sorts products in ranking order and publishes a sharded word
+  index as static files on GitHub Pages, where the browser queries it directly. ODbL allows this, with
+  attribution and share-alike on the database. No server and no monthly cost (decision D3). Generic
   foods (AUSNUT / OpenNutrition) come later (DR-12). Full design: [FOOD_SEARCH.md](FOOD_SEARCH.md).
 
 ## 7. Decisions, milestones and spikes

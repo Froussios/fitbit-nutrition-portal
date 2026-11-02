@@ -1,10 +1,10 @@
 # Food search: design
 
-Status: proposed, 2 November 2026; hosting revised the same day to run free on a home server. Milestone M1 ([#3](https://github.com/Froussios/fitbit-nutrition-portal/issues/3)).
-Decision: [D3 #9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) (hosting). Work items: section 11.
+Status: proposed, 2 November 2026 (third revision: exact-word matching over a static index, no server).
+Milestone M1 ([#3](https://github.com/Froussios/fitbit-nutrition-portal/issues/3)). Decision: [D3 #9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) (hosting). Work items: section 11.
 
-This document covers typing a food name and picking a product from a dropdown of fuzzy matches. Barcode
-lookup and recent foods reuse the same catalogue but have their own issues.
+This document covers typing a food name and picking a product from a dropdown of matches. Barcode lookup
+and recent foods reuse the same catalogue but have their own issues.
 
 ## 1. Requirements
 
@@ -12,25 +12,26 @@ Set by the owner on 2 November 2026.
 
 | # | Requirement | How the design meets it |
 |---|---|---|
-| R1 | Search happens as the user types. | Debounced search on every input event, stale responses dropped (section 8.1). |
+| R1 | Search happens as the user types. | Debounced search on every input event, stale responses dropped (section 8.2). |
 | R2 | Options appear below the field, like a dropdown. | An editable combobox with a listbox popup (section 3). |
-| R3 | Fuzzy matching and ordering; show the top 10 best matches. | A search engine with typo tolerance, prefix matching and a popularity tie-break; `limit: 10` (section 4). |
+| R3 | Matching and ordering; show the top 10 best matches. Revised: no typo tolerance; every query word must be in the result, in any order; a result ranks higher the more of it the query covers ("chocolate" beats "dark chocolate"). | Exact words, last word as a prefix while typing; ranked by coverage, then popularity (section 4). |
 | R4 | One food source for now: Open Food Facts. | The index holds Open Food Facts products only. Generic foods (AUSNUT / OpenNutrition) move to later (DR-12). |
 | R5 | Rich visuals in the dropdown: a summary per food, starting with calories per unit. | Two-line rows with kcal per 100 g / 100 ml and per serving, built from a summary view model that can grow (section 3.3). |
 | R6 | Arrow keys move through the options; the selected row is filled into the input. | Keyboard model in section 3.2; the typed query is kept so Escape and ArrowUp can restore it. |
-| R7 | Open Food Facts is large and its APIs throttle; the hosting must support fuzzy search over the dataset, and cost nothing a month (free, or a small home server). | Meilisearch on a home server, published with Tailscale Funnel and rebuilt weekly from the Open Food Facts export (section 5). |
+| R7 | Open Food Facts is large and its APIs throttle; the hosting must support the search over the dataset, and cost nothing a month. The dataset may be slimmed (drop fields and dead rows). | A slimmed, pre-sorted word index built weekly by a GitHub Action and served as static files from GitHub Pages. No server (section 5). |
 
 ## 2. Scope
 
-**In:** typed search over Open Food Facts products; the dropdown; choosing a product into the log form; a
-`FoodCatalog` implementation over the search service; the index pipeline; the hosted service.
+**In:** typed search over Open Food Facts products; the dropdown; choosing a product into the log form; the
+index builder; publishing the index; a `FoodCatalog` that queries it.
 
 **Not in this design:**
 
-* Barcode scanning ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)). It uses `FoodCatalog.get()`, which this design provides (an exact key lookup).
+* Barcode scanning ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)). It uses `FoodCatalog.get()`, which this design provides (a barcode map in the index).
 * Recent foods ([#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14)). The dropdown is where they would appear when the field is empty; not built here.
 * Generic foods (AUSNUT / OpenNutrition): parked as [#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38). If the coverage test ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15))
   misses the target, they are the first thing to add.
+* Typo tolerance. Dropped from R3; section 4.4 lists cheap additions if misses show it is needed.
 * Product images, Nutri-Score, macro bars. The row layout leaves room for them (section 3.3).
 * kJ display preference ([#21](https://github.com/Froussios/fitbit-nutrition-portal/issues/21)). Rows show kcal for now.
 
@@ -57,7 +58,7 @@ The **Food** field in the log form becomes a text input with a dropdown under it
 | Searching, previous results shown | Previous results stay; a small spinner in the field after 300 ms. No flicker between keystrokes. |
 | Results | Up to 10 rows, then the custom-food row, then an attribution line |
 | No results | "No match for "…"" and the custom-food row |
-| Error (offline, service down, rate limited) | "Food search is unavailable right now" and the custom-food row. The next keystroke retries. |
+| Error (offline, index unreachable) | "Food search is unavailable right now" and the custom-food row. The next keystroke retries. |
 
 ### 3.2 Keyboard (R6)
 
@@ -106,7 +107,7 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
   `src/core/`. Later visuals (a thumbnail, a macro bar, Nutri-Score) are new fields on that model and new
   cells in the row; the search contract does not change.
 * Open Food Facts text is user-contributed. It is always rendered with `textContent`, never as HTML
-  (section 6.5).
+  (section 6.6).
 
 ### 3.4 Accessibility and mobile
 
@@ -121,195 +122,201 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 
 ## 4. Matching and ordering (R3)
 
-### 4.1 Query handling
+### 4.1 Words
 
-* Trim and collapse whitespace. Case and diacritics are folded by the engine.
-* Fewer than 2 characters: no search.
-* A query of only 8, 12, 13 or 14 digits is treated as a barcode: an exact `get()` on that code, with any
-  hit shown first, plus the normal text search.
+Product names, brands and queries go through the same tokeniser, shared by the index builder and the app
+(`src/core/tokens.ts`):
+
+* Lower case; accents removed (`crème` → `creme`); split on anything that is not a letter or digit.
+* Stop words dropped: `and`, `with`, `of`, `the`, `in`, `&`, and a few more (list in the repo).
+* Hyphenated and apostrophe words are indexed both split and joined: `Weet-Bix` → `weet`, `bix`, `weetbix`;
+  `McDonald's` → `mcdonald`, `s`, `mcdonalds`. So `weetbix`, `weet bix` and `weet-bix` all find it.
+* Query: trimmed and tokenised the same way. Fewer than 2 characters in total: no search. A query of only
+  8, 12, 13 or 14 digits is also treated as a barcode (section 6.4): an exact hit is shown first.
 
 ### 4.2 Matching
 
-Done by the search engine (Meilisearch defaults unless stated):
-
-* **Prefix on the last word**, so `weet b` matches `Weet-Bix` while the user is still typing.
-* **Typo tolerance**: 1 typo from 5 characters, 2 from 9 (`wheetbix`, `vegimite`).
-* **Word order does not matter**, and words may match the name or the brand (`sanitarium weet`).
-* **Split and joined words** (`weetbix` ↔ `weet bix`, `corn flakes` ↔ `cornflakes`).
-* **Synonyms** from a small curated list kept in the repo (`coke` → `coca cola`, `choc` → `chocolate`, `maccas`
-  → `mcdonald's`). It grows from misses in the relevance tests.
+* **Every query word must appear** as a word in the product's name or brand. Order does not matter.
+* **The last word is a prefix** while the user is still typing: `dark choc` matches `Dark Chocolate`.
+  Without this nothing would show until a word was finished. A trailing space marks the last word as
+  complete. A last word of 1 letter is ignored until the second letter.
+* **No typo tolerance.** `chocolat` still finds `chocolate` (prefix), but `chocloate` finds nothing.
 
 ### 4.3 Ordering
 
-Meilisearch ranking rules, starting order:
-
-1. `words`: more query words matched first
-2. `typo`: fewer typos first
-3. `proximity`: matched words closer together first
-4. `attribute`: a match in the name beats a match in the brand
-5. `exactness`: whole-word matches beat prefix matches
-6. `rank:desc`: a precomputed popularity score (below)
-
-`rank` is computed by the pipeline from fields in the Open Food Facts record:
+**Coverage** is how much of the product's name the query accounts for:
 
 ```
-rank = log10(1 + unique_scans_n)       popularity in Open Food Facts apps
-     + 2 if countries_tags has en:australia
-     + completeness                     0..1, Open Food Facts' own score
+coverage = query words found in the name / words in the name      (stop words not counted)
 ```
 
-Open Food Facts has many near-duplicate and incomplete entries, so the tie-break matters. The order of
-rules 5 and 6 and the weights above are starting points; the relevance tests (section 10) decide.
+`chocolate` → `Chocolate` 1/1, `Dark chocolate` 1/2, `Dark chocolate with almonds` 1/3. Higher coverage
+first; equal coverage is broken by **popularity**:
 
-The app asks for `limit: 10` and shows them in the engine's order.
+```
+popularity = log10(1 + unique_scans_n)       how often Open Food Facts apps have scanned it
+           + 2 if sold in Australia          (countries_tags has en:australia)
+           + completeness                    0..1, Open Food Facts' own score
+```
+
+**Pre-sorted index.** When every query word is in the name, coverage is the same fraction for every match
+with the same number of name words. So the order is simply: fewer name words first, then more popular. That
+order does not depend on the query, so the builder numbers the products in it (document ID 0 is the
+shortest-named, most popular product). Every word's list of products is stored in ID order, and the first
+10 products that contain all query words are the top 10. A search never needs to see all the matches for a
+common word like `chocolate`, only their first few hundred. This is what makes static files fast enough.
+
+The order is approximate in one case: a query word found only in the brand (`cadbury chocolate` against
+`Dairy Milk Chocolate`, brand Cadbury) does not lower that product's rank as the coverage formula would.
+The relevance tests (section 10) show whether that matters.
+
+### 4.4 If exact words prove too strict
+
+Cheap additions that fit the same index, to consider only if the coverage test or daily use shows misses:
+
+* **Synonyms** applied to the query (`coke` → `coca cola`, `choc` → `chocolate`), as a small table in the app.
+* **"Did you mean"**: when a word is not in the dictionary, suggest dictionary words one edit away (the
+  client already holds that dictionary shard).
+* **Plurals**: index a simple singular form (`biscuits` → `biscuit`).
 
 ## 5. Hosting (R7, decision D3)
 
-Owner constraint (2 November 2026): **no monthly bill.** The search service must be free, or run on a
-small home server. A paid VM (about US$20–25 a month) was considered and rejected on cost.
+Owner constraints (2 November 2026): **no monthly bill**; the dataset may be slimmed; exact-word matching
+is acceptable (section 4). That combination removes the need for a search engine.
 
-### 5.1 Facts and estimates
+### 5.1 Slimming the dataset
 
-Network access to the sources was limited when this was written. Figures marked *estimate* come from search
-results and must be confirmed by the first pipeline run ([#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12)) or on the hardware.
+**Rows.** The builder drops:
 
-| Fact | Value | Status |
+1. Products without a name (`product_name`, falling back to `product_name_en`).
+2. Products that fail `fromOffProduct()`: no usable energy value.
+3. Implausible energy (below 0 or above 900 kcal per 100 g/ml).
+4. Products flagged obsolete.
+5. Optionally, by a **popularity floor**: products never scanned and not sold in Australia. This is the
+   main size knob.
+6. Duplicates (same words in name and brand, same kcal per 100) are collapsed in the word index to the most
+   popular one. All of them stay reachable by barcode.
+
+**Fields.** Of the hundreds of fields in an Open Food Facts record, the index keeps what the app shows or
+logs: barcode, name, brand, pack size, basis, energy and the 14 other nutrients in `NUTRIENTS`, portions
+(serving and pack), and popularity. The builder runs `fromOffProduct()` and stores the resulting
+`FoodItem` in a compact array, so the normaliser stays the single place that interprets Open Food Facts
+data; it just runs at build time. About 150 bytes per product.
+
+**Scope.** A setting chooses the rows: `au` (products sold in Australia) or `world` (everything that
+survives the filters). Both use the same format and code.
+
+### 5.2 Sizes (estimates, measured by the first build)
+
+| | `au` | `world` |
 |---|---|---|
-| Open Food Facts size | About 4 million products (passed 4 M in 2025) | Estimate (Wikipedia, Open Food Facts webinar May 2025) |
-| Products sold in Australia | Growing about 1,300 a month (2 % monthly) in Nov 2024, which implies about 65 k then; roughly 80–100 k now | Estimate (Open Food Facts wiki progress board) |
-| Public search API limit | 10 searches per minute per IP, including Search-a-licious | Open Food Facts API docs; DR-07 |
-| Export | Full JSONL dump and daily deltas on static.openfoodfacts.org; a Parquet version on Hugging Face (`food.parquet`, about 4.2 GB) | Estimate for sizes |
-| Meilisearch index size | About documents × average size × 5 on disk. Best when the index fits in RAM; RAM at ⅓ of the index has little impact, and less RAM means slower, not crashing. | Meilisearch docs (planning formula) |
-| Meilisearch indexing | Uses up to ⅔ of the RAM it detects (in a container it may see the host's RAM) and half the cores, unless capped with `MEILI_MAX_INDEXING_MEMORY` / `MEILI_MAX_INDEXING_THREADS` | Meilisearch docs |
-| Our index, whole dataset | Assuming 2–3 M products survive the filters at about 500 bytes each: 5–8 GB on disk, twice that during a rebuild | Estimate, to measure |
-| Tailscale Funnel | Free on the personal plan. Public HTTPS at `<machine>.<tailnet>.ts.net`, no domain or port forwarding needed. TLS ends on our machine; traffic passes through Tailscale's relays. Bandwidth limits exist but are not published. | Tailscale docs; limits and relay latency to measure |
-| Cloudflare Tunnel | Free, but needs a domain on Cloudflare (about US$10 a year). Cloudflare terminates TLS and passes the client IP. | Cloudflare docs |
-| Oracle Cloud Always Free | Arm (A1) VM, reportedly cut to 2 OCPU / 12 GB in 2026. Idle instances may be reclaimed after 7 days of low use; A1 capacity is often unavailable. | Estimate (Oracle docs, third-party reports) |
-| Electricity for a home server | Intel N100 mini PC about 6–10 W, Raspberry Pi 5 about 3–5 W: roughly AU$10–25 a year at AU$0.30/kWh | Estimate |
+| Products after filters | 80–100 k | 1.5–2.5 M (from about 4 M) |
+| Product records (~150 B each) | ~15 MB | 225–375 MB |
+| Word lists, dictionary, prefix lists | ~5 MB | 60–120 MB |
+| Barcode map | ~2 MB | 30–45 MB |
+| **Total** | **~25 MB** | **~300–550 MB** |
+| Files | ~1 k | up to ~18 k |
 
-Traffic: Google caps an unverified app at 100 users (V9). At about 10 foods a day and about 6 requests per
-search while typing, that is roughly 6,000 requests a day, 180,000 a month, about 1 GB of responses. A
-home connection's upload handles that easily.
+Network access to Open Food Facts was blocked when this was written; the product counts come from search
+results (about 4 M products in 2025; Australian products growing about 1,300 a month in Nov 2024). If
+`world` does not fit the limits below, the popularity floor shrinks it.
 
-### 5.2 Options
+### 5.3 Free hosts compared
 
-All of these cost nothing a month.
+Traffic at Google's 100-user cap (V9): about 6,000 searches a day, 180,000 a month.
 
-| Option | Fuzzy (R7) | Whole dataset | Main drawback |
-|---|---|---|---|
-| A. Static prefix/token shards on a CDN | No: a typo in the first letters picks the wrong shard | Yes | Fails R7 |
-| B. SQLite FTS5 file on a CDN, queried over HTTP range requests | No: token and prefix match only; several round trips per keystroke | Yes | Fails R7 |
-| C. Client-side fuzzy index (MiniSearch / Orama) of Australian products, on GitHub Pages | Yes | **No**: a few MB for ~100 k products; 4 M is impossible in a browser | Loses imported and long-tail products |
-| D. Static trigram index on a CDN: the browser fetches the posting lists for the query's trigrams and ranks candidates itself | Yes, roughly | Approximately (posting lists cut to the most popular products) | A home-made search engine to build and tune; 6–10 fetches per query; CDN file-count limits |
-| **E. Meilisearch on a home server, published through Tailscale Funnel** | **Yes** | **Yes**, hardware permitting (section 5.4) | **Down when the home server or connection is** |
-| F. The same Docker Compose stack on Oracle Cloud Always Free | Yes | Yes | A quiet search server can look idle and be reclaimed; A1 capacity and allowance cuts; needs a card on file |
-
-Excluded on cost: a paid VM (about US$20–25 a month), Meilisearch Cloud and Algolia (priced per document and
-per search: about US$870 a month for 3 M documents on Meilisearch Cloud), Typesense Cloud (priced by
-cluster size). Excluded by rate limit: Open Food Facts' own search API (DR-07).
-
-### 5.3 Recommendation
-
-**Option E: Meilisearch in Docker on a home server, published with Tailscale Funnel.** It is the only
-free option with real fuzzy search over the whole dataset. Everything else in this design (engine,
-ranking, client contract, pipeline) is the same as for a cloud VM; only where it runs changes.
-
-* **Tailscale Funnel** is free, needs no domain and no port forwarding (it works behind NBN CGNAT), does not
-  expose the home IP, and ends TLS on our own machine, so the relays never see search terms.
-  **Cloudflare Tunnel** is the alternative if a domain is bought (about US$10 a year): it has Australian
-  edge locations and passes the client IP for rate limiting, but Cloudflare sees queries in clear.
-* **The indexer runs on the same box**, weekly at night. No GitHub Action, no SSH tunnel, and the admin key
-  never leaves the server.
-* **Portable.** The same Compose file runs on Oracle Always Free (F) if the home server is retired or proves
-  unreliable. Engine swaps (Typesense) still touch only the `FoodCatalog` adapter and the upload step.
-* **Option C stays useful** as the offline cache for M2 ([#20](https://github.com/Froussios/fitbit-nutrition-portal/issues/20)).
-
-**When the home server is down** (power, internet, reboots), search fails soft: the dropdown says "Food
-search is unavailable right now" and keeps the custom-food row, and recent foods (#14, cached in the
-browser) still work. A free uptime monitor pings the health route.
-
-**DR-01 exception.** This is a running server. DR-01 allows one if it is recorded and holds no user data at
-rest. The service holds only public Open Food Facts data, can be rebuilt from the export at any time (so it
-needs no backups), and never sees who is searching. Search terms are mildly sensitive (they reveal what
-someone eats), so queries are sent in POST bodies and the proxy does not log bodies (section 6.6).
-
-### 5.4 Home server hardware
-
-The pipeline has a **dataset scope** setting, so the index fits the box:
-
-| Scope | Contents | Products (est.) | Index on disk (est.) | Enough hardware |
+| Host | Free limits | `au` | `world` | Verdict |
 |---|---|---|---|---|
-| `au` | Products sold in Australia (`countries_tags` has `en:australia`) | 80–100 k | Under 1 GB | Raspberry Pi 4 or 5 with 4 GB and an SSD |
-| `world` | Every product with a name and usable energy | 2–3 M | 5–8 GB, twice that during a rebuild | 4 cores, 8 GB RAM, SSD with 30 GB free (an Intel N100 mini PC, or a Pi 5 8 GB with NVMe) |
+| **GitHub Pages** (static files) | 1 GB per site, 100 GB/month soft bandwidth, Actions deploy | Yes | Yes | **Recommended** |
+| Cloudflare Pages (static files) | 20,000 files and 25 MiB per file; bandwidth not capped (third-party reports) | Yes | Yes, keeping under 20 k files | Alternative if GitHub's limits bite |
+| Cloudflare Workers + D1 (SQLite FTS5) | 500 MB per database, 5 GB total, 5 M rows read and 100 k rows written per day | Yes | **No**: loading 2 M rows takes about 20 days of the write allowance, and every rebuild again | `au` only |
+| Turso (SQLite FTS5) | 5 GB, 500 M rows read and 10 M rows written a month | Yes | Barely: one full rebuild a month; and a database token in the browser lets anyone spend the read allowance, so it needs a Worker in front | Not worth the extra moving parts |
+| Supabase (Postgres full-text) | 500 MB database; pauses after a week without use | Yes | **No** (size) | `au` only |
+| Algolia free | 1 M records, 10 k searches a month | – | – | **No**: 180 k searches a month |
+| Oracle Always Free + Meilisearch | Arm VM; reclaimed if idle; capacity shortages | Yes | Yes | Only if typo tolerance comes back |
 
-* Start with `world` if the hardware allows. The coverage test (#15) runs against both and shows whether
-  `au` is enough.
-* Use an SSD, not an SD card: the index is memory-mapped and read randomly.
-* Cap indexing (for example `MEILI_MAX_INDEXING_MEMORY=3GiB` and half the cores on an 8 GB box) so a rebuild
-  does not starve the box's other services, and schedule it at night.
+### 5.4 Recommendation
+
+**A static, pre-sorted word index on GitHub Pages, built weekly by a GitHub Action.**
+
+* **Free and no server.** No DR-01 exception, no home exposure, no rate limits to manage, no uptime to
+  watch. It is the same kind of hosting the app already uses.
+* **Same origin.** Published from a second repository (`food-index`) to `froussios.github.io/food-index/`,
+  it shares the app's origin (`froussios.github.io`), so no CORS setup.
+* **Share-alike for free.** The index is a derivative database under ODbL; publishing it openly, with the
+  licence file at its root, is exactly what share-alike asks.
+* **Offline later.** Index files are plain cacheable files, so M2's offline mode ([#20](https://github.com/Froussios/fitbit-nutrition-portal/issues/20)) can keep the ones a
+  user has fetched.
+* **Privacy.** No query text leaves the browser. The host sees which index files are fetched, which hints at
+  words searched, but nothing ties them to a person beyond the IP address.
+* **Start with `world`** if it fits under about 800 MB; otherwise raise the popularity floor or use `au`.
+  The coverage test (#15) runs against both.
+
+The previous designs (Meilisearch on a paid VM, then on a home server) remain the path if typo tolerance
+becomes a requirement again; the `FoodCatalog` interface hides the difference.
 
 ## 6. Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Browser["Static web app (GitHub Pages)"]
+  subgraph Browser["App (froussios.github.io/fitbit-nutrition-portal)"]
     Form["Log form"] --> Combo["Food combobox"]
     Combo --> Ctl["Search controller<br/>debounce · abort · cache"]
     Ctl --> FC["FoodCatalog"]
-    FC --> Meili["SearchFoodCatalog"]
-    FC -.->|"no service configured<br/>(dev, tests)"| Local["LocalFoodCatalog"]
+    FC --> SFC["StaticFoodCatalog<br/>query engine"]
+    FC -.->|"no index configured<br/>(dev, tests)"| Local["LocalFoodCatalog"]
   end
-  Meili -- "HTTPS, search-only key" --> Funnel["Tailscale Funnel<br/>(or Cloudflare Tunnel)"]
-  subgraph Home["Home server: Docker Compose"]
-    Funnel --> Proxy["nginx<br/>route allowlist · CORS · rate limit"]
-    Proxy --> MS["Meilisearch<br/>index: foods"]
-    Indexer["indexer, weekly at night<br/>filter · fromOffProduct · rank<br/>relevance tests · swap"] -- "admin key" --> MS
+  SFC -- "GET index files<br/>same origin" --> Pages["GitHub Pages<br/>froussios.github.io/food-index"]
+  subgraph GHA["GitHub Actions, food-index repo, weekly"]
+    Dump["Open Food Facts<br/>JSONL export"] --> Build["build-index<br/>filter · fromOffProduct · sort · tokenise"]
+    Build --> Test["relevance tests"] --> Deploy["deploy to Pages"]
   end
-  Dump["Open Food Facts<br/>JSONL export"] --> Indexer
+  Deploy --> Pages
 ```
 
-### 6.1 Index documents
+### 6.1 Index files
 
-Each document is an Open Food Facts product record cut down to the fields `OffProduct` reads, so
-`fromOffProduct()` stays the single normaliser (constraint from #3). Two fields are added for search:
-
-```json
-{
-  "code": "9300652000000",
-  "product_name": "Weet-Bix Wholegrain Cereal",
-  "brands": "Sanitarium",
-  "quantity": "575 g",
-  "product_quantity": 575,
-  "product_quantity_unit": "g",
-  "serving_size": "2 biscuits (30 g)",
-  "serving_quantity": 30,
-  "serving_quantity_unit": "g",
-  "nutrition_data_per": "100g",
-  "nutriments": { "energy-kcal_100g": 358, "proteins_100g": 12, "...": "only the keys in NUTRIENTS" },
-  "rank": 4.1,
-  "au": true
-}
 ```
-(values illustrative)
-
-Primary key `code`. Expected size about 400–600 bytes per document.
-
-### 6.2 Index settings (starting point)
-
-```json
-{
-  "searchableAttributes": ["product_name", "brands"],
-  "displayedAttributes": ["code", "product_name", "brands", "quantity", "product_quantity",
-    "product_quantity_unit", "serving_size", "serving_quantity", "serving_quantity_unit",
-    "nutrition_data_per", "nutriments"],
-  "rankingRules": ["words", "typo", "proximity", "attribute", "exactness", "rank:desc"],
-  "filterableAttributes": ["au"],
-  "synonyms": "from pipeline/synonyms.json",
-  "pagination": { "maxTotalHits": 100 }
-}
+current.json                     { "version": "2026-11-08" }  (the only file whose content changes between builds)
+<version>/
+  meta.json                      build and export dates, counts, scope, shard sizes, licence
+  LICENSE.txt                    ODbL notice and attribution
+  dict/<ab>.json                 every word starting with "ab": [word, product count, where its list is]
+  post/<nnnn>.bin                short product lists, packed by a hash of the word (4,096 packs)
+  big/<word id>/<k>.bin          chunk k (4,096 IDs each) of a long product list
+  pfx/<ab>.bin                   2- and 3-letter prefixes with many expansions: first 1,000 IDs of their union
+  rec/<nnnn>.json                product records, 512 per file, by ID
+  code/<nnnn>.json               barcode → ID, by a hash of the barcode (2,048 files)
 ```
 
-`au` is filterable so an "Australian products only" switch can be added without reindexing.
+* **Product lists** are sorted ID lists, stored as deltas in variable-length integers (about 2 bytes per
+  entry). Because IDs follow the ranking, the first chunk of a list holds its best products.
+* **Records** are compact arrays decoded into `FoodItem`:
+  `[code, name, brand, basis, kcal, [nutrients in NUTRIENT_KEYS order], [[portion, amount, unit], …], quantity]`.
+* **Versioned folders** let the next build replace everything at once. The app reads `current.json` at
+  start; if an index file returns 404 (a new build was published mid-session), it rereads
+  `current.json` and retries once.
+* GitHub Pages serves every file with a 10-minute cache and ETags. Files are effectively immutable within a
+  version, so revalidation is cheap.
+
+### 6.2 Query engine (`StaticFoodCatalog`)
+
+For a query `dark choc`:
+
+1. **Words.** Tokenise (section 4.1). `dark` is complete; `choc` is the last word, a prefix.
+2. **Dictionary.** Fetch `dict/da.json` and `dict/ch.json` (cached after the first time). If a complete word
+   is not in the dictionary, there are no results (every word must match).
+3. **Prefix expansion.** Words in `dict/ch.json` that start with `choc`, most common first. Up to 16 of them
+   are used; rarer expansions (usually misspellings) are skipped. For a 2- or 3-letter last word with more
+   expansions than that, the precomputed `pfx/` list is used instead.
+4. **Product lists.** Open a lazy iterator per complete word and a merged iterator over the prefix's
+   expansions. Each fetches chunks only when the walk reaches them.
+5. **Intersect** in ID order (leapfrogging the shortest list) and stop at the first 10 matches.
+6. **Records.** Fetch the record files holding those IDs (often one or two, because good matches cluster at
+   low IDs), decode to `FoodItem`, and compute highlight runs from the query words.
+
+Fetches per keystroke after the first few: usually 0–2 list chunks and 1–3 record files, all small and
+mostly cached. Section 9 sets the budget.
 
 ### 6.3 Client contract
 
@@ -333,135 +340,93 @@ export interface FoodCatalog {
 }
 ```
 
-* `SearchFoodCatalog` (new, `src/food/search-catalog.ts`) calls the service with `fetch`; no SDK, to keep
-  the bundle small. Hits go through `fromOffProduct()`; a hit that fails to normalise is dropped and logged.
-* `LocalFoodCatalog` keeps working for development and tests, with a simple fuzzy scorer so the UI behaves
-  the same without the service. Relevance is only tested against the real engine.
+* `StaticFoodCatalog` (`src/food/static-catalog.ts`) implements it over the index files with `fetch`.
+* `LocalFoodCatalog` gets the same matching and ordering rules (shared tokeniser and coverage function), so
+  the UI behaves identically in development and tests without the index.
 * `main.ts` stops loading the whole catalogue up front (`catalog.search("")`); the log form receives the
   catalogue instead of an array of foods.
 
-Search request:
+### 6.4 Barcode lookup
 
-```http
-POST https://<search host>/indexes/foods/search
-Authorization: Bearer <public search-only key>
-Content-Type: application/json
+`get({ source: "off", id })`: fetch `code/<hash(id)>.json`, find the ID, fetch its record file. Two small
+fetches. Open Food Facts stores some products as UPC-A (12 digits) and some as EAN-13 with a leading 0; the
+lookup tries both forms.
 
-{
-  "q": "weetbix",
-  "limit": 10,
-  "attributesToHighlight": ["product_name", "brands"],
-  "highlightPreTag": "",
-  "highlightPostTag": ""
-}
-```
-
-The highlight tags are private-use characters, not HTML. The client splits `_formatted.product_name` on
-them into `TextRun`s and renders each run as a text node.
-
-Barcode lookup: `GET /indexes/foods/documents/<code>` with the same key.
-
-### 6.4 Configuration
+### 6.5 Configuration
 
 | Variable | Meaning |
 |---|---|
-| `VITE_FOOD_SEARCH_URL` | Base URL of the search service, e.g. `https://food.<tailnet>.ts.net` |
-| `VITE_FOOD_SEARCH_KEY` | Public Meilisearch key with only the `search` and `documents.get` actions on index `foods` |
+| `VITE_FOOD_INDEX_URL` | Base URL of the index, e.g. `https://froussios.github.io/food-index/` |
 
-Both are public and baked in at build time, like the OAuth client ID. Without them the app uses
-`LocalFoodCatalog`.
+Without it the app uses `LocalFoodCatalog`.
 
-### 6.5 Security
+### 6.6 Security
 
-Exposing a home machine needs care; the design keeps the exposed surface to two read-only routes.
+* Open Food Facts text is user-contributed and untrusted. It is rendered with `textContent` only (the
+  existing `el()` helper already does this), and records are parsed as JSON, never evaluated.
+* The index is public data on a public host; there are no keys and nothing to write to.
 
-* **No inbound ports.** No port forwarding on the router; the tunnel client connects outwards. Funnel
-  publishes only the nginx port, never the box's other services.
-* **Two routes.** Meilisearch is reachable only on the Compose network. nginx exposes just
-  `POST /indexes/foods/search`, `GET /indexes/foods/documents/*` and `GET /health`; everything else gets 404.
-* **Keys.** The browser holds only the search-only key; it cannot change the index. The master key stays on
-  the server, and the indexer reaches Meilisearch over the Compose network.
-* **Containers** run as non-root with read-only root filesystems where possible. Putting the box on a
-  separate network (guest network or VLAN) is recommended but optional.
-* **CORS** allows the GitHub Pages origin and `http://localhost:5173`.
-* **Rate limit** in nginx, generous enough for fast typing. Behind Cloudflare it is per client IP
-  (`CF-Connecting-IP`). Whether Funnel passes the client IP is unverified; if it does not, a global limit
-  sized for the 100-user cap (for example 30 requests a second) protects the box.
-* Open Food Facts text is untrusted: rendered with `textContent` only (the existing `el()` helper already
-  does this).
+## 7. Index builder
 
-### 6.6 Privacy
+A Node script (`pipeline/build-index.ts`) in this repository, run weekly (and on demand) by a GitHub Action
+in the `food-index` repository, which deploys the output to that repository's GitHub Pages.
 
-The service never receives Google tokens or user identifiers. Search terms are in POST bodies, which nginx
-does not log; access logs are off or reduced to status and timing. With Funnel, TLS ends on our server, so
-no third party sees the queries; with Cloudflare Tunnel, Cloudflare does.
+1. **Download** the Open Food Facts JSONL export, streamed and decompressed on the fly. If the runner is too
+   slow, the Parquet export read with DuckDB fetches only the columns we need.
+2. **Slim** the rows and fields (section 5.1). `fromOffProduct()` is imported from `src/core/off.ts`.
+3. **Score and sort**: popularity, name word count, then assign IDs in ranking order.
+4. **Tokenise** names and brands (`src/core/tokens.ts`), build product lists, the dictionary, prefix lists,
+   record files and the barcode map.
+5. **Check limits**: total size under 800 MB, files under 18,000, no file over 20 MB. Fail the run otherwise.
+6. **Test**: run the relevance suite (section 10) against the built files with the real query engine. On
+   failure, stop; the published index is untouched.
+7. **Deploy** to GitHub Pages, then update `current.json`.
 
-## 7. Index pipeline
-
-A Node script in the repo (`pipeline/`), packaged as the `indexer` service of the same Compose project. A
-timer on the server (cron or systemd) pulls the repo and runs it weekly at night; it can also be run by hand.
-
-1. **Download** the Open Food Facts JSONL export, streamed and decompressed on the fly (never stored
-   uncompressed). JSONL keeps the record shape the app already reads. If the weekly download (several GB)
-   is a problem, the Parquet export read with DuckDB fetches only the columns we need.
-2. **Filter** each product: needs a name (`product_name`, falling back to `product_name_en`), must pass
-   `fromOffProduct()` (usable energy), energy must be plausible (0–900 kcal per 100 g/ml), and it must be in
-   the configured scope (`au` or `world`, section 5.4). The normaliser is imported from `src/core/off.ts`, so
-   build time and run time agree.
-3. **Shape** each survivor into the document in section 6.1 and compute `rank` and `au`.
-4. **Report** counts (read, kept, dropped by reason), document size and index size to the log, and write a
-   small status file (build date, export date, counts) that nginx serves at `/health`.
-5. **Upload** into a new index `foods_<date>`: apply settings first (Meilisearch uses less memory that way),
-   then add documents in NDJSON batches and wait for indexing.
-6. **Gate** on the relevance tests (section 10) against the new index. On failure stop; the live index is
-   untouched.
-7. **Swap** `foods_<date>` with `foods` (atomic) and delete the previous index once the swap succeeds, so
-   disk use peaks at two indexes during a rebuild.
-
-Daily delta updates can come later; weekly full rebuilds keep the pipeline simple and self-healing.
-
-**Licence.** The Open Food Facts database is under ODbL; our index is a derivative database. The app shows
-"Food data: Open Food Facts (ODbL)" with a link in the dropdown and the footer. For share-alike, the
-pipeline that produces the index is public in this repo and `/health` names the export it was built from,
-so anyone can rebuild it. Confirm that this is enough when building #12.
+**Licence.** The app shows "Food data: Open Food Facts (ODbL)" with a link in the dropdown and the footer;
+the published index carries the ODbL notice.
 
 ## 8. Client implementation
 
-### 8.1 Search controller
-
-A small class between the combobox and `FoodCatalog`, unit-tested with fake timers and a fake catalogue:
-
-* **Debounce** 100 ms after the last keystroke.
-* **Cancel** the previous request with `AbortController` when a new one starts.
-* **Drop stale responses**: a response is used only if its query still equals the current query, even if
-  the abort came too late.
-* **Cache** the last 50 queries (LRU), so Backspace and repeated searches are instant.
-* **Errors**: surface a single error state; never throw into the UI; retry on the next keystroke.
-
-### 8.2 Combobox
+### 8.1 Combobox
 
 * `src/ui/food-combobox.ts`: DOM, events and ARIA.
 * `src/ui/combobox-state.ts`: the keyboard model in section 3.2 as a pure reducer
   (`state, event → state`), so every row in that table becomes a unit test without a DOM.
 * `src/core/food-summary.ts`: `FoodItem → FoodSummary` (kcal per 100, basis, per-serving kcal and label).
 
+### 8.2 Search controller
+
+A small class between the combobox and `FoodCatalog`, unit-tested with fake timers and a fake catalogue:
+
+* **Debounce** 100 ms after the last keystroke.
+* **Cancel** the previous search with `AbortController` when a new one starts.
+* **Drop stale results**: a result is used only if its query still equals the current query.
+* **Cache** the last 50 queries (LRU), so Backspace and repeated searches are instant. Index files are also
+  cached in memory by the query engine for the session.
+* **Errors**: one error state; never throw into the UI; retry on the next keystroke.
+
 ## 9. Performance budgets
 
 | Measure | Target |
 |---|---|
-| Last keystroke → rows on screen, Australian broadband, p95 | ≤ 250 ms (100 ms debounce + tunnel + network + render). Measure Funnel from an Australian phone early; if its relays add too much, switch to Cloudflare Tunnel. |
-| Engine processing time per search, p95 | ≤ 50 ms |
-| Response size for 10 hits | ≤ 15 KB |
-| Added JavaScript for the combobox and catalogue | ≤ 10 KB gzipped |
+| Last keystroke → rows on screen, Australian broadband, p95 | ≤ 250 ms (100 ms debounce + fetches + render) |
+| Data fetched for a search after the first few, typical | ≤ 50 KB |
+| Data fetched for the very first search of a session | ≤ 300 KB |
+| Added JavaScript for the combobox and query engine | ≤ 15 KB gzipped |
+
+GitHub Pages is served through a CDN with Australian edge locations; measure early from a phone on mobile
+data. If it misses the budget, Cloudflare Pages is a drop-in alternative.
 
 ## 10. Testing
 
-* **Unit (Vitest):** keyboard reducer (every row of section 3.2); search controller (debounce, abort,
-  stale responses, cache, errors); highlight splitting; `FoodSummary`; the pipeline's filter and `rank`.
+* **Unit (Vitest):** tokeniser (split, join, accents, stop words); coverage and ordering; the query engine
+  against a tiny index built in the test (exact words, any order, prefix, no-match, chunk boundaries,
+  barcode lookup); keyboard reducer (every row of section 3.2); search controller (debounce, abort, stale
+  results, cache, errors); highlight runs; `FoodSummary`.
 * **Relevance suite** (`pipeline/relevance.json`): queries with the product expected in the top N, for
-  example `weetbix`, `wheetbix`, `vegemite`, `coke zero`, `big mac`, `tim tam`, `sanitarium weet`. It runs
-  against every new index before the swap (section 7, step 6) and is the tool for tuning ranking and
-  synonyms. The coverage test list ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) is folded into it.
+  example `weet bix`, `weetbix`, `vegemite`, `coke zero`, `big mac`, `tim tam`, `sanitarium weet`,
+  `chocolate` (a plain "Chocolate" product before "Dark chocolate"). Runs against every build before deploy.
+  The coverage test list ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) is folded into it.
 * **Manual:** keyboard-only and screen-reader pass (VoiceOver on iOS, TalkBack on Android), phone and
   desktop.
 
@@ -469,22 +434,21 @@ A small class between the combobox and `FoodCatalog`, unit-tested with fake time
 
 | Order | Issue | What |
 |---|---|---|
-| 1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) Decision D3 | Confirm option E (Meilisearch on a home server via Tailscale Funnel) and record it as a DR-01 exception |
-| 2 | [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Run the food search service on a home server | Docker Compose (Meilisearch, nginx, indexer), Funnel, keys, CORS, rate limit, setup notes in `infra/search/` |
-| 3 | [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) Index pipeline | Section 7, plus `SearchFoodCatalog` |
-| 3 | [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Coverage spike | Can start as soon as the pipeline runs locally against a Meilisearch container |
+| 1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) Decision D3 | Confirm the static index on GitHub Pages; no server |
+| 2 | [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) Index builder and `StaticFoodCatalog` | Sections 4, 5.1, 6, 7 |
+| 2 | [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Coverage spike | As soon as the builder runs locally; compare `au` and `world` |
+| 3 | [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Publish the food index | `food-index` repository, weekly Action, Pages, size checks |
 | 4 | [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) Search-as-you-type UI | Sections 3, 8 |
 | 5 | [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Camera and manual entry, via `get()` |
 | 6 | [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) Recent foods | Unchanged; shows in the empty dropdown |
 
 ## 12. Open questions
 
-* **Which home server.** Its RAM and disk decide the dataset scope (`world` or `au`); the first pipeline run
-  measures the real index size.
-* **Funnel in practice.** Latency through Tailscale's relays from Australian mobile networks, its unpublished
-  bandwidth limits, and whether it passes the client IP. Cloudflare Tunnel (with a domain) is the fallback.
-* **Barcode forms.** Open Food Facts stores some products as UPC-A (12 digits) and some as EAN-13 with a
-  leading 0. The pipeline may need to index both forms.
+* **Real sizes.** Products surviving the filters and the total index size decide `world` versus `au` and
+  the popularity floor. Measured by the first build.
+* **Exact words in practice.** Whether misses (misspellings, `timtam` vs `Tim Tam`, plurals) are common
+  enough to add the section 4.4 helpers.
+* **Brand-only matches.** Whether the approximation in section 4.3 orders `cadbury chocolate` well enough.
+* **Duplicates.** Whether collapsing same-name, same-energy products hides pack sizes people want to see.
 * **Per-serving kcal.** Open Food Facts serving sizes are sometimes wrong. If the coverage test finds many,
   show per-serving values only when they agree with the per-100 values.
-* **Australian-only switch.** The `au` filter exists; whether the UI offers it waits for real use.

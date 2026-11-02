@@ -9,7 +9,7 @@ labelled `decision`; when one closes, its outcome is added here. Supporting fact
 | ID | Question | Milestone | Issue | Current leaning |
 |---|---|---|---|---|
 | D1 | How to provide long-lived sessions | M3 | [#22](https://github.com/Froussios/fitbit-nutrition-portal/issues/22) | Stateless token broker (option A2) plus OAuth app in Production |
-| D3 | Design of the food data mirror | M1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) | Meilisearch on a home server, published with Tailscale Funnel and rebuilt weekly on the same box from the Open Food Facts export; a DR-01 exception. Owner requirements (2 Nov 2026): fuzzy search over the dataset, which rules out static shards and SQLite over range requests; and no monthly bill, which rules out a paid VM or search SaaS. Fallback host: Oracle Cloud Always Free. See [FOOD_SEARCH.md](FOOD_SEARCH.md#5-hosting-r7-decision-d3). |
+| D3 | Design of the food data mirror | M1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) | A slimmed, pre-sorted word index built weekly by a GitHub Action and served as static files from GitHub Pages; no server, so no DR-01 exception. Owner requirements (2 Nov 2026): no monthly bill; the dataset may be slimmed; exact-word matching (DR-13). Free database tiers (D1, Supabase) fit only the Australian subset. Meilisearch on a home server is the path if typo tolerance returns. See [FOOD_SEARCH.md](FOOD_SEARCH.md#5-hosting-r7-decision-d3). |
 
 ## Decided
 
@@ -86,3 +86,12 @@ data (M1).
 are parked ([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38)).
 **Why.** Owner decision (2 November 2026): one source first, to get search working end to end.
 **Reopen if.** The coverage test ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) finds fewer than 45 of 50 items, or generic foods are a frequent miss.
+
+### DR-13 Food search matches exact words, ranked by coverage
+**Decision.** No typo tolerance. Every query word must appear in the product's name or brand, in any order;
+the last word matches as a prefix while typing. Results rank by coverage (query words in the name divided by
+words in the name), then popularity: "chocolate" ranks a product called "Chocolate" above "Dark chocolate".
+**Why.** Owner decision (2 November 2026): it lets a pre-sorted static index serve search for free, with no
+search engine or server ([FOOD_SEARCH.md](FOOD_SEARCH.md#4-matching-and-ordering-r3)).
+**Reopen if.** Misspellings or word-form misses are common in the coverage test ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) or daily use; try
+the cheap helpers (synonyms, "did you mean", plurals) first.
