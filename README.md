@@ -15,6 +15,7 @@ This is the MVP, a proof of concept (milestone M0):
 * MVP targets, post-MVP milestones and work saved for later: [docs/ROADMAP.md](docs/ROADMAP.md)
   (tracked in [GitHub issues](https://github.com/Froussios/fitbit-nutrition-portal/issues/1))
 * Decision log: [docs/DECISIONS.md](docs/DECISIONS.md)
+* Food search design (milestone M1): [docs/FOOD_SEARCH.md](docs/FOOD_SEARCH.md)
 
 ## Google Cloud setup (once, by the developer)
 

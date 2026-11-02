@@ -47,7 +47,7 @@ flowchart LR
   end
   HC -- "Bearer token, CORS" --> GHAPI["Google Health API v4<br/>nutrition-log = the diary"]
   FC --> Fake["M0: local fake data"]
-  FC -. "later" .-> Mirror["Food data mirror<br/>(OFF dump + generic foods)"]
+  FC -. "M1" .-> Search["Food search service<br/>Meilisearch over the OFF export"]
 ```
 
 | Layer | Folder | Notes |
@@ -164,12 +164,12 @@ The app **never queries the public Open Food Facts API**. Its read limits (about
 `FoodCatalog` (`search`, `get`):
 
 * **M0:** `LocalFoodCatalog` over a handful of fake records written in the Open Food Facts format.
-* **Later:** a mirror built from the Open Food Facts data exports (ODbL allows this, with attribution and
-  share-alike on the database), filtered (for example to Australian products and chains) and merged with
-  generic foods (AUSNUT / OpenNutrition). A design that keeps "no backend" is a scheduled job (for example
-  a GitHub Action) that builds a static, sharded search index or an SQLite file served from a CDN and
-  queried over HTTP range requests. That means build-time compute but no running server. Contributions
-  back to Open Food Facts are a separate concern for that milestone.
+* **M1:** fuzzy search-as-you-type over Open Food Facts, served by a self-hosted search engine
+  (Meilisearch on a small VM in Sydney) that a weekly GitHub Action rebuilds from the Open Food Facts
+  export (ODbL allows this, with attribution and share-alike on the database). Static indexes on a CDN
+  were considered and rejected because they cannot do typo-tolerant search over the dataset. The service
+  holds only public data, so it is a recorded, stateless exception to "no backend" (decision D3). Generic
+  foods (AUSNUT / OpenNutrition) come later (DR-12). Full design: [FOOD_SEARCH.md](FOOD_SEARCH.md).
 
 ## 7. Decisions, milestones and spikes
 

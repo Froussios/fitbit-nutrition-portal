@@ -9,7 +9,7 @@ labelled `decision`; when one closes, its outcome is added here. Supporting fact
 | ID | Question | Milestone | Issue | Current leaning |
 |---|---|---|---|---|
 | D1 | How to provide long-lived sessions | M3 | [#22](https://github.com/Froussios/fitbit-nutrition-portal/issues/22) | Stateless token broker (option A2) plus OAuth app in Production |
-| D3 | Design of the food data mirror | M1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) | Static index built by a scheduled job and served from a CDN |
+| D3 | Design of the food data mirror | M1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) | Self-hosted Meilisearch on a small VM in Sydney, rebuilt weekly from the Open Food Facts export by a GitHub Action; a DR-01 exception. The owner requires fuzzy search over the dataset (2 Nov 2026), which rules out static shards and SQLite over range requests. See [FOOD_SEARCH.md](FOOD_SEARCH.md#5-hosting-r7-decision-d3). |
 
 ## Decided
 
@@ -80,3 +80,9 @@ Health data from the web.
 features (M2), long-lived sessions (M3) and custom meals (M4) are post-MVP milestones.
 **Why.** Owner decision: prove the Google Health API round trip first; meals also depend on real food
 data (M1).
+
+### DR-12 Food search starts with Open Food Facts only
+**Decision.** M1 food search indexes Open Food Facts products only. Generic foods (AUSNUT / OpenNutrition)
+are parked ([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38)).
+**Why.** Owner decision (2 November 2026): one source first, to get search working end to end.
+**Reopen if.** The coverage test ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) finds fewer than 45 of 50 items, or generic foods are a frequent miss.
