@@ -178,3 +178,60 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
   border: 1px solid var(--border);
   border-radius: 6px;
 }
+
+/* Food search combobox (docs/FOOD_SEARCH.md section 3) */
+.combo { position: relative; }
+.combo.searching input {
+  background-image: linear-gradient(90deg, transparent 0%, var(--border) 50%, transparent 100%);
+  background-size: 200% 2px;
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  animation: combo-busy 1s linear infinite;
+}
+@keyframes combo-busy { to { background-position: -200% 100%; } }
+@media (prefers-reduced-motion: reduce) { .combo.searching input { animation: none; } }
+.combo-list {
+  position: absolute;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.15);
+}
+.opt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 12px;
+  align-items: baseline;
+  min-height: 44px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.opt[aria-selected="true"], .opt:hover { background: var(--row-alt); }
+.opt[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--accent); }
+.opt-name { overflow-wrap: anywhere; }
+.opt-kcal { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.opt-sub, .opt-serving { font-size: 0.85rem; color: var(--muted); }
+.opt-sub { overflow-wrap: anywhere; }
+.opt-serving { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.opt mark { background: none; color: inherit; font-weight: 700; }
+.opt-custom { display: block; color: var(--accent); }
+.opt-note { padding: 8px 12px; color: var(--muted); font-size: 0.85rem; }
+.opt-note.attribution { padding-top: 4px; font-size: 0.75rem; }
+.opt-note.attribution a { color: var(--muted); }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

@@ -1,7 +1,8 @@
 # Food search: design
 
-Status: proposed, 2 November 2026 (fourth revision: whole world dataset; exact-word matching over a static
-index queried file by file from the browser; no server).
+Status: implemented, 2 November 2026 (whole world dataset; exact-word matching over a static index queried
+file by file from the browser; no server). The index is stored in this repository under `public/food-index/`
+and deployed to GitHub Pages with the app.
 Milestone M1 ([#3](https://github.com/Froussios/fitbit-nutrition-portal/issues/3)). Decision: [D3 #9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) (hosting). Work items: section 11.
 
 This document covers typing a food name and picking a product from a dropdown of matches. Barcode lookup
@@ -296,8 +297,8 @@ queried by an engine in the browser that fetches only what each search needs.**
 
 * **Free and no server.** No DR-01 exception, no home exposure, no rate limits to manage, no uptime to
   watch. It is the same kind of hosting the app already uses.
-* **Same origin.** Published from a second repository (`food-index`) to `froussios.github.io/food-index/`,
-  it shares the app's origin (`froussios.github.io`), so no CORS setup.
+* **Same origin.** Stored in this repository under `public/food-index/`, it is deployed to GitHub Pages
+  with the app, next to it, so no CORS setup and no second site.
 * **Share-alike for free.** The index is a derivative database under ODbL; publishing it openly, with the
   licence file at its root, is exactly what share-alike asks.
 * **Offline later.** Index files are plain cacheable files, so M2's offline mode ([#20](https://github.com/Froussios/fitbit-nutrition-portal/issues/20)) can keep the ones a
@@ -319,8 +320,8 @@ flowchart LR
     FC --> SFC["StaticFoodCatalog<br/>query engine"]
     FC -.->|"no index configured<br/>(dev, tests)"| Local["LocalFoodCatalog"]
   end
-  SFC -- "GET a few small files per search<br/>same origin" --> Pages["GitHub Pages<br/>froussios.github.io/food-index<br/>~350–600 MB stored"]
-  subgraph GHA["GitHub Actions, food-index repo, weekly"]
+  SFC -- "GET a few small files per search<br/>same origin" --> Pages["GitHub Pages<br/>app + food-index/<br/>~350–600 MB stored"]
+  subgraph GHA["GitHub Actions: food-index.yml"]
     Dump["Open Food Facts<br/>JSONL export"] --> Build["build-index<br/>slim · fromOffProduct · sort · tokenise"]
     Build --> Test["relevance tests"] --> Deploy["deploy to Pages"]
   end
@@ -425,9 +426,9 @@ leading 0; the lookup tries both forms.
 
 | Variable | Meaning |
 |---|---|
-| `VITE_FOOD_INDEX_URL` | Base URL of the index, e.g. `https://froussios.github.io/food-index/` |
+| `VITE_FOOD_INDEX_URL` | Base URL of the index. Default: `food-index/` next to the app (`public/food-index/` in the repo). |
 
-Without it the app uses `LocalFoodCatalog`.
+If no index is found there, the app logs a warning and uses `LocalFoodCatalog` over the sample foods.
 
 ### 6.6 Security
 
@@ -437,8 +438,11 @@ Without it the app uses `LocalFoodCatalog`.
 
 ## 7. Index builder
 
-A Node script (`pipeline/build-index.ts`) in this repository, run weekly (and on demand) by a GitHub Action
-in the `food-index` repository, which deploys the output to that repository's GitHub Pages.
+A Node script (`pipeline/build-index.ts`, logic in `pipeline/index-builder.ts`) run by
+`.github/workflows/food-index.yml`: by hand, and whenever the builder or the code that shapes the index
+changes. The workflow streams the export through the builder and commits `public/food-index/` to the
+branch; the CI workflow then deploys it to GitHub Pages with the app. To build locally from a downloaded
+export: `npm run build:index -- --input openfoodfacts-products.jsonl.gz`.
 
 1. **Download** the Open Food Facts JSONL export, streamed and decompressed on the fly. If the runner is too
    slow, the Parquet export read with DuckDB fetches only the columns we need.
@@ -446,11 +450,24 @@ in the `food-index` repository, which deploys the output to that repository's Gi
 3. **Score and sort**: popularity, name word count, then assign IDs in ranking order.
 4. **Tokenise** names and brands (`src/core/tokens.ts`); build product lists, the range-sharded dictionary,
    prefix lists, summary and detail files and the barcode map.
-5. **Check limits**: total under 900 MB (GitHub's cap is 1 GB), no file over 20 MB, every dictionary shard
-   under 16 KB compressed. Fail the run otherwise.
-6. **Test**: run the relevance suite (section 10) against the built files with the real query engine, and
-   record the bytes each test query fetched. On failure, stop; the published index is untouched.
-7. **Deploy** to GitHub Pages, then update `current.json`.
+5. **Check limits**: total under 900 MB (GitHub's cap is 1 GB) and no file over 20 MB. Fail the run
+   otherwise; nothing is committed.
+6. **Switch** `current.json` to the new version folder and delete the old one.
+7. **Commit** `public/food-index/` (workflow), which the CI workflow deploys with the app.
+
+Not built yet: the relevance suite against the real index (section 10) and the per-query byte budget check.
+The unit tests run the builder and engine on a small fixture.
+
+**Measured on synthetic data** (2 M made-up products with a realistic mix of common and rare words, on a
+4-core machine): 94 s and 1.9 GB of memory to build; 471 MB in 20,518 files. Typing a query letter by
+letter with a cold cache and no debounce fetched 23 KB gzipped for `chocolate`, 76 KB for `dark choc` and
+287 KB for `chips salt vinegar` in total. Real Open Food Facts records are larger and more varied; the
+workflow's job summary reports the real counts and sizes.
+
+**Repository growth.** Each rebuild commits a new copy of most index files (IDs follow popularity, which
+changes), adding roughly 150–200 MB of compressed history. That is why the workflow does not run on a
+schedule. If regular refreshes are wanted, move the index to a branch that is replaced on each build, or a
+separate repository.
 
 **Licence.** The app shows "Food data: Open Food Facts (ODbL)" with a link in the dropdown and the footer;
 the published index carries the ODbL notice.
@@ -510,7 +527,7 @@ data. If browser execution misses the latency budget, move the engine into a Wor
 | 1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) Decision D3 | Confirm the static index on GitHub Pages; no server |
 | 2 | [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) Index builder and `StaticFoodCatalog` | Sections 4, 5, 6, 7 |
 | 2 | [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Coverage spike | As soon as the builder runs locally |
-| 3 | [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Publish the food index | `food-index` repository, weekly Action, Pages, size checks |
+| 3 | [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Publish the food index | `food-index.yml` workflow commits `public/food-index/`; CI deploys it with the app |
 | 4 | [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) Search-as-you-type UI | Sections 3, 8 |
 | 5 | [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Camera and manual entry, via `get()` |
 | 6 | [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) Recent foods | Unchanged; shows in the empty dropdown |

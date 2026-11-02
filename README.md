@@ -61,7 +61,8 @@ client ID instead.
 |---|---|
 | `npm run dev` | Dev server on port 5173 |
 | `npm test` | Unit tests (Vitest) |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run typecheck` | `tsc --noEmit` for the app and the index builder |
+| `npm run build:index -- --input <export.jsonl.gz>` | Build the food index into `public/food-index/` from an Open Food Facts export |
 | `npm run build` | Type-check and build the static site into `dist/` |
 | `npm run preview` | Serve `dist/` on port 4173 |
 
@@ -78,6 +79,14 @@ client ID instead.
 
 Any static host works. The build uses relative paths, so it can live under a sub-path.
 
+### Food index
+
+Food search reads a static index of the Open Food Facts database from `public/food-index/`, deployed with
+the app (design: [docs/FOOD_SEARCH.md](docs/FOOD_SEARCH.md)). `.github/workflows/food-index.yml` builds it
+from the Open Food Facts export and commits it: run it from the Actions tab, or it runs when the builder
+changes. Without an index the app falls back to the sample foods. Food data © Open Food Facts
+contributors, ODbL.
+
 ## Project layout
 
 ```
@@ -85,8 +94,10 @@ src/
   core/      domain logic, no I/O: units, nutrients, food model, Open Food Facts normaliser, ids, time
   health/    Google Health API types (from the discovery document), client and mapping
   auth/      Google Identity Services token flow
-  food/      FoodCatalog interface and the local fake catalogue (Open Food Facts format)
-  ui/        DOM helpers, log form, diary table
+  food/      FoodCatalog interface, the static index engine and catalogue, sample foods
+  ui/        DOM helpers, log form, food search combobox, diary table
+pipeline/    food index builder (Open Food Facts export → public/food-index/)
+public/      static files served with the app, including the generated food index
   main.ts    app shell
 tests/       Vitest unit tests
 docs/        architecture and decisions
@@ -96,7 +107,7 @@ docs/        architecture and decisions
 
 * Access tokens last about an hour; click **Continue** when asked. Long-lived sessions are planned for a
   later milestone (they need refresh tokens, which Google only issues through the client secret).
-* The app never queries the public Open Food Facts API (its rate limits are too low). Food search will use
-  a mirror; for now the catalogue is local fake data.
+* The app never queries the public Open Food Facts API (its rate limits are too low). Food search uses our
+  own static index of the Open Food Facts export, matching exact words (no typo tolerance).
 * Only entries made by this app can be deleted (the write scope covers only the app's own data).
 * While the OAuth app is in *Testing*, only listed test users (up to 100) can sign in.
