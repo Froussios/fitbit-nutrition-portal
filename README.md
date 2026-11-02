@@ -62,7 +62,7 @@ client ID instead.
 | `npm run dev` | Dev server on port 5173 |
 | `npm test` | Unit tests (Vitest) |
 | `npm run typecheck` | `tsc --noEmit` for the app and the index builder |
-| `npm run build:index -- --input <export.jsonl.gz>` | Build the food index into `public/food-index/` from an Open Food Facts export |
+| `npm run build:index -- --input <export.jsonl.gz>` | Build the food index into `public/food-index/` (ignored by git) from an Open Food Facts export, for local development |
 | `npm run build` | Type-check and build the static site into `dist/` |
 | `npm run preview` | Serve `dist/` on port 4173 |
 
@@ -81,11 +81,21 @@ Any static host works. The build uses relative paths, so it can live under a sub
 
 ### Food index
 
-Food search reads a static index of the Open Food Facts database from `public/food-index/`, deployed with
-the app (design: [docs/FOOD_SEARCH.md](docs/FOOD_SEARCH.md)). `.github/workflows/food-index.yml` builds it
-from the Open Food Facts export and commits it: run it from the Actions tab, or it runs when the builder
-changes. Without an index the app falls back to the sample foods. Food data © Open Food Facts
-contributors, ODbL.
+Food search reads a static index of the Open Food Facts database hosted on **Cloudflare Pages** (design:
+[docs/FOOD_SEARCH.md](docs/FOOD_SEARCH.md)). `.github/workflows/food-index.yml` builds it from the Open Food
+Facts export and deploys it weekly, or when run from the Actions tab. It is never committed to git. Without
+an index the app falls back to the sample foods. Food data © Open Food Facts contributors, ODbL.
+
+One-time setup:
+
+1. In the Cloudflare dashboard, create an **Account API token** with **Account → Cloudflare Pages → Edit**,
+   and copy your **account ID**.
+2. Add repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (Settings → Secrets and
+   variables → Actions).
+3. Run the **Food index** workflow. It creates the Pages project `food-diary-index` on its first run
+   (set the repository variable `CLOUDFLARE_PAGES_PROJECT` to use another name).
+4. Set the repository variable `FOOD_INDEX_URL` to the project's URL (shown in the workflow log, normally
+   `https://food-diary-index.pages.dev/`), so the CI build points the app at it.
 
 ## Project layout
 
@@ -97,7 +107,6 @@ src/
   food/      FoodCatalog interface, the static index engine and catalogue, sample foods
   ui/        DOM helpers, log form, food search combobox, diary table
 pipeline/    food index builder (Open Food Facts export → public/food-index/)
-public/      static files served with the app, including the generated food index
   main.ts    app shell
 tests/       Vitest unit tests
 docs/        architecture and decisions

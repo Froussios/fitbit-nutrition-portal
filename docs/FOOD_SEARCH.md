@@ -1,8 +1,8 @@
 # Food search: design
 
 Status: implemented, 2 November 2026 (whole world dataset; exact-word matching over a static index queried
-file by file from the browser; no server). The index is stored in this repository under `public/food-index/`
-and deployed to GitHub Pages with the app.
+file by file from the browser; no server). The index is deployed to Cloudflare Pages by a GitHub Action and
+is never committed to git.
 Milestone M1 ([#3](https://github.com/Froussios/fitbit-nutrition-portal/issues/3)). Decision: [D3 #9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) (hosting). Work items: section 11.
 
 This document covers typing a food name and picking a product from a dropdown of matches. Barcode lookup
@@ -20,7 +20,7 @@ Set by the owner on 2 November 2026.
 | R4 | One food source for now: Open Food Facts. | The index holds Open Food Facts products only. Generic foods (AUSNUT / OpenNutrition) move to later (DR-12). |
 | R5 | Rich visuals in the dropdown: a summary per food, starting with calories per unit. | Two-line rows with kcal per 100 g / 100 ml and per serving, built from a summary view model that can grow (section 3.3). |
 | R6 | Arrow keys move through the options; the selected row is filled into the input. | Keyboard model in section 3.2; the typed query is kept so Escape and ArrowUp can restore it. |
-| R7 | Open Food Facts is large and its APIs throttle; host our own copy of the **whole world** dataset (Australian tagging is incomplete), at no monthly cost, without the browser downloading it. The dataset may be slimmed (drop fields and dead rows). | A slimmed, pre-sorted word index built weekly by a GitHub Action and stored as static files on GitHub Pages. The browser fetches only the few small files each search needs, tens of KB (section 5). |
+| R7 | Open Food Facts is large and its APIs throttle; host our own copy of the **whole world** dataset (Australian tagging is incomplete), at no monthly cost, without the browser downloading it. The dataset may be slimmed (drop fields and dead rows). | A slimmed, pre-sorted word index built weekly by a GitHub Action and stored as static files on Cloudflare Pages. The browser fetches only the few small files each search needs, tens of KB (section 5). |
 
 ## 2. Scope
 
@@ -228,7 +228,7 @@ browser, in Node (builder and tests) or in a Cloudflare Worker.
 
 | Engine runs in | Network per keystroke | Infrastructure | Free limits |
 |---|---|---|---|
-| **The browser** (start here) | 0–40 KB, 1–3 round trips | Static files only | No quota; GitHub Pages' soft 100 GB/month bandwidth |
+| **The browser** (start here) | 0–40 KB, 1–3 round trips | Static files only | No quota; Cloudflare Pages serves static files without request or bandwidth limits |
 | A Cloudflare Worker beside the files | One request, ~3 KB response, 1 round trip | A stateless Worker reading the index from R2 (a DR-01 exception) | 100 k requests/day and 10 ms CPU per request; R2 10 GB storage and 10 M reads/month. Abuse could use up the daily request quota. |
 
 **Start in the browser**: no server, no quota, no exception to DR-01. Measure on a phone on Australian
@@ -281,8 +281,9 @@ Traffic at Google's 100-user cap (V9): about 6,000 search requests a day, 180,00
 
 | Host | Free limits | Fits? | Verdict |
 |---|---|---|---|
-| **GitHub Pages** (static files) | 1 GB per site, 100 GB/month soft bandwidth, no file-count limit | Yes | **Recommended** |
-| Cloudflare Pages (static files) | 20,000 files, 25 MiB per file | Yes, with larger shards | Alternative |
+| **Cloudflare Pages** (static files, Direct Upload) | 20,000 files and 25 MiB per file; static requests and bandwidth free and unlimited | Yes: the builder sizes its files to stay under 19,000 | **Chosen** |
+| GitHub Pages, index committed to git | 1 GB per site, 100 GB/month soft bandwidth | Yes, but every rebuild stays in the git history (150–200 MB each) | Rejected by the owner |
+| GitHub release asset unpacked into GitHub Pages | Release assets do not count toward repo size | Yes | Every app deploy re-uploads the index; browsers cannot fetch release assets directly (no CORS) |
 | Cloudflare R2 (+ a Worker) | 10 GB, 10 M reads and 1 M writes a month | Yes | For the Worker option (section 5.2) |
 | Cloudflare Workers + D1 (SQLite FTS5) | 500 MB per database, 100 k rows written per day | **No**: loading 2 M rows takes about 20 days of write allowance, and every rebuild again | No |
 | Turso (SQLite FTS5) | 5 GB, 500 M rows read and 10 M written a month | Barely: one full rebuild a month; a database token in the browser exposes the read allowance | No |
@@ -292,13 +293,15 @@ Traffic at Google's 100-user cap (V9): about 6,000 search requests a day, 180,00
 
 ### 5.6 Recommendation
 
-**A slimmed, pre-sorted word index of the whole dataset on GitHub Pages, built weekly by a GitHub Action,
-queried by an engine in the browser that fetches only what each search needs.**
+**A slimmed, pre-sorted word index of the whole dataset on Cloudflare Pages, built weekly by a GitHub Action,
+queried by an engine in the browser that fetches only what each search needs.** (Owner decision,
+2 November 2026: the index must not live in git history, where every rebuild would stay for good.)
 
 * **Free and no server.** No DR-01 exception, no home exposure, no rate limits to manage, no uptime to
-  watch. It is the same kind of hosting the app already uses.
-* **Same origin.** Stored in this repository under `public/food-index/`, it is deployed to GitHub Pages
-  with the app, next to it, so no CORS setup and no second site.
+  watch. Static files on a CDN with Australian edge locations.
+* **No git history.** Each deploy replaces the previous one (Direct Upload with Wrangler, which uploads only
+  changed files). The app stays on GitHub Pages; Pages sends `Access-Control-Allow-Origin: *` by default,
+  so the app can read the index from its `*.pages.dev` origin.
 * **Share-alike for free.** The index is a derivative database under ODbL; publishing it openly, with the
   licence file at its root, is exactly what share-alike asks.
 * **Offline later.** Index files are plain cacheable files, so M2's offline mode ([#20](https://github.com/Froussios/fitbit-nutrition-portal/issues/20)) can keep the ones a
@@ -320,10 +323,10 @@ flowchart LR
     FC --> SFC["StaticFoodCatalog<br/>query engine"]
     FC -.->|"no index configured<br/>(dev, tests)"| Local["LocalFoodCatalog"]
   end
-  SFC -- "GET a few small files per search<br/>same origin" --> Pages["GitHub Pages<br/>app + food-index/<br/>~350–600 MB stored"]
+  SFC -- "GET a few small files per search<br/>(CORS)" --> Pages["Cloudflare Pages<br/>food-diary-index.pages.dev<br/>~350–600 MB stored"]
   subgraph GHA["GitHub Actions: food-index.yml"]
     Dump["Open Food Facts<br/>JSONL export"] --> Build["build-index<br/>slim · fromOffProduct · sort · tokenise"]
-    Build --> Test["relevance tests"] --> Deploy["deploy to Pages"]
+    Build --> Deploy["wrangler pages deploy"]
   end
   Deploy --> Pages
 ```
@@ -355,8 +358,8 @@ current.json                 { "version": "2026-11-08" }  (the only file whose c
 * **Versioned folders** let the next build replace everything at once. The app reads `current.json` at
   start; if an index file returns 404 (a new build was published mid-session), it rereads `current.json`
   and retries once.
-* GitHub Pages serves every file with a 10-minute cache and ETags, and compresses JSON. Files never change
-  within a version, so revalidation is cheap.
+* Version folders never change, so `_headers` lets browsers cache them for a year (`immutable`);
+  `current.json` keeps Pages' default of revalidating every time. Pages compresses JSON on the fly.
 
 ### 6.2 Query engine (`StaticFoodCatalog`)
 
@@ -426,7 +429,7 @@ leading 0; the lookup tries both forms.
 
 | Variable | Meaning |
 |---|---|
-| `VITE_FOOD_INDEX_URL` | Base URL of the index. Default: `food-index/` next to the app (`public/food-index/` in the repo). |
+| `VITE_FOOD_INDEX_URL` | Base URL of the index, e.g. `https://food-diary-index.pages.dev/`. CI sets it from the `FOOD_INDEX_URL` repository variable. Default: `food-index/` next to the app, for a locally built index in `public/food-index/` (ignored by git). |
 
 If no index is found there, the app logs a warning and uses `LocalFoodCatalog` over the sample foods.
 
@@ -439,10 +442,10 @@ If no index is found there, the app logs a warning and uses `LocalFoodCatalog` o
 ## 7. Index builder
 
 A Node script (`pipeline/build-index.ts`, logic in `pipeline/index-builder.ts`) run by
-`.github/workflows/food-index.yml`: by hand, and whenever the builder or the code that shapes the index
-changes. The workflow streams the export through the builder and commits `public/food-index/` to the
-branch; the CI workflow then deploys it to GitHub Pages with the app. To build locally from a downloaded
-export: `npm run build:index -- --input openfoodfacts-products.jsonl.gz`.
+`.github/workflows/food-index.yml`, weekly and by hand. The workflow streams the export through the builder
+and deploys the output to the Cloudflare Pages project `food-diary-index` with `wrangler pages deploy`. Nothing
+is committed. To build locally from a downloaded export (into `public/food-index/`, ignored by git):
+`npm run build:index -- --input openfoodfacts-products.jsonl.gz`.
 
 1. **Download** the Open Food Facts JSONL export, streamed and decompressed on the fly. If the runner is too
    slow, the Parquet export read with DuckDB fetches only the columns we need.
@@ -450,24 +453,24 @@ export: `npm run build:index -- --input openfoodfacts-products.jsonl.gz`.
 3. **Score and sort**: popularity, name word count, then assign IDs in ranking order.
 4. **Tokenise** names and brands (`src/core/tokens.ts`); build product lists, the range-sharded dictionary,
    prefix lists, summary and detail files and the barcode map.
-5. **Check limits**: total under 900 MB (GitHub's cap is 1 GB) and no file over 20 MB. Fail the run
-   otherwise; nothing is committed.
-6. **Switch** `current.json` to the new version folder and delete the old one.
-7. **Commit** `public/food-index/` (workflow), which the CI workflow deploys with the app.
+5. **Fit the file budget**: summary and detail files grow from 256 and 512 products per file until the
+   whole index fits in 19,000 files (Cloudflare Pages allows 20,000). Fail if any file exceeds 20 MB.
+6. **Switch** `current.json` to the new version folder, delete the old one, and write `_headers`.
+7. **Deploy** the folder to Cloudflare Pages (workflow). A deploy replaces the previous one; a session that
+   still holds the old version gets a 404, rereads `current.json` and carries on.
 
 Not built yet: the relevance suite against the real index (section 10) and the per-query byte budget check.
 The unit tests run the builder and engine on a small fixture.
 
 **Measured on synthetic data** (2 M made-up products with a realistic mix of common and rare words, on a
-4-core machine): 94 s and 1.9 GB of memory to build; 471 MB in 20,518 files. Typing a query letter by
+4-core machine): 94 s and 1.9 GB of memory to build; 471 MB in 15,638 files. Typing a query letter by
 letter with a cold cache and no debounce fetched 23 KB gzipped for `chocolate`, 76 KB for `dark choc` and
 287 KB for `chips salt vinegar` in total. Real Open Food Facts records are larger and more varied; the
 workflow's job summary reports the real counts and sizes.
 
-**Repository growth.** Each rebuild commits a new copy of most index files (IDs follow popularity, which
-changes), adding roughly 150–200 MB of compressed history. That is why the workflow does not run on a
-schedule. If regular refreshes are wanted, move the index to a branch that is replaced on each build, or a
-separate repository.
+**Why not git.** IDs follow popularity, which changes weekly, so each rebuild rewrites most files. Committed
+to git, every rebuild would add 150–200 MB of history that can only be removed by rewriting it. Cloudflare
+Pages keeps old deployments too, but they cost nothing and can be deleted.
 
 **Licence.** The app shows "Food data: Open Food Facts (ODbL)" with a link in the dropdown and the footer;
 the published index carries the ODbL notice.
@@ -503,8 +506,7 @@ A small class between the combobox and `FoodCatalog`, unit-tested with fake time
 | Data read from product lists by any one search | ≤ 256 KB (hard cap in the engine) |
 | Added JavaScript for the combobox and query engine | ≤ 15 KB gzipped |
 
-GitHub Pages is served through a CDN with Australian edge locations; measure early from a phone on mobile
-data. If browser execution misses the latency budget, move the engine into a Worker (section 5.2).
+Cloudflare serves Pages from Australian edge locations; measure early from a phone on mobile data. If browser execution misses the latency budget, move the engine into a Worker (section 5.2).
 
 ## 10. Testing
 
@@ -524,18 +526,18 @@ data. If browser execution misses the latency budget, move the engine into a Wor
 
 | Order | Issue | What |
 |---|---|---|
-| 1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) Decision D3 | Confirm the static index on GitHub Pages; no server |
+| 1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) Decision D3 | Static index on Cloudflare Pages; no server |
 | 2 | [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) Index builder and `StaticFoodCatalog` | Sections 4, 5, 6, 7 |
 | 2 | [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Coverage spike | As soon as the builder runs locally |
-| 3 | [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Publish the food index | `food-index.yml` workflow commits `public/food-index/`; CI deploys it with the app |
+| 3 | [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Publish the food index | `food-index.yml` deploys to Cloudflare Pages weekly; CI points the app at it |
 | 4 | [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) Search-as-you-type UI | Sections 3, 8 |
 | 5 | [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Camera and manual entry, via `get()` |
 | 6 | [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) Recent foods | Unchanged; shows in the empty dropdown |
 
 ## 12. Open questions
 
-* **Real sizes.** Products surviving the filters and the total index size; a popularity floor only if it
-  exceeds GitHub Pages' 1 GB. Measured by the first build.
+* **Real sizes.** Products surviving the filters, the index size and its file count against Cloudflare
+  Pages' 20,000. Measured by the first build.
 * **Real bytes per search.** The relevance suite measures them; the estimates in section 5.1 are from
   back-of-envelope sizing.
 * **Browser or Worker.** Whether browser execution meets the latency budget on Australian mobile data.

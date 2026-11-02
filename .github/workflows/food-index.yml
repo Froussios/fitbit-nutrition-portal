@@ -1,27 +1,43 @@
 name: Food index
 
-# Builds the static food index from the Open Food Facts export and reports its
-# counts and sizes. See docs/FOOD_SEARCH.md section 7.
+# Builds the static food index from the Open Food Facts export and deploys it to
+# Cloudflare Pages. The index is never committed to git (every rebuild would stay
+# in the history). See docs/FOOD_SEARCH.md section 7 and the README.
 #
-# Publishing is not wired up yet: the index must NOT be committed to git, where
-# every rebuild would stay in the history for good. Where it will live (release
-# asset, Cloudflare Pages, R2) is being decided. Runs by hand only.
+# Needs repository secrets CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit)
+# and CLOUDFLARE_ACCOUNT_ID. Optional repository variable CLOUDFLARE_PAGES_PROJECT.
 
 on:
   workflow_dispatch:
+  schedule:
+    # Weekly, Sunday 16:17 UTC (early Monday morning in Sydney).
+    - cron: "17 16 * * 0"
 
 permissions:
   contents: read
 
 concurrency:
-  group: food-index-${{ github.ref }}
-  cancel-in-progress: true
+  group: food-index
+  cancel-in-progress: false
+
+env:
+  PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'food-diary-index' }}
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
+      - name: Check the Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Add the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets (README, Food index)."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -41,5 +57,17 @@ jobs:
           curl -sSfL --retry 3 -A "$USER_AGENT" "$EXPORT_URL" \
             | gzip -dc \
             | node --max-old-space-size=5632 --import tsx pipeline/build-index.ts \
-                --out public/food-index --source-url "$EXPORT_URL" --last-modified "$LAST_MODIFIED" \
+                --out food-index-dist --source-url "$EXPORT_URL" --last-modified "$LAST_MODIFIED" \
             | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          # First run only: create the project (fails harmlessly when it exists).
+          npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch=main || echo "Using the existing project $PAGES_PROJECT"
+          npx --yes wrangler@4 pages deploy food-index-dist --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true \
+            | tee deploy.log
+          echo "Deployed to Cloudflare Pages project **$PAGES_PROJECT**. The app reads it from the FOOD_INDEX_URL repository variable (https://$PAGES_PROJECT.pages.dev/ unless that name was taken)." >> "$GITHUB_STEP_SUMMARY"

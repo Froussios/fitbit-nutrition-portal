@@ -9,12 +9,12 @@ import {
   detailPath,
   detailRow,
   dictPath,
-  DOCS_PER_FILE,
   encodeIds,
   fnv1a,
   INDEX_FORMAT,
   INLINE_MAX,
   MAX_EXPANSIONS,
+  MIN_SUMMARIES_PER_FILE,
   packPath,
   PREFIX_TOP,
   prefixPath,
@@ -55,6 +55,8 @@ export interface BuildOptions {
   readonly packBytes?: number;
   /** Barcodes per barcode-map file, on average. */
   readonly codesPerBucket?: number;
+  /** Most files the index may have (Cloudflare Pages' free plan allows 20,000 per site). */
+  readonly maxFiles?: number;
 }
 
 const MAX_NAME = 150;
@@ -136,7 +138,9 @@ export class IndexBuilder {
     const o = this.options;
     const dictShardBytes = o.dictShardBytes ?? 24_000;
     const packBytes = o.packBytes ?? 16_000;
-    const codesPerBucket = o.codesPerBucket ?? 1024;
+    const codesPerBucket = o.codesPerBucket ?? 2048;
+    const maxFiles = o.maxFiles ?? 19_000;
+    let files = 0;
 
     // Rank, then collapse duplicates: the best of each group is searchable, the rest only by barcode.
     const ranked = [...this.docs].sort(compareRank);
@@ -155,20 +159,6 @@ export class IndexBuilder {
     const docs = [...searchable, ...duplicates];
     this.counts.searchable = searchable.length;
     this.counts.duplicates = duplicates.length;
-
-    // Summary and detail files, in ID order.
-    for (let f = 0; f * DOCS_PER_FILE < docs.length; f++) {
-      const slice = docs.slice(f * DOCS_PER_FILE, (f + 1) * DOCS_PER_FILE);
-      yield [summaryPath(f), JSON.stringify(slice.map((d) => d.sum))];
-      yield [detailPath(f), `[${slice.map((d) => d.det).join(",")}]`];
-    }
-
-    // Barcode map.
-    const codeBuckets = Math.max(1, Math.ceil(docs.length / codesPerBucket));
-    const buckets: Record<string, number>[] = Array.from({ length: codeBuckets }, () => ({}));
-    docs.forEach((d, id) => (buckets[fnv1a(d.code) % codeBuckets]![d.code] = id));
-    for (let b = 0; b < codeBuckets; b++) yield [codePath(b), JSON.stringify(buckets[b])];
-    buckets.length = 0;
 
     // Product lists: built in ID order, so each list is already sorted by rank.
     const lists = new Map<string, number[]>();
@@ -225,8 +215,10 @@ export class IndexBuilder {
           const chunk = ids.slice(k * CHUNK_SIZE, (k + 1) * CHUNK_SIZE);
           firsts.push(chunk[0]!);
           yield [chunkPath(listId, k), encodeIds(chunk)];
+          files++;
         }
         yield [skipPath(listId), JSON.stringify(firsts)];
+        files++;
         entry = [w, ids.length, -1, listId, firsts.length];
       }
       const json = JSON.stringify(entry);
@@ -266,6 +258,35 @@ export class IndexBuilder {
     for (const [two, g] of groups) yield [prefixPath(two), JSON.stringify(g satisfies PrefixGroup)];
     this.counts.prefixGroups = groups.size;
     lists.clear();
+    files += dictStarts.length + packNo + groups.size;
+
+    // Barcode map.
+    const codeBuckets = Math.max(1, Math.ceil(docs.length / codesPerBucket));
+    const buckets: Record<string, number>[] = Array.from({ length: codeBuckets }, () => ({}));
+    docs.forEach((d, id) => (buckets[fnv1a(d.code) % codeBuckets]![d.code] = id));
+    for (let b = 0; b < codeBuckets; b++) yield [codePath(b), JSON.stringify(buckets[b])];
+    buckets.length = 0;
+    files += codeBuckets;
+
+    // Summary and detail files, in ID order, as small as the file budget allows (details are only
+    // fetched when a row is chosen, so they get twice as many products per file).
+    const budget = maxFiles - files - 4; // meta.json, LICENSE.txt, current.json, _headers
+    let sumPerFile = MIN_SUMMARIES_PER_FILE;
+    const fileCount = (per: number) => Math.ceil(docs.length / per) + Math.ceil(docs.length / (2 * per));
+    while (fileCount(sumPerFile) > budget) {
+      sumPerFile *= 2;
+      if (sumPerFile > 16_384) throw new Error(`The index needs more than ${maxFiles} files`);
+    }
+    const detPerFile = 2 * sumPerFile;
+    for (let f = 0; f * sumPerFile < docs.length; f++) {
+      yield [summaryPath(f), JSON.stringify(docs.slice(f * sumPerFile, (f + 1) * sumPerFile).map((d) => d.sum))];
+    }
+    for (let f = 0; f * detPerFile < docs.length; f++) {
+      yield [detailPath(f), `[${docs.slice(f * detPerFile, (f + 1) * detPerFile).map((d) => d.det).join(",")}]`];
+    }
+    files += fileCount(sumPerFile);
+    this.counts.sumPerFile = sumPerFile;
+    this.counts.files = files + 1;
 
     const meta: IndexMeta = {
       format: INDEX_FORMAT,
@@ -276,6 +297,8 @@ export class IndexBuilder {
       docs: docs.length,
       searchableDocs: searchable.length,
       codeBuckets,
+      sumPerFile,
+      detPerFile,
       dict: dictStarts,
       licence:
         "Contains information from Open Food Facts (https://world.openfoodfacts.org), made available under the Open Database License (ODbL) 1.0.",

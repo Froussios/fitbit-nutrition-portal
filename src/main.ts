@@ -448,8 +448,8 @@ function renderSetup(canCancel = false) {
   replaceChildren(root, el("header", { class: "top" }, el("h1", {}, "Food Diary")), form, debugPanel);
 }
 
-/** Where the static food index lives; by default next to the app (public/food-index/, built by pipeline/). */
-const FOOD_INDEX_URL = (import.meta.env.VITE_FOOD_INDEX_URL as string | undefined)?.trim() || `${import.meta.env.BASE_URL}food-index/`;
+/** Where the static food index lives: Cloudflare Pages in production (VITE_FOOD_INDEX_URL), else next to the app (public/food-index/ in development). */
+const FOOD_INDEX_URL = ((import.meta.env.VITE_FOOD_INDEX_URL as string | undefined)?.trim() || `${import.meta.env.BASE_URL}food-index`).replace(/\/?$/, "/");
 
 /** The Open Food Facts index if it is deployed, otherwise the built-in sample foods. */
 async function openCatalog(): Promise<FoodCatalog> {

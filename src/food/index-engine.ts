@@ -7,10 +7,9 @@ import {
   decodeIds,
   detailPath,
   dictPath,
-  DOCS_PER_FILE,
-  fileOf,
   fnv1a,
   fromBase64,
+  INDEX_FORMAT,
   MAX_EXPANSIONS,
   packPath,
   prefixPath,
@@ -160,7 +159,9 @@ export class FoodIndex {
   ) {}
 
   static async open(reader: IndexReader): Promise<FoodIndex> {
-    return new FoodIndex(reader, await reader.json<IndexMeta>("meta.json"));
+    const meta = await reader.json<IndexMeta>("meta.json");
+    if (meta.format !== INDEX_FORMAT) throw new Error(`Food index format ${meta.format} is not supported (expected ${INDEX_FORMAT})`);
+    return new FoodIndex(reader, meta);
   }
 
   /** Reads a file once per session; failed reads are retried next time. */
@@ -287,17 +288,18 @@ export class FoodIndex {
   }
 
   async summaries(ids: readonly number[]): Promise<SummaryRow[]> {
-    const files = await Promise.all(ids.map((id) => this.read<SummaryRow[]>("json", summaryPath(fileOf(id)))));
-    return ids.map((id, i) => files[i]![id % DOCS_PER_FILE]!);
+    const per = this.meta.sumPerFile;
+    const files = await Promise.all(ids.map((id) => this.read<SummaryRow[]>("json", summaryPath(Math.floor(id / per)))));
+    return ids.map((id, i) => files[i]![id % per]!);
   }
 
   async food(id: number): Promise<FoodItem> {
     const [sums, dets] = await Promise.all([
-      this.read<SummaryRow[]>("json", summaryPath(fileOf(id))),
-      this.read<DetailRow[]>("json", detailPath(fileOf(id))),
+      this.read<SummaryRow[]>("json", summaryPath(Math.floor(id / this.meta.sumPerFile))),
+      this.read<DetailRow[]>("json", detailPath(Math.floor(id / this.meta.detPerFile))),
     ]);
-    const s = sums[id % DOCS_PER_FILE];
-    const d = dets[id % DOCS_PER_FILE];
+    const s = sums[id % this.meta.sumPerFile];
+    const d = dets[id % this.meta.detPerFile];
     if (!s || !d) throw new IndexNotFoundError(`Product ${id} is not in the index`);
     return toFoodItem(s, d);
   }

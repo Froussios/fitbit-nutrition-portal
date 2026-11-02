@@ -11,6 +11,7 @@
  *   --source-url <url>   recorded in meta.json
  *   --last-modified <s>  the export's Last-Modified date, recorded in meta.json
  *   --limit <n>          stop after n records (for trying it out)
+ *   --max-files <n>      file budget for the whole index folder (default 19000; Cloudflare Pages allows 20,000)
  *
  * Prints a Markdown report (counts and sizes) to stdout.
  */
@@ -44,7 +45,8 @@ async function main(): Promise<void> {
 
   const stream = input ? (input.endsWith(".gz") ? createReadStream(input).pipe(createGunzip()) : createReadStream(input)) : process.stdin;
   const lines = createInterface({ input: stream, crlfDelay: Infinity });
-  const builder = new IndexBuilder({ version, source });
+  const maxFiles = Number(opts.get("max-files") ?? 19_000);
+  const builder = new IndexBuilder({ version, source, maxFiles });
   const started = Date.now();
   let n = 0;
   let badJson = 0;
@@ -93,6 +95,10 @@ async function main(): Promise<void> {
     if (entry !== version && statSync(p).isDirectory()) rmSync(p, { recursive: true, force: true });
   }
   writeFileSync(join(versionDir, "LICENSE.txt"), LICENCE);
+  // Cloudflare Pages: version folders never change, so browsers may cache them for good.
+  // current.json keeps Pages' default (revalidate every time). Pages already sends Access-Control-Allow-Origin: *.
+  writeFileSync(join(outRoot, "_headers"), "/:version/*\n  Cache-Control: public, max-age=31536000, immutable\n");
+  files += 3;
 
   const mb = (b: number) => `${(b / 1e6).toFixed(1)} MB`;
   const report = [
@@ -111,8 +117,8 @@ async function main(): Promise<void> {
   ].join("\n");
   process.stdout.write(`${report}\n`);
 
-  if (bytes > 900e6) throw new Error(`Index is ${mb(bytes)}, over the 900 MB limit (GitHub Pages allows 1 GB)`);
-  if (largest > 20e6) throw new Error(`A file is ${mb(largest)}, over the 20 MB limit`);
+  if (files > maxFiles) throw new Error(`Index has ${files} files, over the limit of ${maxFiles}`);
+  if (largest > 20e6) throw new Error(`A file is ${mb(largest)}, over the 20 MB limit (Cloudflare Pages allows 25 MiB)`);
   if (!existsSync(join(versionDir, "meta.json"))) throw new Error("meta.json was not written");
 }
 

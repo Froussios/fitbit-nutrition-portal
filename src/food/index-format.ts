@@ -14,16 +14,17 @@ import type { BaseUnit, Portion } from "../core/units";
  *   <version>/post/<n>.bin       medium product lists, packed in dictionary order
  *   <version>/big/<id>/<k>.bin   chunk k of a long product list; skip.json holds each chunk's first ID
  *   <version>/pfx/<hex>.json     top IDs for 2- and 3-letter prefixes (PrefixGroup)
- *   <version>/sum/<n>.json       SummaryRow[], DOCS_PER_FILE per file, by product ID
- *   <version>/det/<n>.json       DetailRow[], same files as sum/
+ *   <version>/sum/<n>.json       SummaryRow[], meta.sumPerFile per file, by product ID
+ *   <version>/det/<n>.json       DetailRow[], meta.detPerFile per file, by product ID
  *   <version>/code/<n>.json      barcode → product ID, bucketed by fnv1a(barcode)
  *
  * Product IDs follow the ranking (section 4.3), so every product list is in
  * ranking order and a search can stop after the first matches.
  */
 
-export const INDEX_FORMAT = 1;
-export const DOCS_PER_FILE = 256;
+export const INDEX_FORMAT = 2;
+/** Smallest number of products per summary file; the builder raises it to stay under the host's file limit. */
+export const MIN_SUMMARIES_PER_FILE = 256;
 /** Lists up to this length are stored inline in the dictionary. */
 export const INLINE_MAX = 16;
 /** Lists longer than this are split into chunks of this size. */
@@ -42,6 +43,9 @@ export interface IndexMeta {
   readonly docs: number;
   readonly searchableDocs: number;
   readonly codeBuckets: number;
+  /** Products per summary file and per detail file. */
+  readonly sumPerFile: number;
+  readonly detPerFile: number;
   /** First word of each dictionary shard; shard i holds words >= dict[i] and < dict[i + 1]. */
   readonly dict: readonly string[];
   readonly licence: string;
@@ -66,7 +70,6 @@ export type SummaryRow = readonly [string, string, string | null, string | null,
 /** [nutrients in NUTRIENT_KEYS order, portions as [name, amount, unit], density] */
 export type DetailRow = readonly [readonly (number | null)[], readonly (readonly [string, number, BaseUnit])[], number | null];
 
-export const fileOf = (id: number) => Math.floor(id / DOCS_PER_FILE);
 export const dictPath = (n: number) => `dict/${n}.json`;
 export const packPath = (n: number) => `post/${n}.bin`;
 export const chunkPath = (list: number, k: number) => `big/${list}/${k}.bin`;

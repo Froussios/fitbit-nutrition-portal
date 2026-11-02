@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IndexBuilder, type RawProduct } from "../pipeline/index-builder";
+import { IndexBuilder, type BuildOptions, type RawProduct } from "../pipeline/index-builder";
 import { parseQuery } from "../src/core/tokens";
 import { FoodIndex, IndexNotFoundError, type IndexReader } from "../src/food/index-engine";
 import { CHUNK_SIZE, fromSummaryRow } from "../src/food/index-format";
@@ -36,8 +36,8 @@ const MANY = Array.from({ length: CHUNK_SIZE + 500 }, (_, i) =>
   product(`9${String(i).padStart(6, "0")}`, `Snack bar flavour${i}${i === CHUNK_SIZE + 400 ? " special" : ""}`),
 );
 
-function build(records: RawProduct[]) {
-  const b = new IndexBuilder({ version: "test", builtAt: "2026-11-02T00:00:00Z", dictShardBytes: 2000, packBytes: 500 });
+function build(records: RawProduct[], options: Partial<BuildOptions> = {}) {
+  const b = new IndexBuilder({ version: "test", builtAt: "2026-11-02T00:00:00Z", dictShardBytes: 2000, packBytes: 500, ...options });
   for (const r of records) b.add(r);
   const files = new Map<string, string | Uint8Array>(b.files());
   const read: string[] = [];
@@ -117,6 +117,15 @@ describe("food index", () => {
     expect(await names(index, "snack special")).toEqual([`Snack bar flavour${CHUNK_SIZE + 400} special`]);
     expect(big()).toEqual(["big/L/0.bin", "big/L/skip.json", "big/L/1.bin"]);
     expect(await names(index, "sn")).toHaveLength(10);
+  });
+
+  it("packs more products per file to stay under the file limit", async () => {
+    const { files, reader } = build([...FIXTURE, ...MANY], { maxFiles: 40, dictShardBytes: 50_000 });
+    expect(files.size + 2).toBeLessThanOrEqual(40); // plus current.json and LICENSE.txt, written by the CLI
+    const index = await FoodIndex.open(reader);
+    expect(index.meta.sumPerFile).toBeGreaterThan(256);
+    expect(await names(index, "snack special")).toEqual([`Snack bar flavour${CHUNK_SIZE + 400} special`]);
+    expect((await index.food((await index.findBarcode("1005"))!)).name).toBe("Weet-Bix");
   });
 
   it("answers no-match prefixes without errors", async () => {
