@@ -88,13 +88,19 @@ an index the app falls back to the sample foods. Food data © Open Food Facts co
 
 One-time setup:
 
-1. In the Cloudflare dashboard, create an **Account API token** with **Account → Cloudflare Pages → Edit**,
-   and copy your **account ID**.
-2. Add repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (Settings → Secrets and
-   variables → Actions).
-3. Run the **Food index** workflow. It creates the Pages project `food-diary-index` on its first run
-   (set the repository variable `CLOUDFLARE_PAGES_PROJECT` to use another name).
-4. Set the repository variable `FOOD_INDEX_URL` to the project's URL (shown in the workflow log, normally
+1. Preferably create a **separate free Cloudflare account** for this project (Accounts → Create Account;
+   up to five extra free accounts per user). A Pages token can edit every Pages project in its account, so
+   a dedicated account keeps this project and your others fully apart.
+2. In that account, create an **Account API token** with only **Account → Cloudflare Pages → Edit**, and copy
+   the **account ID**.
+3. In GitHub, create the environment **food-index** (Settings → Environments), limit its deployment
+   branches to `main`, and add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` there.
+   Only workflows running from `main` can then use the token.
+4. Run the **Food index** workflow. It creates the Pages project `food-diary-index` on its first run (set
+   the repository variable `CLOUDFLARE_PAGES_PROJECT` to use another name). It refuses to deploy to an
+   existing project that is not this repository's index: every deploy carries a `food-index-owner.json`
+   marker, which the next deploy checks first.
+5. Set the repository variable `FOOD_INDEX_URL` to the project's URL (shown in the job summary, normally
    `https://food-diary-index.pages.dev/`), so the CI build points the app at it.
 
 ## Project layout

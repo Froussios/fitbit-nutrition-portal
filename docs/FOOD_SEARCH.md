@@ -299,6 +299,10 @@ queried by an engine in the browser that fetches only what each search needs.** 
 
 * **Free and no server.** No DR-01 exception, no home exposure, no rate limits to manage, no uptime to
   watch. Static files on a CDN with Australian edge locations.
+* **Isolation.** A Pages API token can edit every Pages project in its Cloudflare account; it cannot be
+  limited to one project. So the index should live in its own free Cloudflare account, the token is kept in
+  a GitHub environment limited to `main`, and the workflow only deploys to a project whose live site serves
+  this repository's `food-index-owner.json` marker (or to a new, empty one).
 * **No git history.** Each deploy replaces the previous one (Direct Upload with Wrangler, which uploads only
   changed files). The app stays on GitHub Pages; Pages sends `Access-Control-Allow-Origin: *` by default,
   so the app can read the index from its `*.pages.dev` origin.

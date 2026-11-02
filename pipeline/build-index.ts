@@ -12,6 +12,7 @@
  *   --last-modified <s>  the export's Last-Modified date, recorded in meta.json
  *   --limit <n>          stop after n records (for trying it out)
  *   --max-files <n>      file budget for the whole index folder (default 19000; Cloudflare Pages allows 20,000)
+ *   --owner <repo>       written to food-index-owner.json, so a deploy can check it only ever replaces its own site
  *
  * Prints a Markdown report (counts and sizes) to stdout.
  */
@@ -98,7 +99,9 @@ async function main(): Promise<void> {
   // Cloudflare Pages: version folders never change, so browsers may cache them for good.
   // current.json keeps Pages' default (revalidate every time). Pages already sends Access-Control-Allow-Origin: *.
   writeFileSync(join(outRoot, "_headers"), "/:version/*\n  Cache-Control: public, max-age=31536000, immutable\n");
-  files += 3;
+  // Ownership marker: the deploy workflow refuses to overwrite a Pages project that does not serve this file.
+  writeFileSync(join(outRoot, "food-index-owner.json"), JSON.stringify({ repository: opts.get("owner") ?? "local", purpose: "Food Diary food search index" }));
+  files += 4;
 
   const mb = (b: number) => `${(b / 1e6).toFixed(1)} MB`;
   const report = [
