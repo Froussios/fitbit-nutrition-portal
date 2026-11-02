@@ -38,7 +38,7 @@ export function createLogForm(foods: readonly FoodItem[], onSubmit: (draft: LogD
     el("div", { class: "row" }, field("Protein (g)", cProtein), field("Carbs (g)", cCarbs), field("Fat (g)", cFat)),
   );
 
-  const quantity = el("input", { id: "qty", type: "number", min: "0", step: "any", value: "1", required: true, inputmode: "decimal" });
+  const quantity = el("input", { id: "qty", type: "number", min: "0.01", step: "any", value: "1", required: true, inputmode: "decimal" });
   const unitSelect = el("select", { id: "unit", required: true });
   const now = new Date();
   const mealSelect = el(
@@ -89,10 +89,23 @@ export function createLogForm(foods: readonly FoodItem[], onSubmit: (draft: LogD
     }
   };
 
+  /** Why the entry cannot be logged as entered, if anything. */
+  const validationError = (): string | undefined => {
+    const q = Number(quantity.value);
+    if (!quantity.value.trim() || !Number.isFinite(q) || q <= 0) return "Enter an amount greater than 0.";
+    if (foodSelect.value === CUSTOM) {
+      const values = [cEnergy, cProtein, cCarbs, cFat].map((i) => Number(i.value));
+      if (values.some((v) => !Number.isFinite(v) || v < 0)) return "Custom food values must be numbers of 0 or more.";
+    }
+    return undefined;
+  };
+
   const refreshPreview = () => {
     const food = currentFood();
     try {
       if (!food) throw new Error("Pick a food");
+      const invalid = validationError();
+      if (invalid) throw new Error(invalid);
       preview.textContent = `≈ ${summary(nutrientsForAmount(food, Number(quantity.value), unitSelect.value))}`;
       preview.classList.remove("error");
     } catch (e) {
@@ -105,8 +118,15 @@ export function createLogForm(foods: readonly FoodItem[], onSubmit: (draft: LogD
   let timeTouched = false;
   time.addEventListener("input", () => (timeTouched = true));
 
+  const syncCustomFields = () => {
+    const custom = foodSelect.value === CUSTOM;
+    customFields.hidden = !custom;
+    // Disabled controls are skipped by form validation, so stale custom values can't block other foods.
+    customFields.disabled = !custom;
+  };
+
   foodSelect.addEventListener("change", () => {
-    customFields.hidden = foodSelect.value !== CUSTOM;
+    syncCustomFields();
     refreshUnits();
     refreshPreview();
   });
@@ -133,7 +153,12 @@ export function createLogForm(foods: readonly FoodItem[], onSubmit: (draft: LogD
     ev.preventDefault();
     const food = currentFood();
     const when = timeTouched ? new Date(time.value) : new Date();
-    if (!food || Number.isNaN(when.getTime())) return;
+    const invalid = validationError() ?? (Number.isNaN(when.getTime()) ? "Enter a valid time." : undefined);
+    if (!food || invalid) {
+      status.textContent = invalid ?? "Pick a food.";
+      status.classList.add("error");
+      return;
+    }
     submit.disabled = true;
     status.textContent = "Saving to Google Health…";
     status.classList.remove("error");
@@ -150,6 +175,7 @@ export function createLogForm(foods: readonly FoodItem[], onSubmit: (draft: LogD
     }
   });
 
+  syncCustomFields();
   refreshUnits();
   refreshPreview();
   return form;

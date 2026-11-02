@@ -18,6 +18,8 @@ import { describeError, installGlobalErrorHandlers, logger } from "./debug/log";
 
 /** Refetch interval while the tab is visible: the client-only stand-in for webhook pushes. */
 const POLL_MS = 5 * 60_000;
+/** How long a written entry may stay unlisted before its pending row is dropped. */
+const PENDING_TTL_MS = 10 * 60_000;
 
 const root = document.getElementById("app")!;
 const appLog = logger("app");
@@ -45,6 +47,8 @@ class App {
   private unitNames = new Map<string, string>();
   /** Points written this session that a list call has not returned yet (the API may lag). */
   private readonly pending = new Map<string, DataPoint>();
+  /** When each pending point was written; ones the API never lists are dropped after PENDING_TTL_MS. */
+  private readonly pendingSince = new Map<string, number>();
   private entries: DiaryEntry[] = [];
   private notice = "";
   private signInError = "";
@@ -178,12 +182,18 @@ class App {
     try {
       const today = civilDate(new Date());
       const points = await this.api.listNutritionLogs(today);
-      const matched = reconcilePending(this.pending, points);
-      for (const key of [...matched.listedById, ...matched.listedByContent]) this.pending.delete(key);
+      const matched = reconcilePending(this.pending, points, this.clientId);
+      for (const key of [...matched.listedById, ...matched.listedByContent]) this.dropPending(key);
+      const stale = matched.stillPending.filter((key) => Date.now() - (this.pendingSince.get(key) ?? 0) > PENDING_TTL_MS);
+      if (stale.length) {
+        appLog.warn("Dropping entries the API has not listed for 10 minutes (deleted elsewhere, or stored differently)", stale);
+        for (const key of stale) this.dropPending(key);
+      }
       if (matched.listedByContent.length) {
         appLog.warn("The API listed new entries under different IDs than this app sent; matched them by content", matched.listedByContent);
       }
-      if (matched.stillPending.length) appLog.info("Entries written but not listed by the API yet", matched.stillPending);
+      const waiting = matched.stillPending.filter((key) => this.pending.has(key));
+      if (waiting.length) appLog.info("Entries written but not listed by the API yet", waiting);
       const pending = [...this.pending.values()].filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === today);
       this.entries = toDiaryEntries([...points, ...pending], { ownClientId: this.clientId, unitNames: this.unitNames });
       const unparsed = points.length - this.entries.length + pending.length;
@@ -224,7 +234,9 @@ class App {
         appLog.warn("The API stored the entry under its own ID, not the one this app sent", { sent: point.name, stored: created.name });
       }
       // Key by the stored ID so the next listing replaces the pending row.
-      this.pending.set(idFromName(created.name ?? point.name!), created);
+      const key = idFromName(created.name ?? point.name!);
+      this.pending.set(key, created);
+      this.pendingSince.set(key, Date.now());
     } catch (e) {
       appLog.error("Logging the entry failed", describeError(e));
       this.handleError(e, false);
@@ -238,7 +250,7 @@ class App {
     appLog.info(`Deleting ${entry.name}`);
     try {
       await this.api.deleteNutritionLogs([entry.name]);
-      this.pending.delete(entry.id);
+      this.dropPending(entry.id);
       this.entries = this.entries.filter((e) => e.id !== entry.id);
       this.renderDiary();
     } catch (e) {
@@ -246,6 +258,23 @@ class App {
       this.handleError(e);
     }
     await this.loadToday();
+  }
+
+  private dropPending(key: string) {
+    this.pending.delete(key);
+    this.pendingSince.delete(key);
+  }
+
+  /** Signs out and forgets this user's diary state (the per-user unit cache stays). */
+  private signOut() {
+    this.pending.clear();
+    this.pendingSince.clear();
+    this.entries = [];
+    this.notice = "";
+    this.connectError = "";
+    this.listError = "";
+    this.ready = false;
+    this.auth.signOut();
   }
 
   private handleError(e: unknown, rerender = true) {
@@ -270,7 +299,7 @@ class App {
       el(
         "div",
         { class: "account" },
-        signedIn && el("button", { type: "button", onclick: () => this.auth.signOut() }, "Sign out"),
+        signedIn && el("button", { type: "button", onclick: () => this.signOut() }, "Sign out"),
         !isClientIdBuiltIn() && el("button", { type: "button", class: "link", onclick: () => renderSetup(true) }, "Settings"),
       ),
     );
@@ -338,7 +367,7 @@ class App {
         "div",
         { class: "actions" },
         el("button", { type: "button", class: "primary", onclick: () => void this.afterSignIn() }, "Retry"),
-        el("button", { type: "button", onclick: () => this.auth.signOut() }, "Sign out"),
+        el("button", { type: "button", onclick: () => this.signOut() }, "Sign out"),
       ),
       el("p", { class: "hint" }, "Details are in the Debug log below (Copy log to share it). Common causes are listed in issue #30."),
     );

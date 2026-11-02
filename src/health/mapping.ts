@@ -194,19 +194,43 @@ export function entryFingerprint(point: DataPoint): string | undefined {
 
 /**
  * Splits locally pending points (written but maybe not yet listed) into those
- * the listing already contains, by ID or by content, and those still pending.
+ * the listing already contains and those still pending. A pending point matches
+ * a listed one by ID, or else by content (for when the API stored it under its
+ * own ID). Content matches are one-to-one, so two identical entries logged in
+ * the same minute need two listed copies, and only consider listed points this
+ * app wrote (when the API says who wrote them).
  */
 export function reconcilePending(
   pending: ReadonlyMap<string, DataPoint>,
   listed: readonly DataPoint[],
+  ownClientId?: string,
 ): { listedById: string[]; listedByContent: string[]; stillPending: string[] } {
-  const ids = new Set(listed.flatMap((p) => (p.name ? [idFromName(p.name)] : [])));
-  const prints = new Set(listed.map(entryFingerprint).filter((f): f is string => f !== undefined));
   const result = { listedById: [] as string[], listedByContent: [] as string[], stillPending: [] as string[] };
+  const listedIds = new Set(listed.flatMap((p) => (p.name ? [idFromName(p.name)] : [])));
+
+  // Listed points not claimed by an ID match are available for content matches, once each.
+  const available = new Map<string, number>();
+  for (const p of listed) {
+    if (p.name && pending.has(idFromName(p.name))) continue;
+    const writer = p.dataSource?.application?.googleWebClientId;
+    if (ownClientId !== undefined && writer !== undefined && writer !== ownClientId) continue;
+    const print = entryFingerprint(p);
+    if (print !== undefined) available.set(print, (available.get(print) ?? 0) + 1);
+  }
+
   for (const [key, point] of pending) {
-    if (ids.has(key)) result.listedById.push(key);
-    else if (prints.has(entryFingerprint(point) ?? "")) result.listedByContent.push(key);
-    else result.stillPending.push(key);
+    if (listedIds.has(key)) {
+      result.listedById.push(key);
+      continue;
+    }
+    const print = entryFingerprint(point);
+    const left = print === undefined ? 0 : (available.get(print) ?? 0);
+    if (print !== undefined && left > 0) {
+      available.set(print, left - 1);
+      result.listedByContent.push(key);
+    } else {
+      result.stillPending.push(key);
+    }
   }
   return result;
 }

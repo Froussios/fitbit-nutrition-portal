@@ -41,16 +41,13 @@ export interface ListOptions {
  * The API sends CORS headers for any origin, so no proxy is needed.
  */
 export class HealthClient {
-  private readonly fetchImpl: typeof fetch;
-
   constructor(
     private readonly getToken: TokenProvider,
-    fetchImpl: typeof fetch = (...a) => fetch(...a),
+    private readonly fetchImpl: typeof fetch = (...a) => fetch(...a),
     private readonly base: string = HEALTH_API_BASE,
-    timeoutMs = 20_000,
-  ) {
-    this.fetchImpl = withTimeout(fetchImpl, timeoutMs);
-  }
+    /** Covers the whole request, including reading the response body. */
+    private readonly timeoutMs = 20_000,
+  ) {}
 
   getIdentity(): Promise<Identity> {
     return this.request("GET", "users/me/identity");
@@ -107,17 +104,6 @@ export class HealthClient {
       if (v !== undefined && v !== "") url.searchParams.set(k, String(v));
     }
 
-    const send = async (forceRefresh: boolean) => {
-      const token = await this.getToken({ forceRefresh });
-      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-      if (opts.body !== undefined) headers["Content-Type"] = "application/json";
-      return this.fetchImpl(url, {
-        method,
-        headers,
-        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-      });
-    };
-
     const call = `${method} ${path}`;
     const query = Object.fromEntries(url.searchParams);
     const details = {
@@ -127,18 +113,44 @@ export class HealthClient {
     log.debug(`→ ${call}`, Object.keys(details).length ? details : undefined);
     const started = performance.now();
 
+    // One deadline for the whole exchange, including reading the body.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const send = (token: string) => {
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+      return this.fetchImpl(url, {
+        method,
+        headers,
+        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+        signal: controller.signal,
+      });
+    };
+
     let res: Response;
     let text: string;
     try {
-      res = await send(false);
+      res = await send(await this.getToken());
       if (res.status === 401) {
-        log.warn(`${call}: 401, the access token was rejected; asking for a new sign-in`, { body: truncate(await res.text()) });
-        res = await send(true); // token expired or revoked: one retry
+        log.warn(`${call}: 401, the access token was rejected`, { body: truncate(await res.text()) });
+        // Ask the provider for a fresh token. The current Google Identity Services provider cannot
+        // refresh silently and throws SignInRequiredError (the UI then asks for a click); a
+        // refresh-token provider (milestone M3) would return a new token, and we retry once.
+        res = await send(await this.getToken({ forceRefresh: true }));
       }
       text = await res.text();
     } catch (e) {
-      log.error(`✗ ${call} failed after ${Math.round(performance.now() - started)} ms`, describeError(e));
-      throw e;
+      const ms = Math.round(performance.now() - started);
+      const error = controller.signal.aborted
+        ? new HealthApiError(`Google Health did not answer within ${this.timeoutMs / 1000} s (${call}).`, 0, "TIMEOUT")
+        : e instanceof TypeError
+          ? // fetch rejects with a bare TypeError on network and CORS failures.
+            new HealthApiError(`Could not reach Google Health (${e.message}; ${call}).`, 0, "NETWORK")
+          : e;
+      log.error(`✗ ${call} failed after ${ms} ms`, describeError(error));
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
     const ms = Math.round(performance.now() - started);
 
@@ -169,22 +181,6 @@ function summarize(json: unknown): unknown {
   return json;
 }
 
-/** fetch with a timeout, so a request that never answers surfaces as an error instead of hanging the UI. */
-function withTimeout(fetchImpl: typeof fetch, ms: number): typeof fetch {
-  return async (input, init) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ms);
-    try {
-      return await fetchImpl(input, { ...init, signal: controller.signal });
-    } catch (e) {
-      if (controller.signal.aborted) throw new HealthApiError(`Google Health did not answer within ${ms / 1000} s.`, 0, "TIMEOUT");
-      // fetch rejects with a bare TypeError on network and CORS failures.
-      throw new HealthApiError(`Could not reach Google Health (${e instanceof Error ? e.message : String(e)}).`, 0, "NETWORK");
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-}
 
 function toError(httpStatus: number, json: unknown, call: string): HealthApiError {
   const err = (json as { error?: { message?: string; status?: string; details?: { reason?: string }[] } }).error;

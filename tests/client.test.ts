@@ -34,6 +34,49 @@ describe("HealthClient errors", () => {
     expect(err.status).toBe("TIMEOUT");
   });
 
+  it("times out when the response body stalls", async () => {
+    const stallingBody: typeof fetch = async (_i, init) =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"name":'));
+            init?.signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
+          },
+        }),
+        { status: 200 },
+      );
+    const err = (await new HealthClient(token, stallingBody, undefined, 50).getIdentity().catch((e: unknown) => e)) as HealthApiError;
+    expect(err.status).toBe("TIMEOUT");
+  });
+
+  it("asks the token provider for a fresh token on 401 and retries once", async () => {
+    const tokens: string[] = [];
+    const seen: (string | null)[] = [];
+    const provider = async (o?: { forceRefresh?: boolean }) => {
+      const t = o?.forceRefresh ? "fresh" : "stale";
+      tokens.push(t);
+      return t;
+    };
+    const fetchImpl: typeof fetch = async (_i, init) => {
+      const auth = new Headers(init?.headers).get("Authorization");
+      seen.push(auth);
+      return auth === "Bearer fresh" ? new Response('{"name":"users/me/identity"}', { status: 200 }) : new Response("{}", { status: 401 });
+    };
+    await new HealthClient(provider, fetchImpl).getIdentity();
+    expect(tokens).toEqual(["stale", "fresh"]);
+    expect(seen).toEqual(["Bearer stale", "Bearer fresh"]);
+  });
+
+  it("propagates the provider's sign-in error on 401", async () => {
+    class SignIn extends Error {}
+    const provider = async (o?: { forceRefresh?: boolean }) => {
+      if (o?.forceRefresh) throw new SignIn("sign in");
+      return "stale";
+    };
+    const err = await new HealthClient(provider, respond(401, "{}")).getIdentity().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SignIn);
+  });
+
   it("reports network and CORS failures", async () => {
     const fail: typeof fetch = async () => {
       throw new TypeError("Failed to fetch");

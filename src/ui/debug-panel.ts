@@ -35,6 +35,11 @@ export function createDebugPanel(environment: () => Record<string, string>): HTM
     { class: "card debug" },
     summary,
     el("div", { class: "actions" }, copy, clear, status),
+    el(
+      "p",
+      { class: "hint" },
+      "The log contains your food entries and Google Health user ID (never your access token). Review it before sharing it publicly.",
+    ),
     pre,
   );
 

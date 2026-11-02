@@ -156,6 +156,27 @@ describe("reconcilePending", () => {
     expect(reconcilePending(pending, [stored])).toEqual({ listedById: [], listedByContent: ["e-mgx-ab12-smp-oats"], stillPending: [] });
   });
 
+  it("matches identical entries one-to-one", () => {
+    const twin = { ...sent, name: "users/me/dataTypes/nutrition-log/dataPoints/e-mgx-cd34-smp-oats" };
+    const two = new Map([
+      ["e-mgx-ab12-smp-oats", sent],
+      ["e-mgx-cd34-smp-oats", twin],
+    ]);
+    const storedOnce: DataPoint = { ...sent, name: "users/4772/dataTypes/nutrition-log/dataPoints/9001" };
+    const r = reconcilePending(two, [storedOnce]);
+    expect(r.listedByContent).toHaveLength(1);
+    expect(r.stillPending).toHaveLength(1);
+  });
+
+  it("does not match another app's entry by content", () => {
+    const foreign: DataPoint = {
+      ...sent,
+      name: "users/4772/dataTypes/nutrition-log/dataPoints/9002",
+      dataSource: { application: { googleWebClientId: "someone-else" } },
+    };
+    expect(reconcilePending(pending, [foreign], "our-client").stillPending).toEqual(["e-mgx-ab12-smp-oats"]);
+  });
+
   it("keeps entries the listing does not contain yet", () => {
     const other: DataPoint = { ...sent, name: "x/1", nutritionLog: { ...sent.nutritionLog!, foodDisplayName: "Banana" } };
     expect(reconcilePending(pending, [other]).stillPending).toEqual(["e-mgx-ab12-smp-oats"]);

@@ -4,8 +4,10 @@ import type { FoodRef, FoodSource } from "./food";
  * Client-supplied data point IDs.
  *
  * The Google Health API accepts IDs of 4-63 characters: lowercase letters,
- * digits and hyphens. We use them for idempotent writes and to carry the food
- * reference, because a NutritionLog has no metadata field of its own:
+ * digits and hyphens. We use them to carry the food reference, because a
+ * NutritionLog has no metadata field of its own. They would also make retries
+ * idempotent, but only if a retry reuses the same ID; the app does not retry
+ * writes yet (the offline queue, issue #20, will):
  *
  *   e-<time36>-<rand>-<src>[-<foodId>]     single entry
  *   m-<mealId>-<n>-...                     meal ingredient (milestone 2)

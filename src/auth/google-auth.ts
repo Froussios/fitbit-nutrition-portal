@@ -57,6 +57,7 @@ export class GoogleAuth {
   private token?: StoredToken;
   private pending?: { resolve: () => void; reject: (e: Error) => void };
   private readonly listeners = new Set<() => void>();
+  private expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly clientId: string,
@@ -71,6 +72,7 @@ export class GoogleAuth {
         valid: this.isSignedIn,
         scopes: this.grantedScopes,
       });
+      this.scheduleExpiry();
     }
   }
 
@@ -122,6 +124,7 @@ export class GoogleAuth {
       log.warn("Access token rejected by the API; marking it expired");
       this.token = { ...this.token, expiresAt: 0 };
       this.persist();
+      this.scheduleExpiry();
       this.emit();
     }
     if (!this.isSignedIn || !this.token) throw new SignInRequiredError();
@@ -133,6 +136,7 @@ export class GoogleAuth {
     const t = this.token?.accessToken;
     this.token = undefined;
     this.persist();
+    this.scheduleExpiry();
     if (t && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(t, () => undefined);
     this.emit();
   }
@@ -161,8 +165,25 @@ export class GoogleAuth {
       clientId: this.clientId,
     };
     this.persist();
+    this.scheduleExpiry();
     this.settle();
     this.emit();
+  }
+
+  /**
+   * Notifies listeners when the token stops counting as valid, so the UI shows
+   * "Session expired" instead of a diary that silently stops refreshing.
+   */
+  private scheduleExpiry(): void {
+    clearTimeout(this.expiryTimer);
+    this.expiryTimer = undefined;
+    if (!this.isSignedIn || !this.token) return;
+    const delay = this.token.expiresAt - EXPIRY_MARGIN_MS - Date.now();
+    this.expiryTimer = setTimeout(() => {
+      this.expiryTimer = undefined;
+      log.info("Access token expired; asking the user to continue");
+      this.emit();
+    }, Math.max(0, delay) + 50);
   }
 
   private settle(error?: Error): void {
