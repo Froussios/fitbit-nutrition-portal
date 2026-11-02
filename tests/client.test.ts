@@ -43,3 +43,45 @@ describe("HealthClient errors", () => {
     expect(err.message).toContain("Failed to fetch");
   });
 });
+
+describe("HealthClient paging", () => {
+  /** A fake catalogue of `total` units served `perPage` at a time; records the requests. */
+  function catalogue(total: number, perPage: number, named: Record<number, string>) {
+    const requests: URL[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      requests.push(url);
+      const start = Number(url.searchParams.get("pageToken") ?? 0);
+      const end = Math.min(start + perPage, total);
+      const dataPoints = Array.from({ length: end - start }, (_, i) => ({
+        name: `u/${start + i}`,
+        foodMeasurementUnit: { displayName: named[start + i] ?? `unit ${start + i}` },
+      }));
+      return new Response(JSON.stringify({ dataPoints, ...(end < total ? { nextPageToken: String(end) } : {}) }), { status: 200 });
+    };
+    return { requests, fetchImpl };
+  }
+
+  it("asks for large pages and stops as soon as stopWhen is satisfied", async () => {
+    const { requests, fetchImpl } = catalogue(500, 25, { 30: "gram", 60: "milliliter" });
+    const units = await new HealthClient(token, fetchImpl).listFoodMeasurementUnits({
+      stopWhen: (items) => items.some((p) => p.foodMeasurementUnit?.displayName === "milliliter"),
+    });
+    expect(requests).toHaveLength(3);
+    expect(requests[0]!.searchParams.get("pageSize")).toBe("1000");
+    expect(units).toHaveLength(75);
+  });
+
+  it("stops at maxPages", async () => {
+    const { requests, fetchImpl } = catalogue(500, 25, {});
+    const units = await new HealthClient(token, fetchImpl).listFoodMeasurementUnits({ maxPages: 4 });
+    expect(requests).toHaveLength(4);
+    expect(units).toHaveLength(100);
+  });
+
+  it("reads every page when nothing limits it", async () => {
+    const { requests, fetchImpl } = catalogue(60, 25, {});
+    expect(await new HealthClient(token, fetchImpl).listFoodMeasurementUnits()).toHaveLength(60);
+    expect(requests).toHaveLength(3);
+  });
+});

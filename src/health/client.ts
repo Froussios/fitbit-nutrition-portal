@@ -27,6 +27,15 @@ export type TokenProvider = (opts?: { forceRefresh?: boolean }) => Promise<strin
 
 type Query = Record<string, string | number | undefined>;
 
+export interface ListOptions {
+  /** Requested page size; the server may return fewer. */
+  readonly pageSize?: number;
+  /** Stop after this many pages even if more remain. */
+  readonly maxPages?: number;
+  /** Stop as soon as this returns true for the items fetched so far. */
+  readonly stopWhen?: (items: readonly DataPoint[]) => boolean;
+}
+
 /**
  * Minimal browser client for the Google Health API.
  * The API sends CORS headers for any origin, so no proxy is needed.
@@ -61,17 +70,33 @@ export class HealthClient {
     return this.request("POST", "users/me/dataTypes/nutrition-log/dataPoints:batchDelete", { body: { names } });
   }
 
-  listFoodMeasurementUnits(): Promise<DataPoint[]> {
-    return this.listAll("users/me/dataTypes/food-measurement-unit/dataPoints", {});
+  /**
+   * Google's food measurement units. This is the whole shared catalogue
+   * (thousands of units, about 25 per page), so callers should stop early.
+   */
+  listFoodMeasurementUnits(opts: ListOptions = {}): Promise<DataPoint[]> {
+    return this.listAll("users/me/dataTypes/food-measurement-unit/dataPoints", {}, { pageSize: 1000, ...opts });
   }
 
-  private async listAll(path: string, query: Query): Promise<DataPoint[]> {
+  private async listAll(path: string, query: Query, opts: ListOptions = {}): Promise<DataPoint[]> {
     const out: DataPoint[] = [];
     let pageToken: string | undefined;
+    let pages = 0;
     do {
-      const page: ListDataPointsResponse = await this.request("GET", path, { query: { ...query, pageToken } });
+      const page: ListDataPointsResponse = await this.request("GET", path, {
+        query: { ...query, pageSize: opts.pageSize, pageToken },
+      });
       out.push(...(page.dataPoints ?? []));
+      pages++;
       pageToken = page.nextPageToken || undefined;
+      if (pageToken && opts.stopWhen?.(out)) {
+        log.debug(`${path}: stopped after ${pages} page(s), ${out.length} items: found what was needed`);
+        break;
+      }
+      if (pageToken && opts.maxPages !== undefined && pages >= opts.maxPages) {
+        log.warn(`${path}: stopped at the limit of ${opts.maxPages} page(s), ${out.length} items; more remain`);
+        break;
+      }
     } while (pageToken);
     return out;
   }

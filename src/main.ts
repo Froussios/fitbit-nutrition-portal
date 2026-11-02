@@ -8,7 +8,7 @@ import type { FoodItem } from "./core/food";
 import { LocalFoodCatalog, type FoodCatalog } from "./food/catalog";
 import { SAMPLE_FOODS } from "./food/sample-foods";
 import { HealthApiError, HealthClient } from "./health/client";
-import { buildNutritionLogPoint, findServingUnits, toDiaryEntries, unitNamesOf, type DiaryEntry, type LogDraft } from "./health/mapping";
+import { buildNutritionLogPoint, findServingUnits, toDiaryEntries, type DiaryEntry, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
@@ -103,9 +103,11 @@ class App {
     this.ready = false;
     this.render();
     appLog.info("Connecting: checking the Google Health identity");
+    let healthUserId: string | undefined;
     try {
       const identity = await this.api.getIdentity();
-      appLog.info("Google Health account is linked", { healthUserId: identity.healthUserId ?? "(not returned)" });
+      healthUserId = identity.healthUserId;
+      appLog.info("Google Health account is linked", { healthUserId: healthUserId ?? "(not returned)" });
     } catch (e) {
       if (e instanceof SignInRequiredError) return this.handleError(e);
       appLog.error("Identity check failed; showing the connection error", describeError(e));
@@ -122,24 +124,50 @@ class App {
         "Read access to your nutrition diary was not granted, so only entries made by this app are shown. " +
         "Sign out and sign in again, and tick the permission to see your nutrition data, to see everything.";
     }
-    // Serving units are optional: without them entries carry no `serving` field.
+    this.ready = true;
+    this.render();
+    // The gram/ml units only matter for `serving`; find them without holding up the diary.
+    void this.loadServingUnits(healthUserId);
+    await this.loadToday();
+  }
+
+  /**
+   * Finds the API's gram and millilitre `food-measurement-unit`s. The list is
+   * Google's whole unit catalogue, so stop as soon as both are found and cache
+   * them per Google Health user. Until then, entries put the amount in the name.
+   */
+  private async loadServingUnits(healthUserId: string | undefined) {
+    const cacheKey = `foodDiary.servingUnits.${healthUserId ?? "me"}`;
+    const cached = readJson<Partial<Record<BaseUnit, string>>>(cacheKey);
+    if (cached?.g && cached.ml) {
+      this.setServingUnits(cached);
+      appLog.info("Gram and millilitre units loaded from cache", cached);
+      return;
+    }
+    appLog.info("Looking up the gram and millilitre units in Google's unit catalogue");
     try {
-      const units = await this.api.listFoodMeasurementUnits();
-      this.servingUnits = findServingUnits(units);
-      this.unitNames = unitNamesOf(units);
-      appLog.info(`Food measurement units: ${units.length} listed`, {
-        gramAndMillilitre: this.servingUnits,
-        names: [...this.unitNames.values()].slice(0, 30),
+      const units = await this.api.listFoodMeasurementUnits({
+        maxPages: 20,
+        stopWhen: (items) => {
+          const found = findServingUnits(items);
+          return Boolean(found.g && found.ml);
+        },
       });
-      if (!this.servingUnits.g || !this.servingUnits.ml) {
-        appLog.warn("Gram or millilitre unit not found; affected entries put the amount in the name instead of `serving`");
-      }
+      const found = findServingUnits(units);
+      this.setServingUnits(found);
+      appLog.info(`Scanned ${units.length} food measurement units`, { gramAndMillilitre: found });
+      if (found.g && found.ml) writeJson(cacheKey, found);
+      else appLog.warn("Gram or millilitre unit not found; affected entries put the amount in the name instead of `serving`");
     } catch (e) {
       appLog.warn("food-measurement-unit list not available; logging without `serving`", describeError(e));
     }
-    this.ready = true;
-    this.render();
-    await this.loadToday();
+  }
+
+  private setServingUnits(units: Partial<Record<BaseUnit, string>>) {
+    this.servingUnits = units;
+    // Names for the servings of entries we just wrote (the API fills them in on its own entries).
+    if (units.g) this.unitNames.set(units.g, "gram");
+    if (units.ml) this.unitNames.set(units.ml, "milliliter");
   }
 
   private async loadToday() {
@@ -313,6 +341,23 @@ class App {
       this.diary,
       renderDiaryTable({ entries: this.entries, pendingIds: new Set(this.pending.keys()), onDelete: (e) => void this.remove(e) }),
     );
+  }
+}
+
+function readJson<T>(key: string): T | undefined {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage blocked: the units are looked up again next time.
   }
 }
 
