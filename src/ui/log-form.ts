@@ -131,6 +131,12 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     customFields.disabled = !custom;
   };
 
+  /** A new choice makes an earlier load error or "Logged" message stale. */
+  const clearStatus = () => {
+    status.textContent = "";
+    status.classList.remove("error");
+  };
+
   const refreshAll = () => {
     syncCustomFields();
     refreshUnits();
@@ -140,6 +146,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
   const combobox = createFoodCombobox(catalog, {
     id: "food",
     onChoose: (hit) => {
+      clearStatus();
       const mine = ++choice;
       chosen = undefined;
       custom = false;
@@ -165,6 +172,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       );
     },
     onCustom: (query) => {
+      clearStatus();
       choice++;
       chosen = undefined;
       loading = undefined;
@@ -174,6 +182,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       cName.focus();
     },
     onEdit: () => {
+      clearStatus();
       choice++;
       chosen = undefined;
       loading = undefined;

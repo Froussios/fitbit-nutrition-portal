@@ -338,18 +338,25 @@ flowchart LR
 ### 6.1 Index files
 
 ```
-current.json                 { "version": "2026-11-08" }  (the only file whose content changes between builds)
+_headers                     caches <version>/* for a year as immutable (Cloudflare Pages)
+food-index-owner.json        ownership marker checked before each deploy
+current.json                 { "version": "20261104T085100Z-<run id>-<attempt>" }  (the only file whose content changes between builds)
 <version>/
-  meta.json                  the manifest: build and export dates, counts, licence, first word of every dictionary shard
+  meta.json                  the manifest: format, build and export dates, counts, licence, file sizes
+                             (sumPerFile, detPerFile, codeBuckets) and the first word of every dictionary shard
   LICENSE.txt                ODbL notice and attribution
-  dict/<n>.json              a run of consecutive words in sorted order, ≤ 16 KB compressed:
-                             [word, product count, list location, or the list itself if short]
-  post/<nnnn>.bin            medium product lists, packed by a hash of the word
-  big/<word id>/<k>.bin      chunk k (4,096 IDs) of a long product list
-  pfx/<n>.bin                2- and 3-letter prefixes with many expansions: first 1,000 IDs of their union
-  sum/<nnnn>.json            row summaries, 256 per file, by ID
-  det/<nnnn>.json            details, 256 per file, by ID
-  code/<nnnn>.json           barcode → ID, by a hash of the barcode
+  dict/<n>.json              a run of consecutive words in sorted order (about 24 KB uncompressed):
+                             [word, count, IDs] for lists of up to 16, [word, count, pack, offset, length]
+                             for medium lists, [word, count, -1, list, chunks] for long ones
+  post/<n>.bin               medium lists (17 to 4,096 IDs), packed in dictionary order, about 16 KB per pack
+  big/<list>/<k>.bin         chunk k (4,096 IDs) of a long list
+  big/<list>/skip.json       the first ID of each chunk, to jump straight to the chunk holding an ID
+  pfx/<hex>.json             one file per 2-letter prefix (hex of its UTF-8 bytes): for it and each 3-letter
+                             extension, the number of words it starts, and if over 16, the best 200 IDs of
+                             their union (base64 varint deltas)
+  sum/<n>.json               row summaries, sumPerFile per file (256, more if the file budget needs it), by ID
+  det/<n>.json               details, detPerFile = 2 × sumPerFile per file (512 or more), by ID
+  code/<n>.json              barcode → ID, about 2,048 per file, bucketed by FNV-1a of the barcode
 ```
 
 * **Dictionary shards are word ranges**, not first letters, so every shard stays small however the words
@@ -359,7 +366,9 @@ current.json                 { "version": "2026-11-08" }  (the only file whose c
 * **Product lists** are sorted ID lists, stored as deltas in variable-length integers (1–2 bytes per entry).
   Because IDs follow the ranking, the first chunk of a list holds its best products.
 * **Summaries and details** are compact JSON arrays, decoded into `FoodSummary` and `FoodItem`.
-* **Versioned folders** let the next build replace everything at once. The app reads `current.json` at
+* **Versioned folders** let the next build replace everything at once. Every build gets a new version name
+  (UTC build time, plus the run ID and attempt in CI), because browsers cache version folders as
+  immutable: reusing a name would mix two builds' files. The app reads `current.json` at
   start; if an index file returns 404 (a new build was published mid-session), it rereads `current.json`
   and retries once.
 * Version folders never change, so `_headers` lets browsers cache them for a year (`immutable`);
@@ -373,8 +382,11 @@ For a query `dark choc`:
 2. **Dictionary.** Find the shards for `dark` and `choc` from the manifest and fetch them (cached after the
    first time). If a complete word is not in the dictionary, there are no results (every word must match).
 3. **Prefix expansion.** The words from `choc` up to `chod` in sorted order, most common first. Up to 16
-   are used; rarer expansions (usually misspellings) are skipped. For a 2- or 3-letter last word with more
-   expansions than that, the precomputed `pfx/` list is used instead.
+   are used; rarer expansions (usually misspellings) are skipped. A 2- or 3-letter last word with more
+   expansions than that uses its precomputed `pfx/` list when it is the only word. After other words
+   (`milk ch`), that list (the best 200 IDs overall) would rarely meet theirs, so the engine instead takes
+   up to 100 candidates matching the other words, in ranking order, and keeps those whose name or brand
+   has a word starting with the prefix.
 4. **Product lists.** Open a lazy iterator per complete word and a merged iterator over the prefix's
    expansions. Each fetches the next chunk only when the walk reaches it.
 5. **Intersect** in ID order (leapfrogging from the shortest list) and stop at the first 10 matches, or at

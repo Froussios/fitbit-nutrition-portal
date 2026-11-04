@@ -1,5 +1,5 @@
 import type { FoodItem } from "../core/food";
-import type { ParsedQuery } from "../core/tokens";
+import { productMatches, type ParsedQuery } from "../core/tokens";
 import {
   barcodeVariants,
   chunkPath,
@@ -46,6 +46,13 @@ export class IndexNotFoundError extends Error {
 export const MAX_SCAN = 200_000;
 /** Dictionary shards read to expand one prefix. */
 const MAX_PREFIX_SHARDS = 3;
+/**
+ * A short prefix (2-3 letters) after other words is checked against the candidates' names instead of
+ * intersected with its precomputed list, which only holds the best IDs across the whole index. At most
+ * this many candidates are checked, in batches.
+ */
+const MAX_VERIFIED = 100;
+const VERIFY_BATCH = 25;
 
 const END = Number.POSITIVE_INFINITY;
 
@@ -226,8 +233,12 @@ export class FoodIndex {
     return found.sort((x, y) => entryCount(y) - entryCount(x)).slice(0, max);
   }
 
-  /** A cursor over every product with a word starting with `prefix`, or undefined if there is none. */
-  private async prefixCursor(prefix: string, budget: Budget): Promise<Cursor | undefined> {
+  /**
+   * A cursor over every product with a word starting with `prefix`; undefined if there is none; or
+   * "verify" when the prefix is short and common and `alone` is false, so candidates found through the
+   * other words are checked against the prefix instead.
+   */
+  private async prefixCursor(prefix: string, budget: Budget, alone: boolean): Promise<Cursor | "verify" | undefined> {
     const chars = Array.from(prefix);
     if (chars.length <= 3) {
       let group: PrefixGroup;
@@ -241,6 +252,8 @@ export class FoodIndex {
       if (!g) return undefined;
       const [n, top] = g;
       if (n > MAX_EXPANSIONS && top) {
+        // The precomputed list holds only the best IDs overall, so it rarely meets other words' lists.
+        if (!alone) return "verify";
         const ids = decodeIds(fromBase64(top));
         return new ListCursor(ids.length, async () => ids, budget);
       }
@@ -261,30 +274,63 @@ export class FoodIndex {
     const entries = await Promise.all(q.words.map((w) => this.lookup(w)));
     if (entries.some((e) => !e)) return [];
     const cursors = entries.map((e) => this.cursorFor(e!, budget));
+    let verify: string | undefined;
     if (q.prefix !== undefined) {
-      const c = await this.prefixCursor(q.prefix, budget);
+      const c = await this.prefixCursor(q.prefix, budget, cursors.length === 0);
       if (!c) return [];
-      cursors.push(c);
+      if (c === "verify") verify = q.prefix;
+      else cursors.push(c);
     }
     if (cursors.length === 0) return [];
     cursors.sort((a, b) => a.size - b.size);
 
-    // Leapfrog intersection: advance every cursor to the largest current ID until all agree.
     const hits: number[] = [];
+    if (verify === undefined) {
+      for await (const id of this.intersect(cursors, budget)) {
+        hits.push(id);
+        if (hits.length >= limit) break;
+      }
+      return hits;
+    }
+
+    // Candidates from the other words, in ranking order, kept if a word in their name or brand starts with the prefix.
+    const prefixOnly: ParsedQuery = { words: [], prefix: verify };
+    let batch: number[] = [];
+    let checked = 0;
+    const check = async () => {
+      const rows = await this.summaries(batch);
+      rows.forEach((r, i) => {
+        if (hits.length < limit && productMatches(prefixOnly, r[1], r[2] ?? undefined)) hits.push(batch[i]!);
+      });
+      batch = [];
+    };
+    for await (const id of this.intersect(cursors, budget)) {
+      batch.push(id);
+      checked++;
+      if (batch.length === VERIFY_BATCH || checked >= MAX_VERIFIED) {
+        await check();
+        if (hits.length >= limit || checked >= MAX_VERIFIED) return hits;
+      }
+    }
+    if (batch.length > 0) await check();
+    return hits;
+  }
+
+  /** Leapfrog intersection: advances every cursor to the largest current ID until all agree, yielding IDs in ranking order. */
+  private async *intersect(cursors: readonly Cursor[], budget: Budget): AsyncGenerator<number> {
     let target = 0;
-    outer: while (hits.length < limit && budget.scanned <= MAX_SCAN) {
+    outer: while (budget.scanned <= MAX_SCAN) {
       for (const c of cursors) {
         await c.seek(target);
-        if (c.current === END) break outer;
+        if (c.current === END) return;
         if (c.current > target) {
           target = c.current;
           continue outer;
         }
       }
-      hits.push(target);
+      yield target;
       target++;
     }
-    return hits;
   }
 
   async summaries(ids: readonly number[]): Promise<SummaryRow[]> {

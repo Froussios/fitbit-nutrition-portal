@@ -128,6 +128,15 @@ describe("food index", () => {
     expect((await index.food((await index.findBarcode("1005"))!)).name).toBe("Weet-Bix");
   });
 
+  it("checks a short, common last word against the other words' matches", async () => {
+    // "fl" starts thousands of words, so its precomputed list holds only the best IDs overall,
+    // which misses this low-ranked product; candidates for "special" are checked instead.
+    const index = await FoodIndex.open(build([...FIXTURE, ...MANY]).reader);
+    expect(await names(index, "special fl")).toEqual([`Snack bar flavour${CHUNK_SIZE + 400} special`]);
+    expect(await names(index, "special zz")).toEqual([]);
+    expect(await names(index, "fl")).toHaveLength(10);
+  });
+
   it("answers no-match prefixes without errors", async () => {
     const index = await FoodIndex.open(build(FIXTURE).reader);
     expect(await names(index, "zz")).toEqual([]);

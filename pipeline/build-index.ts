@@ -7,7 +7,8 @@
  * Options:
  *   --out <dir>          index root (default public/food-index); holds current.json and one version folder
  *   --input <file>       read this file instead of stdin (.gz is decompressed)
- *   --version <name>     version folder name (default: today's date, YYYYMMDD)
+ *   --version <name>     version folder name; must be unique per build, because browsers cache version
+ *                        folders as immutable (default: UTC build time, e.g. 20261104T085100Z)
  *   --source-url <url>   recorded in meta.json
  *   --last-modified <s>  the export's Last-Modified date, recorded in meta.json
  *   --limit <n>          stop after n records (for trying it out)
@@ -36,7 +37,9 @@ function args(): Map<string, string> {
 async function main(): Promise<void> {
   const opts = args();
   const outRoot = opts.get("out") ?? "public/food-index";
-  const version = opts.get("version") ?? new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  // Unique per build: two builds never share a version folder, or browsers would mix their cached files.
+  const version = opts.get("version") ?? new Date().toISOString().replace(/[-:]|\.\d+/g, "");
+  if (!/^[A-Za-z0-9._-]+$/.test(version)) throw new Error(`Invalid version name: ${version}`);
   const limit = Number(opts.get("limit") ?? Infinity);
   const input = opts.get("input");
   const source = {
