@@ -15,6 +15,7 @@ This is the MVP, a proof of concept (milestone M0):
 * MVP targets, post-MVP milestones and work saved for later: [docs/ROADMAP.md](docs/ROADMAP.md)
   (tracked in [GitHub issues](https://github.com/Froussios/fitbit-nutrition-portal/issues/1))
 * Decision log: [docs/DECISIONS.md](docs/DECISIONS.md)
+* Food search design (milestone M1): [docs/FOOD_SEARCH.md](docs/FOOD_SEARCH.md)
 
 ## Google Cloud setup (once, by the developer)
 
@@ -60,7 +61,8 @@ client ID instead.
 |---|---|
 | `npm run dev` | Dev server on port 5173 |
 | `npm test` | Unit tests (Vitest) |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run typecheck` | `tsc --noEmit` for the app and the index builder |
+| `npm run build:index -- --input <export.jsonl.gz>` | Build the food index into `public/food-index/` (ignored by git) from an Open Food Facts export, for local development |
 | `npm run build` | Type-check and build the static site into `dist/` |
 | `npm run preview` | Serve `dist/` on port 4173 |
 
@@ -77,6 +79,30 @@ client ID instead.
 
 Any static host works. The build uses relative paths, so it can live under a sub-path.
 
+### Food index
+
+Food search reads a static index of the Open Food Facts database hosted on **Cloudflare Pages** (design:
+[docs/FOOD_SEARCH.md](docs/FOOD_SEARCH.md)). `.github/workflows/food-index.yml` builds it from the Open Food
+Facts export and deploys it weekly, or when run from the Actions tab. It is never committed to git. Without
+an index the app falls back to the sample foods. Food data © Open Food Facts contributors, ODbL.
+
+One-time setup:
+
+1. Preferably create a **separate free Cloudflare account** for this project (Accounts → Create Account;
+   up to five extra free accounts per user). A Pages token can edit every Pages project in its account, so
+   a dedicated account keeps this project and your others fully apart.
+2. In that account, create an **Account API token** with only **Account → Cloudflare Pages → Edit**, and copy
+   the **account ID**.
+3. In GitHub, create the environment **food-index** (Settings → Environments), limit its deployment
+   branches to `main`, and add the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` there.
+   Only workflows running from `main` can then use the token.
+4. Run the **Food index** workflow. It creates the Pages project `food-diary-index` on its first run (set
+   the repository variable `CLOUDFLARE_PAGES_PROJECT` to use another name). It refuses to deploy to an
+   existing project that is not this repository's index: every deploy carries a `food-index-owner.json`
+   marker, which the next deploy checks first.
+5. Set the repository variable `FOOD_INDEX_URL` to the project's URL (shown in the job summary, normally
+   `https://food-diary-index.pages.dev/`), so the CI build points the app at it.
+
 ## Project layout
 
 ```
@@ -84,8 +110,9 @@ src/
   core/      domain logic, no I/O: units, nutrients, food model, Open Food Facts normaliser, ids, time
   health/    Google Health API types (from the discovery document), client and mapping
   auth/      Google Identity Services token flow
-  food/      FoodCatalog interface and the local fake catalogue (Open Food Facts format)
-  ui/        DOM helpers, log form, diary table
+  food/      FoodCatalog interface, the static index engine and catalogue, sample foods
+  ui/        DOM helpers, log form, food search combobox, diary table
+pipeline/    food index builder (Open Food Facts export → public/food-index/)
   main.ts    app shell
 tests/       Vitest unit tests
 docs/        architecture and decisions
@@ -95,7 +122,7 @@ docs/        architecture and decisions
 
 * Access tokens last about an hour; click **Continue** when asked. Long-lived sessions are planned for a
   later milestone (they need refresh tokens, which Google only issues through the client secret).
-* The app never queries the public Open Food Facts API (its rate limits are too low). Food search will use
-  a mirror; for now the catalogue is local fake data.
+* The app never queries the public Open Food Facts API (its rate limits are too low). Food search uses our
+  own static index of the Open Food Facts export, matching exact words (no typo tolerance).
 * Only entries made by this app can be deleted (the write scope covers only the app's own data).
 * While the OAuth app is in *Testing*, only listed test users (up to 100) can sign in.

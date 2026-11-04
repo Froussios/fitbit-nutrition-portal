@@ -22,6 +22,8 @@ export interface FoodItem extends Measurable {
   readonly ref: FoodRef;
   readonly name: string;
   readonly brand?: string;
+  /** Pack size as printed on the label, e.g. "575 g" (display only). */
+  readonly packSize?: string;
   readonly basis: BaseUnit;
   /** Nutrients per 100 units of `basis` (100 g or 100 ml). */
   readonly per100: NutrientProfile;
@@ -35,6 +37,6 @@ export function nutrientsForAmount(food: FoodItem, quantity: number, unit: strin
   return scaleProfile(food.per100, base / 100);
 }
 
-export function foodLabel(food: FoodItem): string {
+export function foodLabel(food: { readonly name: string; readonly brand?: string }): string {
   return food.brand ? `${food.name} (${food.brand})` : food.name;
 }

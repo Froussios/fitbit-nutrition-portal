@@ -3,3 +3,6 @@ dist/
 .env.local
 .env.*.local
 .DS_Store
+# Generated food index: never committed (it would stay in the git history). See docs/FOOD_SEARCH.md.
+public/food-index/
+food-index-dist/

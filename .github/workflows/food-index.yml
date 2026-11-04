@@ -1,0 +1,110 @@
+name: Food index
+
+# Builds the static food index from the Open Food Facts export and deploys it to
+# Cloudflare Pages. The index is never committed to git (every rebuild would stay
+# in the history). See docs/FOOD_SEARCH.md section 7 and the README.
+#
+# Credentials: CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit) and
+# CLOUDFLARE_ACCOUNT_ID, as secrets of the "food-index" environment (or of the
+# repository). Restrict that environment to the main branch so only reviewed code
+# can use the token.
+#
+# Crosstalk guard: a Pages token can edit every Pages project in its account, so
+# this workflow only ever touches PAGES_PROJECT, and refuses to deploy to an
+# existing project unless its live site serves food-index-owner.json naming this
+# repository (or it has never been deployed).
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Sunday 16:17 UTC (early Monday morning in Sydney).
+    - cron: "17 16 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: food-index
+  cancel-in-progress: false
+
+env:
+  PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'food-diary-index' }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: food-index
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check the credentials and that the Pages project is ours
+        id: project
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Add the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets (README, Food index)."
+            exit 1
+          fi
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PAGES_PROJECT"
+          status=$(curl -sS -o project.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api")
+          case "$status" in
+            404)
+              echo "Project $PAGES_PROJECT does not exist yet; it will be created."
+              echo "create=true" >> "$GITHUB_OUTPUT"
+              ;;
+            200)
+              subdomain=$(jq -r '.result.subdomain' project.json)
+              deployed=$(jq -r '.result.latest_deployment.id // empty' project.json)
+              if [ -n "$deployed" ]; then
+                owner=$(curl -sS --fail "https://$subdomain/food-index-owner.json" | jq -r '.repository' || true)
+                if [ "$owner" != "$GITHUB_REPOSITORY" ]; then
+                  echo "::error::Pages project $PAGES_PROJECT ($subdomain) is not this repository's food index (owner: '${owner:-none}'). Refusing to overwrite it. Set the CLOUDFLARE_PAGES_PROJECT variable to another name."
+                  exit 1
+                fi
+              fi
+              echo "Deploying to our existing project $PAGES_PROJECT ($subdomain)."
+              echo "create=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Cloudflare API returned HTTP $status for project $PAGES_PROJECT:"
+              jq -c '.errors' project.json || cat project.json
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+      - name: Build the index from the Open Food Facts export
+        env:
+          EXPORT_URL: https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz
+          USER_AGENT: FoodDiaryIndexBuilder/1.0 (+https://github.com/Froussios/fitbit-nutrition-portal)
+        run: |
+          set -euo pipefail
+          LAST_MODIFIED=$(curl -sSfIL -A "$USER_AGENT" "$EXPORT_URL" | grep -i '^last-modified:' | tail -1 | cut -d' ' -f2- | tr -d '\r' || true)
+          # Streamed and decompressed on the fly; pipefail stops a truncated download from producing a partial index.
+          curl -sSfL --retry 3 -A "$USER_AGENT" "$EXPORT_URL" \
+            | gzip -dc \
+            | node --max-old-space-size=5632 --import tsx pipeline/build-index.ts \
+                --out food-index-dist --owner "$GITHUB_REPOSITORY" \
+                --version "$(date -u +%Y%m%dT%H%M%SZ)-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+                --source-url "$EXPORT_URL" --last-modified "$LAST_MODIFIED" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy to Cloudflare Pages
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.project.outputs.create }}" = "true" ]; then
+            npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch=main
+          fi
+          npx --yes wrangler@4 pages deploy food-index-dist --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true
+          subdomain=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PAGES_PROJECT" | jq -r '.result.subdomain')
+          echo "Deployed to Cloudflare Pages project **$PAGES_PROJECT**: https://$subdomain/ (set the FOOD_INDEX_URL repository variable to this URL)." | tee -a "$GITHUB_STEP_SUMMARY"

@@ -9,7 +9,7 @@ labelled `decision`; when one closes, its outcome is added here. Supporting fact
 | ID | Question | Milestone | Issue | Current leaning |
 |---|---|---|---|---|
 | D1 | How to provide long-lived sessions | M3 | [#22](https://github.com/Froussios/fitbit-nutrition-portal/issues/22) | Stateless token broker (option A2) plus OAuth app in Production |
-| D3 | Design of the food data mirror | M1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) | Static index built by a scheduled job and served from a CDN |
+| D3 | Design of the food data mirror | M1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) | A slimmed, pre-sorted word index of the whole world dataset, built weekly by a GitHub Action and deployed as static files to Cloudflare Pages (~350–600 MB, under 20,000 files). Never committed to git: every rebuild would stay in the history (owner, 2 Nov 2026). Search runs in the browser, which fetches only the few small files each query needs (tens of KB), never the index; no server, so no DR-01 exception. The same engine can move into a free Cloudflare Worker if mobile latency needs it. Owner requirements (2 Nov 2026): no monthly bill; whole world dataset (Australian tagging is incomplete); the dataset may be slimmed; exact-word matching (DR-13); the browser must not download the dataset. Free database tiers (D1, Supabase, Turso) cannot hold or rebuild the whole dataset. See [FOOD_SEARCH.md](FOOD_SEARCH.md#5-hosting-and-execution-r7-decision-d3). |
 
 ## Decided
 
@@ -80,3 +80,18 @@ Health data from the web.
 features (M2), long-lived sessions (M3) and custom meals (M4) are post-MVP milestones.
 **Why.** Owner decision: prove the Google Health API round trip first; meals also depend on real food
 data (M1).
+
+### DR-12 Food search starts with Open Food Facts only
+**Decision.** M1 food search indexes Open Food Facts products only. Generic foods (AUSNUT / OpenNutrition)
+are parked ([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38)).
+**Why.** Owner decision (2 November 2026): one source first, to get search working end to end.
+**Reopen if.** The coverage test ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) finds fewer than 45 of 50 items, or generic foods are a frequent miss.
+
+### DR-13 Food search matches exact words, ranked by coverage
+**Decision.** No typo tolerance. Every query word must appear in the product's name or brand, in any order;
+the last word matches as a prefix while typing. Results rank by coverage (query words in the name divided by
+words in the name), then popularity: "chocolate" ranks a product called "Chocolate" above "Dark chocolate".
+**Why.** Owner decision (2 November 2026): it lets a pre-sorted static index serve search for free, with no
+search engine or server ([FOOD_SEARCH.md](FOOD_SEARCH.md#4-matching-and-ordering-r3)).
+**Reopen if.** Misspellings or word-form misses are common in the coverage test ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) or daily use; try
+the cheap helpers (synonyms, "did you mean", plurals) first.

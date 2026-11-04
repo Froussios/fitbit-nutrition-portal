@@ -47,7 +47,7 @@ flowchart LR
   end
   HC -- "Bearer token, CORS" --> GHAPI["Google Health API v4<br/>nutrition-log = the diary"]
   FC --> Fake["M0: local fake data"]
-  FC -. "later" .-> Mirror["Food data mirror<br/>(OFF dump + generic foods)"]
+  FC -. "M1" .-> Index["Static food index<br/>(slimmed OFF export, Cloudflare Pages)"]
 ```
 
 | Layer | Folder | Notes |
@@ -164,12 +164,13 @@ The app **never queries the public Open Food Facts API**. Its read limits (about
 `FoodCatalog` (`search`, `get`):
 
 * **M0:** `LocalFoodCatalog` over a handful of fake records written in the Open Food Facts format.
-* **Later:** a mirror built from the Open Food Facts data exports (ODbL allows this, with attribution and
-  share-alike on the database), filtered (for example to Australian products and chains) and merged with
-  generic foods (AUSNUT / OpenNutrition). A design that keeps "no backend" is a scheduled job (for example
-  a GitHub Action) that builds a static, sharded search index or an SQLite file served from a CDN and
-  queried over HTTP range requests. That means build-time compute but no running server. Contributions
-  back to Open Food Facts are a separate concern for that milestone.
+* **M1:** search-as-you-type over Open Food Facts using exact words in any order, ranked by how much of
+  the product name the query covers (DR-13). A weekly GitHub Action slims the Open Food Facts export
+  of the whole world dataset (dead rows and unused fields dropped), sorts products in ranking order and
+  publishes a sharded word index as static files on Cloudflare Pages (never in git). The browser runs the search itself but
+  fetches only the few small index files each query needs (tens of KB), never the whole index. ODbL allows this, with
+  attribution and share-alike on the database. No server and no monthly cost (decision D3). Generic
+  foods (AUSNUT / OpenNutrition) come later (DR-12). Full design: [FOOD_SEARCH.md](FOOD_SEARCH.md).
 
 ## 7. Decisions, milestones and spikes
 

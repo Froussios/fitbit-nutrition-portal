@@ -4,7 +4,8 @@ The plan from MVP onwards, and what is parked for later. GitHub issues track the
 [#1 Roadmap](https://github.com/Froussios/fitbit-nutrition-portal/issues/1) is the root, each milestone is a sub-issue of it, and each work item is a sub-issue of
 its milestone. Labels: `M0`–`M4`, `spike`, `decision`, `later`, `roadmap`.
 
-Decisions live in [DECISIONS.md](DECISIONS.md); the design in [ARCHITECTURE.md](ARCHITECTURE.md).
+Decisions live in [DECISIONS.md](DECISIONS.md); the design in [ARCHITECTURE.md](ARCHITECTURE.md), and food search in
+[FOOD_SEARCH.md](FOOD_SEARCH.md).
 
 ## Product in one line
 
@@ -35,7 +36,7 @@ own entries); those are kept but are not MVP criteria.
 
 | Milestone | Goal | Done when | Work items |
 |---|---|---|---|
-| [M1: food search](https://github.com/Froussios/fitbit-nutrition-portal/issues/3) | Real food data from a mirror behind `FoodCatalog`, search, barcode, recent foods | At least 45 of a 50-item Australian test list found with usable nutrients; a recent food logs in 3 taps or fewer | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) decision D3: mirror design · [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) mirror pipeline · [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) search UI and barcode · [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) recent foods · [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) spike: coverage test |
+| [M1: food search](https://github.com/Froussios/fitbit-nutrition-portal/issues/3) | Search-as-you-type over Open Food Facts (static index, no server) behind `FoodCatalog`, barcode, recent foods ([design](FOOD_SEARCH.md)) | At least 45 of a 50-item Australian test list found with usable nutrients; a recent food logs in 3 taps or fewer; results within 250 ms of the last keystroke | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) decision D3: hosting · [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) index builder · [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) publish the index · [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) search UI · [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) barcode · [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) recent foods · [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) spike: coverage test |
 | [M2: daily driver](https://github.com/Froussios/fitbit-nutrition-portal/issues/4) | Usable every day on phone and desktop | Installable on Android, iOS and desktop; entries can be edited; any day can be viewed; logging works offline | [#16](https://github.com/Froussios/fitbit-nutrition-portal/issues/16) PWA · [#17](https://github.com/Froussios/fitbit-nutrition-portal/issues/17) edit · [#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18) spike: reuse deleted ID · [#19](https://github.com/Froussios/fitbit-nutrition-portal/issues/19) day navigation · [#20](https://github.com/Froussios/fitbit-nutrition-portal/issues/20) offline queue · [#21](https://github.com/Froussios/fitbit-nutrition-portal/issues/21) kJ/kcal |
 | [M3: long-lived sessions](https://github.com/Froussios/fitbit-nutrition-portal/issues/5) | No hourly re-sign-in | A user signs in at most about once a month | [#22](https://github.com/Froussios/fitbit-nutrition-portal/issues/22) decision D1 · [#23](https://github.com/Froussios/fitbit-nutrition-portal/issues/23) spike: unverified production tokens · [#24](https://github.com/Froussios/fitbit-nutrition-portal/issues/24) implement |
 | [M4: custom meals](https://github.com/Froussios/fitbit-nutrition-portal/issues/6) | Meals from known ingredients | A meal can be built, logged and logged again | [#25](https://github.com/Froussios/fitbit-nutrition-portal/issues/25) builder and grouped logging · [#26](https://github.com/Froussios/fitbit-nutrition-portal/issues/26) library from history |
@@ -53,6 +54,7 @@ Not scheduled in any milestone. Tracked under [#7 Later](https://github.com/Frou
 | [#27](https://github.com/Froussios/fitbit-nutrition-portal/issues/27) Contribute missing foods back to Open Food Facts | Depends on the mirror (M1); best done with the user's own Open Food Facts account |
 | [#28](https://github.com/Froussios/fitbit-nutrition-portal/issues/28) OAuth verification and security assessment | Only needed beyond 100 users |
 | [#29](https://github.com/Froussios/fitbit-nutrition-portal/issues/29) Identified logs against Google `food` resources | Depends on what `food` list returns; cannot replace our catalogue |
+| [#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38) Generic foods (AUSNUT / OpenNutrition) | M1 starts with Open Food Facts only (DR-12); first lever if coverage falls short |
 
 ## Not planned
 

@@ -116,7 +116,8 @@ export function fromOffProduct(p: OffProduct): FoodItem {
     portions,
   };
   const brand = p.brands?.split(",")[0]?.trim();
-  return brand ? { ...item, brand } : item;
+  const packSize = p.quantity?.trim();
+  return { ...item, ...(brand ? { brand } : {}), ...(packSize ? { packSize } : {}) };
 }
 
 function mapDefined<T, R>(v: T | undefined, f: (v: T) => R): R | undefined {

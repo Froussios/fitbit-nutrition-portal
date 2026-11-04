@@ -4,9 +4,9 @@ import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_S
 import { idFromName, newEntryId } from "./core/ids";
 import { civilDate } from "./core/time";
 import type { BaseUnit } from "./core/units";
-import type { FoodItem } from "./core/food";
 import { LocalFoodCatalog, type FoodCatalog } from "./food/catalog";
 import { SAMPLE_FOODS } from "./food/sample-foods";
+import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
 import { buildNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, type DiaryEntry, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
@@ -64,9 +64,9 @@ class App {
 
   constructor(
     private readonly clientId: string,
-    foods: readonly FoodItem[],
+    catalog: FoodCatalog,
   ) {
-    this.form = createLogForm(foods, (d) => this.log(d));
+    this.form = createLogForm(catalog, (d) => this.log(d));
     // Logging needs the write scope; the read scope (whole diary) is asked for but optional.
     this.auth = new GoogleAuth(clientId, SCOPES, [NUTRITION_WRITE_SCOPE]);
     this.api = new HealthClient((o) => this.auth.getAccessToken(o));
@@ -448,7 +448,22 @@ function renderSetup(canCancel = false) {
   replaceChildren(root, el("header", { class: "top" }, el("h1", {}, "Food Diary")), form, debugPanel);
 }
 
-const catalog: FoodCatalog = new LocalFoodCatalog(SAMPLE_FOODS);
+/** Where the static food index lives: Cloudflare Pages in production (VITE_FOOD_INDEX_URL), else next to the app (public/food-index/ in development). */
+const FOOD_INDEX_URL = ((import.meta.env.VITE_FOOD_INDEX_URL as string | undefined)?.trim() || `${import.meta.env.BASE_URL}food-index`).replace(/\/?$/, "/");
+
+/** The Open Food Facts index if it is deployed, otherwise the built-in sample foods. */
+async function openCatalog(): Promise<FoodCatalog> {
+  const index = new StaticFoodCatalog(FOOD_INDEX_URL);
+  try {
+    const { meta } = await index.open();
+    appLog.info("Food index loaded", { url: FOOD_INDEX_URL, version: meta.version, products: meta.docs, builtAt: meta.builtAt });
+    return index;
+  } catch (e) {
+    appLog.warn("No food index found; using the sample foods", { url: FOOD_INDEX_URL, error: describeError(e) });
+    return new LocalFoodCatalog(SAMPLE_FOODS);
+  }
+}
+
 const clientId = getClientId();
-if (clientId) void catalog.search("").then((foods) => new App(clientId, foods));
+if (clientId) void openCatalog().then((catalog) => new App(clientId, catalog));
 else renderSetup();

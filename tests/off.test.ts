@@ -74,8 +74,9 @@ describe("LocalFoodCatalog", () => {
   it("searches by every word and finds by reference", async () => {
     const { LocalFoodCatalog } = await import("../src/food/catalog");
     const c = new LocalFoodCatalog(SAMPLE_FOODS);
-    expect((await c.search("")).length).toBe(SAMPLE_FOODS.length);
-    expect((await c.search("sample BURGER")).map((f) => f.ref.id)).toEqual(["burger-classic"]);
+    expect(await c.search("")).toEqual([]);
+    expect((await c.search("sample BURGER")).map((h) => h.summary.ref.id)).toEqual(["burger-classic"]);
+    expect((await c.search("burger sam")).map((h) => h.summary.ref.id)).toEqual(["burger-classic"]);
     expect(await c.get({ source: "sample", id: "oats" })).toBe(SAMPLE_FOODS.find((f) => f.ref.id === "oats"));
     expect(await c.get({ source: "off", id: "oats" })).toBeUndefined();
   });

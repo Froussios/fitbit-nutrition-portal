@@ -23,6 +23,8 @@ jobs:
         env:
           # Public value; a repository secret or a variable both work.
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
+          # Where the food index is deployed (Cloudflare Pages, built by food-index.yml), e.g. https://food-diary-index.pages.dev/
+          VITE_FOOD_INDEX_URL: ${{ vars.FOOD_INDEX_URL }}
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
