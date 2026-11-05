@@ -305,11 +305,14 @@ export class FoodIndex {
       const g = group[prefix];
       if (!g) return undefined;
       const [n, top] = g;
-      if (n > MAX_EXPANSIONS && top) {
+      if (n > MAX_EXPANSIONS) {
         // The precomputed list holds only the best IDs overall, so it rarely meets other words' lists.
         if (!alone) return "verify";
-        const ids = decodeIds(fromBase64(top));
-        return { head: new ListCursor(ids.length, async () => ids, budget, g), whole: false };
+        // It is empty when none of these words is the food in any product name.
+        if (top) {
+          const ids = decodeIds(fromBase64(top));
+          return { head: new ListCursor(ids.length, async () => ids, budget, g), whole: false };
+        }
       }
     }
     const words = await this.expansions(prefix, MAX_EXPANSIONS);
