@@ -4,7 +4,7 @@
  *
  * Matching is on exact words (DR-13): no typo tolerance, every query word must
  * appear in the product's name or brand, in any order, and the last query word
- * may be a prefix while the user is still typing.
+ * may be a prefix while the user is still typing. Ordering follows DR-15.
  */
 
 /** Words too common to search on. Mostly English, plus the most frequent ones in Open Food Facts' other big languages. */
@@ -40,6 +40,14 @@ export function nameWords(text: string): string[] {
 }
 
 /**
+ * What makes two product names the same name: every word in order, ignoring only
+ * case, accents and punctuation. Stop words count: "Milk with chocolate" is not "Milk chocolate".
+ */
+export function sameNameKey(text: string): string {
+  return (fold(text).match(CHUNK) ?? []).join(" ");
+}
+
+/**
  * The words a product is indexed under: every word, plus hyphenated and
  * apostrophe words joined ("Weet-Bix" → weet, bix, weetbix). Deduplicated.
  */
@@ -54,6 +62,40 @@ export function indexWords(text: string): string[] {
     }
   }
   return [...out];
+}
+
+/** Words after a food that only say which part or form of it this is: "Chicken Breast", "Oat Flour". */
+const FORM_WORDS: ReadonlySet<string> = new Set([
+  "breast", "breasts", "thigh", "thighs", "wing", "wings", "drumstick", "drumsticks", "tender", "tenders", "tenderloin", "tenderloins",
+  "fillet", "fillets", "flour", "butter", "bean", "beans", "extract", "essence", "white", "whites", "flake", "flakes", "bran", "slice", "slices",
+]);
+/** Where the part of a name saying what the food is ends: "Bread sticks with vegemite", "Sardines in sauce", "Coke, large". */
+const QUALIFIER = /\b(?:with|in|avec|mit|con|au|aux)\b|[,/(–—]|\s-\s/;
+/** A size rather than a word: "455g", "2pk". */
+const SIZE = /^\d+(?:g|kg|ml|l|oz|lb|pack|pk|x)?$/;
+
+/**
+ * The words of a name that say what the food is, as opposed to its flavour or an
+ * ingredient (docs/FOOD_SEARCH.md section 4.3). English puts the food last, so
+ * "Dark chocolate" is a chocolate and "Chocolate milk" is a milk; a form word
+ * passes this on to the word before it. English word order only, for now.
+ */
+export function headWords(name: string): string[] {
+  const folded = fold(name);
+  const end = folded.search(QUALIFIER);
+  const chunksOf = (text: string) =>
+    (text.match(CHUNK) ?? []).filter((chunk) => {
+      const parts = chunk.split(JOINER).filter(Boolean);
+      return parts.some(keep) && !SIZE.test(chunk);
+    });
+  let chunks = end > 0 ? chunksOf(folded.slice(0, end)) : [];
+  if (chunks.length === 0) chunks = chunksOf(folded);
+  const heads: string[] = [];
+  for (let i = chunks.length - 1; i >= 0; i--) {
+    heads.push(...indexWords(chunks[i]!));
+    if (!FORM_WORDS.has(chunks[i]!)) break;
+  }
+  return heads;
 }
 
 export interface ParsedQuery {
@@ -152,13 +194,113 @@ export function popularity(uniqueScans: number | undefined, soldInAustralia: boo
 }
 
 /**
- * Ranking order (docs/FOOD_SEARCH.md section 4.3): higher coverage first, i.e.
- * fewer words in the name, then more popular. When every query word is in the
- * name this equals ordering by coverage = query words in name / name words.
+ * The words of a name or brand as counted for ranking. A chunk with no searchable words ("O.G.",
+ * "b&b", "M&M's", "L'Or") still counts, because it is something the query does not account for.
+ * Stop words and the article "a" do not.
+ */
+function countedWords(text: string): string[] {
+  const out: string[] = [];
+  for (const chunk of fold(text).match(CHUNK) ?? []) {
+    const parts = chunk.split(JOINER).filter(keep);
+    if (parts.length > 0) out.push(...parts);
+    else if (!STOP_WORDS.has(chunk) && chunk !== "a") out.push(chunk);
+  }
+  return out;
+}
+
+/** Words a product name counts as for ranking: each distinct word once, at least 1. */
+export function nameWordCount(name: string): number {
+  return Math.max(1, new Set(countedWords(name)).size);
+}
+
+/** Words a whole product counts as: each distinct word of its name and brand once, at least 1. */
+export function productWordCount(name: string, brand?: string): number {
+  return Math.max(1, new Set(countedWords(brand ? `${name} ${brand}` : name)).size);
+}
+
+/** What the fixed order looks at. */
+export interface RankedProduct {
+  readonly branded: boolean;
+  readonly nameWordCount: number;
+  readonly productWordCount: number;
+  /** Entries of any brand with this exact name, weighted towards Australia: an estimate of how popular the food is. */
+  readonly sameNameCount: number;
+  readonly popularity: number;
+  readonly key: string;
+}
+
+/**
+ * The fixed order products are numbered in (docs/FOOD_SEARCH.md section 4.3):
+ * unbranded before branded, then fewer words in the name, then fewer words in
+ * the name and brand together, then more entries with the same name, then more
+ * popular. It does not depend on the query, so the index can store every product
+ * list in this order. matchRank() refines it for a particular query.
  */
 export function compareRank(
-  a: { readonly nameWordCount: number; readonly popularity: number; readonly key: string },
-  b: { readonly nameWordCount: number; readonly popularity: number; readonly key: string },
+  a: RankedProduct,
+  b: RankedProduct,
 ): number {
-  return a.nameWordCount - b.nameWordCount || b.popularity - a.popularity || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  return (
+    Number(a.branded) - Number(b.branded) ||
+    a.nameWordCount - b.nameWordCount ||
+    a.productWordCount - b.productWordCount ||
+    b.sameNameCount - a.sameNameCount ||
+    b.popularity - a.popularity ||
+    (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
+  );
+}
+
+/** Words in a name or brand that no query word accounts for. A hyphenated word counts as accounted for if its joined form is. */
+function extraWords(text: string, isTerm: (word: string) => boolean): number {
+  const extras = new Set<string>();
+  for (const chunk of fold(text).match(CHUNK) ?? []) {
+    const parts = chunk.split(JOINER).filter(Boolean);
+    if (parts.length > 1 && isTerm(parts.join(""))) continue;
+    for (const word of countedWords(chunk)) if (!isTerm(word)) extras.add(word);
+  }
+  return extras.size;
+}
+
+/**
+ * How well a product answers a query, for comparing with compareMatch; lower
+ * is better (docs/FOOD_SEARCH.md section 4.3). In order of importance:
+ *
+ * 1. Tier. 0: every query word is a whole word in the name or brand, with at
+ *    least one in the name. 1: the last word only matches as the start of a
+ *    longer word ("coke" in "cokelat"). 2: nothing matched in the name.
+ * 2. The query uses up the whole product, name and brand. There is nothing more
+ *    to type to reach such a product, so it must not be pushed down by others:
+ *    "vegemite" puts "Vegemite (Vegemite)" before "Vegemite pretzels".
+ * 3. A query word is the food, not its flavour or an ingredient (headWords):
+ *    "chocolate" puts "Dark chocolate" before "Chocolate milk".
+ * 4. Unbranded before branded: without evidence otherwise, assume the generic product.
+ * 5. Fewer name words that are not query words.
+ * 6. More query words in the name.
+ * 7. More query words in the brand as well.
+ */
+export function matchRank(q: ParsedQuery, name: string, brand?: string): readonly number[] {
+  const nameW = indexWords(name);
+  const brandW = brand ? indexWords(brand) : [];
+  const terms = q.prefix === undefined ? q.words : [...q.words, q.prefix];
+  const found = (words: readonly string[], term: string) => words.includes(term) || (term === q.prefix && words.some((w) => w.startsWith(term)));
+  const inName = terms.filter((t) => found(nameW, t)).length;
+  const wholeInName = terms.some((t) => nameW.includes(t));
+  const allWhole = terms.every((t) => nameW.includes(t) || brandW.includes(t));
+  const tier = inName === 0 ? 2 : allWhole && wholeInName ? 0 : 1;
+  const inBrand = terms.filter((t) => found(brandW, t)).length;
+  const isTerm = (w: string) => terms.includes(w);
+  const extras = extraWords(name, isTerm);
+  const usedUp = tier === 0 && extras === 0 && (!brand || extraWords(brand, isTerm) === 0);
+  const heads = headWords(name);
+  const isFood = terms.some((t) => found(heads, t));
+  return [tier, usedUp ? 0 : 1, isFood ? 0 : 1, brand ? 1 : 0, extras, -inName, -inBrand];
+}
+
+/** Orders two matchRank() results, or any number lists of the same shape. */
+export function compareMatch(a: readonly number[], b: readonly number[]): number {
+  for (let i = 0; i < a.length; i++) {
+    const d = a[i]! - b[i]!;
+    if (d) return d;
+  }
+  return 0;
 }

@@ -1,6 +1,6 @@
 import type { FoodItem, FoodRef } from "../core/food";
 import { summarise, type FoodSummary } from "../core/food-summary";
-import { compareRank, highlightRuns, isEmptyQuery, nameWords, parseQuery, productMatches, type ParsedQuery, type TextRun } from "../core/tokens";
+import { compareMatch, compareRank, highlightRuns, isEmptyQuery, matchRank, nameWordCount, parseQuery, productMatches, productWordCount, sameNameKey, type ParsedQuery, type TextRun } from "../core/tokens";
 
 /** One row of search results: what the dropdown shows, with matched words marked. */
 export interface FoodSearchHit {
@@ -24,9 +24,11 @@ export interface SearchOptions {
  * (StaticFoodCatalog, docs/FOOD_SEARCH.md).
  *
  * Matching (DR-13): every query word must be in the name or brand, in any
- * order, the last word may be a prefix, no typo tolerance. Ordering: fewer
- * words in the name first (more of the name covered by the query), then more
- * popular.
+ * order, the last word may be a prefix, no typo tolerance. Ordering (DR-15):
+ * see matchRank(). Whole-word matches in the name come first, products the query
+ * uses up entirely first among them, then products where a query word is the food
+ * and not its flavour, then unbranded before branded, then the fewest name words
+ * the query does not account for; products that only matched on their brand come last.
  */
 export interface FoodCatalog {
   /** Shown in the debug log and attribution line. */
@@ -53,7 +55,16 @@ export class LocalFoodCatalog implements FoodCatalog {
   private readonly ranked: readonly FoodItem[];
 
   constructor(items: readonly FoodItem[]) {
-    const key = (f: FoodItem) => ({ nameWordCount: Math.max(1, nameWords(f.name).length), popularity: 0, key: f.name });
+    const sameName = new Map<string, number>();
+    for (const f of items) sameName.set(sameNameKey(f.name), (sameName.get(sameNameKey(f.name)) ?? 0) + 1);
+    const key = (f: FoodItem) => ({
+      branded: Boolean(f.brand),
+      nameWordCount: nameWordCount(f.name),
+      productWordCount: productWordCount(f.name, f.brand),
+      sameNameCount: sameName.get(sameNameKey(f.name)) ?? 0,
+      popularity: 0,
+      key: f.name,
+    });
     this.ranked = [...items].sort((a, b) => compareRank(key(a), key(b)));
   }
 
@@ -62,8 +73,10 @@ export class LocalFoodCatalog implements FoodCatalog {
     if (isEmptyQuery(q)) return [];
     return this.ranked
       .filter((f) => productMatches(q, f.name, f.brand))
+      .map((f) => ({ f, rank: matchRank(q, f.name, f.brand) }))
+      .sort((a, b) => compareMatch(a.rank, b.rank))
       .slice(0, options.limit ?? DEFAULT_LIMIT)
-      .map((f) => toHit(summarise(f), q));
+      .map(({ f }) => toHit(summarise(f), q));
   }
 
   async get(ref: FoodRef): Promise<FoodItem | undefined> {

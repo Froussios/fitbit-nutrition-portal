@@ -87,6 +87,7 @@ are parked ([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38
 **Reopen if.** The coverage test ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) finds fewer than 45 of 50 items, or generic foods are a frequent miss.
 
 ### DR-13 Food search matches exact words, ranked by coverage
+Ordering revised by DR-15.
 **Decision.** No typo tolerance. Every query word must appear in the product's name or brand, in any order;
 the last word matches as a prefix while typing. Results rank by coverage (query words in the name divided by
 words in the name), then popularity: "chocolate" ranks a product called "Chocolate" above "Dark chocolate".
@@ -107,3 +108,18 @@ Free database tiers could not hold or rebuild the dataset; paid search hosting w
 custom domain replaced `*.pages.dev` after the University of Sydney's firewall was found intercepting it.
 **Reopen if.** Typo tolerance becomes a requirement (Meilisearch on a home server is the documented path),
 the index outgrows Cloudflare Pages' 20,000 files, or mobile latency needs the engine in a Worker.
+
+### DR-15 Food search assumes the generic product
+**Decision.** Unless given evidence otherwise, assume the generic product. Whole-word matches in the name come
+first; among them, products the query uses up entirely, then products where a query word is the food and not its
+flavour (judged by word position), then products with no brand before branded ones, then the fewest name words the
+query does not account for; ties go to the name with the most entries; products that only matched on their brand come last
+([FOOD_SEARCH.md](FOOD_SEARCH.md#43-ordering)). Rows with no brand are labelled Generic, and products with no
+brand and the same name are collapsed to one. Motivation in full: [#41](https://github.com/Froussios/fitbit-nutrition-portal/issues/41).
+**Why.** Owner decision (5 November 2026). Brands often name a product after a flavour, so results looked
+arbitrary: searching `vanilla` ranked `Coyo (Vanilla bean)` third. A product the query uses up comes first because
+there is nothing more to type to reach it: `Vegemite (Vegemite)` can't be reached by a more specific search.
+**Consequence.** The index stores three lists per word (food, rest of name, brand only), which ranks products
+without fetching their text. Index format 3. "No brand" is the only available signal for generic, and it is an imperfect one.
+**Reopen if.** Unbranded entries prove too unreliable to rank first; a popularity floor or real generic data
+([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38)) would be the next step.

@@ -1,6 +1,6 @@
 import { summarise } from "../src/core/food-summary";
 import { fromOffProduct, type OffProduct } from "../src/core/off";
-import { compareRank, indexWords, nameWords, popularity } from "../src/core/tokens";
+import { compareRank, headWords, indexWords, nameWordCount, popularity, productWordCount, sameNameKey } from "../src/core/tokens";
 import {
   CHUNK_SIZE,
   chunkPath,
@@ -22,7 +22,9 @@ import {
   summaryPath,
   summaryRow,
   toBase64,
+  type DictEntry,
   type IndexMeta,
+  type ListRef,
   type PrefixGroup,
   type SummaryRow,
 } from "../src/food/index-format";
@@ -60,6 +62,13 @@ export interface BuildOptions {
 }
 
 const MAX_NAME = 150;
+/**
+ * How much more an entry sold in Australia counts when estimating how popular a food is. Open Food
+ * Facts leans American, so plain counts would rank "Whole milk" (350 entries) far above "Full cream
+ * milk" (71) for Australian users. Not yet checked against the real data: see docs/FOOD_SEARCH.md section 12.
+ * To come from the client's locale instead: #42.
+ */
+const AUSTRALIA_WEIGHT = 10;
 const MAX_KCAL = 900;
 
 interface Doc {
@@ -67,7 +76,13 @@ interface Doc {
   readonly sum: SummaryRow;
   /** The detail row, already serialised to save memory. */
   readonly det: string;
+  readonly branded: boolean;
   readonly nameWordCount: number;
+  readonly productWordCount: number;
+  /** Filled in once every product has been read. */
+  sameNameCount: number;
+  readonly nameKey: string;
+  readonly soldInAustralia: boolean;
   readonly popularity: number;
   readonly dedupeKey: string;
   /** Sort key tie-break, for a deterministic order. */
@@ -120,13 +135,20 @@ export class IndexBuilder {
     this.seenCodes.add(code);
 
     const sum = summaryRow(summarise(food));
+    const sortedWords = [...words].sort().join(" ");
     this.docs.push({
       code,
       sum,
       det: JSON.stringify(detailRow(food)),
-      nameWordCount: Math.max(1, nameWords(food.name).length),
+      branded: Boolean(food.brand),
+      nameWordCount: nameWordCount(food.name),
+      productWordCount: productWordCount(food.name, food.brand),
+      sameNameCount: 0,
+      nameKey: sameNameKey(food.name),
+      soldInAustralia: raw.countries_tags?.includes("en:australia") ?? false,
       popularity: popularity(raw.unique_scans_n, raw.countries_tags?.includes("en:australia") ?? false, raw.completeness),
-      dedupeKey: `${[...words].sort().join(" ")}|${Math.round(kcal)}`,
+      // Unbranded products with the same name can't be told apart in the dropdown, whatever their energy.
+      dedupeKey: food.brand ? `${sortedWords}|${Math.round(kcal)}` : sameNameKey(food.name),
       key: code,
     });
     this.bump("kept");
@@ -141,6 +163,12 @@ export class IndexBuilder {
     const codesPerBucket = o.codesPerBucket ?? 2048;
     const maxFiles = o.maxFiles ?? 19_000;
     let files = 0;
+
+    // How common each exact name is, across all brands: an estimate of how popular the food is.
+    const sameName = new Map<string, number>();
+    for (const d of this.docs) sameName.set(d.nameKey, (sameName.get(d.nameKey) ?? 0) + (d.soldInAustralia ? AUSTRALIA_WEIGHT : 1));
+    for (const d of this.docs) d.sameNameCount = sameName.get(d.nameKey)!;
+    sameName.clear();
 
     // Rank, then collapse duplicates: the best of each group is searchable, the rest only by barcode.
     const ranked = [...this.docs].sort(compareRank);
@@ -160,17 +188,31 @@ export class IndexBuilder {
     this.counts.searchable = searchable.length;
     this.counts.duplicates = duplicates.length;
 
+    // What a search needs to rank a product from its ID alone.
+    const brandedFrom = searchable.findIndex((d) => d.sum[2]);
+    const bands: [number, number, number][] = [];
+    searchable.forEach((d, id) => {
+      const last = bands[bands.length - 1];
+      if (!last || last[1] !== d.nameWordCount || last[2] !== d.productWordCount) bands.push([id, d.nameWordCount, d.productWordCount]);
+    });
+
     // Product lists: built in ID order, so each list is already sorted by rank.
-    const lists = new Map<string, number[]>();
+    const headLists = new Map<string, number[]>();
+    const restLists = new Map<string, number[]>();
+    const brandLists = new Map<string, number[]>();
+    const addTo = (lists: Map<string, number[]>, word: string, id: number) => {
+      let list = lists.get(word);
+      if (!list) lists.set(word, (list = []));
+      list.push(id);
+    };
     searchable.forEach((d, id) => {
       const [, name, brand] = d.sum;
-      for (const w of indexWords(brand ? `${name} ${brand}` : name)) {
-        let list = lists.get(w);
-        if (!list) lists.set(w, (list = []));
-        list.push(id);
-      }
+      const inName = indexWords(name);
+      const heads = headWords(name);
+      for (const w of inName) addTo(heads.includes(w) ? headLists : restLists, w, id);
+      if (brand) for (const w of indexWords(brand)) if (!inName.includes(w)) addTo(brandLists, w, id);
     });
-    const words = [...lists.keys()].sort();
+    const words = [...new Set([...headLists.keys(), ...restLists.keys(), ...brandLists.keys()])].sort();
     this.counts.words = words.length;
 
     // Dictionary shards, packs of medium lists, chunked long lists.
@@ -197,30 +239,32 @@ export class IndexBuilder {
       packLength = 0;
     };
 
-    for (const w of words) {
-      const ids = lists.get(w)!;
-      let entry: unknown[];
-      if (ids.length <= INLINE_MAX) {
-        entry = [w, ids.length, deltas(ids)];
-      } else if (ids.length <= CHUNK_SIZE) {
+    const writeList = function* (ids: readonly number[] | undefined): Generator<readonly [string, string | Uint8Array], ListRef | null> {
+      if (!ids) return null;
+      if (ids.length <= INLINE_MAX) return [ids.length, deltas(ids)];
+      if (ids.length <= CHUNK_SIZE) {
         const bytes = encodeIds(ids);
-        entry = [w, ids.length, packNo, packLength, bytes.length];
+        const ref: ListRef = [ids.length, packNo, packLength, bytes.length];
         pack.push(bytes);
         packLength += bytes.length;
         if (packLength >= packBytes) yield* flushPack();
-      } else {
-        const listId = bigLists++;
-        const firsts: number[] = [];
-        for (let k = 0; k * CHUNK_SIZE < ids.length; k++) {
-          const chunk = ids.slice(k * CHUNK_SIZE, (k + 1) * CHUNK_SIZE);
-          firsts.push(chunk[0]!);
-          yield [chunkPath(listId, k), encodeIds(chunk)];
-          files++;
-        }
-        yield [skipPath(listId), JSON.stringify(firsts)];
-        files++;
-        entry = [w, ids.length, -1, listId, firsts.length];
+        return ref;
       }
+      const listId = bigLists++;
+      const firsts: number[] = [];
+      for (let k = 0; k * CHUNK_SIZE < ids.length; k++) {
+        const chunk = ids.slice(k * CHUNK_SIZE, (k + 1) * CHUNK_SIZE);
+        firsts.push(chunk[0]!);
+        yield [chunkPath(listId, k), encodeIds(chunk)];
+        files++;
+      }
+      yield [skipPath(listId), JSON.stringify(firsts)];
+      files++;
+      return [ids.length, -1, listId, firsts.length];
+    };
+
+    for (const w of words) {
+      const entry: DictEntry = [w, yield* writeList(headLists.get(w)), yield* writeList(restLists.get(w)), yield* writeList(brandLists.get(w))];
       const json = JSON.stringify(entry);
       if (shard.length === 0) dictStarts.push(dictStarts.length === 0 ? "" : w);
       shard.push(json);
@@ -234,11 +278,12 @@ export class IndexBuilder {
     this.counts.dictShards = dictStarts.length;
 
     // Prefix groups: for each 2-letter prefix, the counts and best IDs of it and its 3-letter extensions.
+    // Only products where the word says what the food is get into the best IDs: the others rank lower.
     const prefixes = new Map<string, { n: number; top: number[] }>();
     for (const w of words) {
       const chars = Array.from(w);
       if (chars.length < 2) continue;
-      const head = lists.get(w)!.slice(0, PREFIX_TOP);
+      const head = headLists.get(w)?.slice(0, PREFIX_TOP) ?? [];
       for (const len of [2, 3]) {
         if (chars.length < len) break;
         const p = chars.slice(0, len).join("");
@@ -257,7 +302,9 @@ export class IndexBuilder {
     }
     for (const [two, g] of groups) yield [prefixPath(two), JSON.stringify(g satisfies PrefixGroup)];
     this.counts.prefixGroups = groups.size;
-    lists.clear();
+    headLists.clear();
+    restLists.clear();
+    brandLists.clear();
     files += dictStarts.length + packNo + groups.size;
 
     // Barcode map.
@@ -300,6 +347,8 @@ export class IndexBuilder {
       sumPerFile,
       detPerFile,
       dict: dictStarts,
+      brandedFrom: brandedFrom < 0 ? searchable.length : brandedFrom,
+      bands,
       licence:
         "Contains information from Open Food Facts (https://world.openfoodfacts.org), made available under the Open Database License (ODbL) 1.0.",
     };

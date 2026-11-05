@@ -86,7 +86,8 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
 
     const rows: HTMLElement[] = hits.map((hit, i) => {
       const s = hit.summary;
-      const sub = [s.brand ? runs(hit.brand ?? [{ text: s.brand, match: false }]) : [], s.packSize ? [document.createTextNode(`${s.brand ? " · " : ""}${s.packSize}`)] : []].flat();
+      const maker = s.brand ? runs(hit.brand ?? [{ text: s.brand, match: false }]) : [el("span", { class: "opt-generic" }, "Generic")];
+      const sub = [...maker, ...(s.packSize ? [document.createTextNode(` · ${s.packSize}`)] : [])];
       return el(
         "li",
         { id: optionId(i), role: "option", class: "opt", "aria-selected": String(i === state.active) },
