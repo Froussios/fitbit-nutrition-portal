@@ -1,5 +1,5 @@
 import type { FoodItem } from "../core/food";
-import { productMatches, type ParsedQuery } from "../core/tokens";
+import { compareMatch, matchRank, productMatches, type ParsedQuery } from "../core/tokens";
 import {
   barcodeVariants,
   chunkPath,
@@ -10,6 +10,7 @@ import {
   fnv1a,
   fromBase64,
   INDEX_FORMAT,
+  LEGACY_INDEX_FORMAT,
   MAX_EXPANSIONS,
   packPath,
   prefixPath,
@@ -20,6 +21,8 @@ import {
   type DetailRow,
   type DictEntry,
   type IndexMeta,
+  type LegacyDictEntry,
+  type ListRef,
   type PrefixGroup,
   type SummaryRow,
 } from "./index-format";
@@ -56,8 +59,18 @@ const VERIFY_BATCH = 25;
 
 const END = Number.POSITIVE_INFINITY;
 
-interface Budget {
+/** How much of the product lists one search has read. A list read again by a later pass costs nothing more. */
+export interface Budget {
   scanned: number;
+  readonly counted: Set<unknown>;
+}
+
+export const newBudget = (): Budget => ({ scanned: 0, counted: new Set() });
+
+function countOnce(budget: Budget, list: unknown, ids: number): void {
+  if (budget.counted.has(list)) return;
+  budget.counted.add(list);
+  budget.scanned += ids;
 }
 
 /** A position in a sorted list of product IDs. `current` is END once exhausted. */
@@ -88,12 +101,14 @@ class ListCursor implements Cursor {
     readonly size: number,
     private readonly load: () => Promise<number[]>,
     private readonly budget: Budget,
+    /** Identifies the list across passes. */
+    private readonly list: unknown,
   ) {}
   async seek(target: number): Promise<void> {
     if (this.current >= target) return;
     if (!this.ids) {
       this.ids = await this.load();
-      this.budget.scanned += this.ids.length;
+      countOnce(this.budget, this.list, this.ids.length);
     }
     this.pos = lowerBound(this.ids, target, this.pos);
     this.current = this.pos < this.ids.length ? this.ids[this.pos]! : END;
@@ -115,8 +130,9 @@ class ChunkedCursor implements Cursor {
     private readonly budget: Budget,
   ) {}
   private async load(k: number): Promise<void> {
-    this.ids = decodeIds(await this.index.read("bytes", chunkPath(this.listId, k)));
-    this.budget.scanned += this.ids.length;
+    const path = chunkPath(this.listId, k);
+    this.ids = decodeIds(await this.index.read("bytes", path));
+    countOnce(this.budget, path, this.ids.length);
     this.k = k;
     this.pos = 0;
   }
@@ -155,7 +171,37 @@ class UnionCursor implements Cursor {
   }
 }
 
-const entryCount = (e: DictEntry) => e[1];
+/** One query word: where it is found. */
+interface Term {
+  /** Products where it says what the food is. */
+  readonly head?: Cursor | undefined;
+  /** Products with it elsewhere in the name. */
+  readonly rest?: Cursor | undefined;
+  /** Products with it only in the brand. */
+  readonly brand?: Cursor | undefined;
+  /** Whether a hit is the whole word, rather than a longer word starting with it. */
+  readonly whole: boolean;
+}
+
+const either = (cursors: readonly (Cursor | undefined)[]): Cursor | undefined => {
+  const present = cursors.filter((c) => c !== undefined);
+  return present.length > 1 ? new UnionCursor(present) : present[0];
+};
+
+/** The list of each format 2 entry, kept so that it is the same object in every pass (see countOnce). */
+const legacyLists = new WeakMap<object, ListRef>();
+
+/** A format 2 entry holds one list, read here as food matches; a format 3 entry holds three. */
+function refsOf(e: DictEntry | LegacyDictEntry): readonly [ListRef | null, ListRef | null, ListRef | null] {
+  if (typeof e[1] === "number") {
+    let list = legacyLists.get(e);
+    if (!list) legacyLists.set(e, (list = e.slice(1) as unknown as ListRef));
+    return [list, null, null];
+  }
+  return [e[1] as ListRef | null, e[2] as ListRef | null, e[3] as ListRef | null];
+}
+
+const entryCount = (e: DictEntry) => refsOf(e).reduce((n, ref) => n + (ref?.[0] ?? 0), 0);
 
 export class FoodIndex {
   private readonly cache = new Map<string, Promise<unknown>>();
@@ -167,7 +213,9 @@ export class FoodIndex {
 
   static async open(reader: IndexReader): Promise<FoodIndex> {
     const meta = await reader.json<IndexMeta>("meta.json");
-    if (meta.format !== INDEX_FORMAT) throw new Error(`Food index format ${meta.format} is not supported (expected ${INDEX_FORMAT})`);
+    if (meta.format !== INDEX_FORMAT && meta.format !== LEGACY_INDEX_FORMAT) {
+      throw new Error(`Food index format ${meta.format} is not supported (expected ${INDEX_FORMAT})`);
+    }
     return new FoodIndex(reader, meta);
   }
 
@@ -215,11 +263,17 @@ export class FoodIndex {
     return undefined;
   }
 
-  private cursorFor(e: DictEntry, budget: Budget): Cursor {
-    if (e.length === 3) return new ListCursor(e[1], async () => undeltas(e[2]), budget);
-    const [, count, where, a, b] = e;
+  private cursorFor(ref: ListRef, budget: Budget): Cursor {
+    if (ref.length === 2) return new ListCursor(ref[0], async () => undeltas(ref[1]), budget, ref);
+    const [count, where, a, b] = ref;
     if (where === -1) return new ChunkedCursor(this, count, a, b, budget);
-    return new ListCursor(count, async () => decodeIds(await this.read("bytes", packPath(where)), a, a + b), budget);
+    return new ListCursor(count, async () => decodeIds(await this.read("bytes", packPath(where)), a, a + b), budget, ref);
+  }
+
+  private termFor(entries: readonly DictEntry[], whole: boolean, budget: Budget): Term {
+    const refs = entries.map(refsOf);
+    const cursors = (i: 0 | 1 | 2) => either(refs.map((r) => (r[i] ? this.cursorFor(r[i]!, budget) : undefined)));
+    return { head: cursors(0), rest: cursors(1), brand: cursors(2), whole };
   }
 
   /** Dictionary entries for words starting with `prefix`, most common first, at most `max`. */
@@ -234,11 +288,11 @@ export class FoodIndex {
   }
 
   /**
-   * A cursor over every product with a word starting with `prefix`; undefined if there is none; or
-   * "verify" when the prefix is short and common and `alone` is false, so candidates found through the
-   * other words are checked against the prefix instead.
+   * Where the words starting with `prefix` are found; undefined if there is none; or "verify" when the
+   * prefix is short and common and `alone` is false, so candidates found through the other words are
+   * checked against the prefix instead.
    */
-  private async prefixCursor(prefix: string, budget: Budget, alone: boolean): Promise<Cursor | "verify" | undefined> {
+  private async prefixTerm(prefix: string, budget: Budget, alone: boolean): Promise<Term | "verify" | undefined> {
     const chars = Array.from(prefix);
     if (chars.length <= 3) {
       let group: PrefixGroup;
@@ -255,61 +309,171 @@ export class FoodIndex {
         // The precomputed list holds only the best IDs overall, so it rarely meets other words' lists.
         if (!alone) return "verify";
         const ids = decodeIds(fromBase64(top));
-        return new ListCursor(ids.length, async () => ids, budget);
+        return { head: new ListCursor(ids.length, async () => ids, budget, g), whole: false };
       }
     }
     const words = await this.expansions(prefix, MAX_EXPANSIONS);
-    if (words.length === 0) return undefined;
-    const cursors = words.map((e) => this.cursorFor(e, budget));
-    return cursors.length === 1 ? cursors[0] : new UnionCursor(cursors);
+    return words.length === 0 ? undefined : this.termFor(words, false, budget);
   }
 
   /**
-   * IDs of the best `limit` products matching the query, best first. Every
-   * word must match; IDs are in ranking order, so the first matches found
-   * are the best ones.
+   * IDs of the best `limit` products matching the query, best first (ranking:
+   * matchRank). Every word must match. The ranking's top levels are each a pass
+   * over the product lists, in order, so a search stops as soon as better levels
+   * have filled the results.
    */
-  async search(q: ParsedQuery, limit = 10): Promise<number[]> {
-    const budget: Budget = { scanned: 0 };
+  async search(q: ParsedQuery, limit = 10, budget: Budget = newBudget()): Promise<number[]> {
     const entries = await Promise.all(q.words.map((w) => this.lookup(w)));
     if (entries.some((e) => !e)) return [];
-    const cursors = entries.map((e) => this.cursorFor(e!, budget));
-    let verify: string | undefined;
-    if (q.prefix !== undefined) {
-      const c = await this.prefixCursor(q.prefix, budget, cursors.length === 0);
-      if (!c) return [];
-      if (c === "verify") verify = q.prefix;
-      else cursors.push(c);
+    const wordTerms = () => entries.map((e) => this.termFor([e!], true, budget));
+    const hits: number[] = [];
+    const room = () => limit - hits.length;
+
+    // Tier 0: every word whole, in the name or brand, at least one in the name.
+    const lastWord = q.prefix === undefined ? undefined : await this.lookup(q.prefix);
+    if (q.prefix === undefined || lastWord) {
+      const terms = () => [...wordTerms(), ...(lastWord ? [this.termFor([lastWord], true, budget)] : [])];
+      hits.push(...(await this.usedUpMatches(terms(), room(), budget)));
+      hits.push(...(await this.nameMatches(terms(), "head", room(), hits, budget)));
+      hits.push(...(await this.nameMatches(terms(), "name", room(), hits, budget)));
     }
-    if (cursors.length === 0) return [];
+
+    // Tier 1: the last word only as the start of a longer word.
+    if (q.prefix !== undefined && room() > 0) {
+      const term = await this.prefixTerm(q.prefix, budget, entries.length === 0);
+      if (term === "verify") {
+        hits.push(...(await this.verified(wordTerms(), q.prefix, room(), hits, budget)));
+        return this.inRankOrder(hits, q);
+      }
+      if (!term) return this.inRankOrder(hits, q);
+      hits.push(...(await this.nameMatches([...wordTerms(), term], "head", room(), hits, budget)));
+      if (room() > 0) {
+        const again = await this.prefixTerm(q.prefix, budget, entries.length === 0);
+        if (again && again !== "verify") hits.push(...(await this.nameMatches([...wordTerms(), again], "name", room(), hits, budget)));
+      }
+    }
+
+    // Tier 2: nothing in the name, so every word is in the brand.
+    if (room() > 0) {
+      const last = q.prefix === undefined ? undefined : await this.prefixTerm(q.prefix, budget, entries.length === 0);
+      const brands = [...wordTerms(), ...(last && last !== "verify" ? [last] : [])].map((t) => t.brand);
+      if (brands.length > 0 && brands.every((c) => c !== undefined)) {
+        for await (const id of this.intersect(brands, budget)) {
+          if (hits.includes(id)) continue;
+          hits.push(id);
+          if (room() === 0) break;
+        }
+      }
+    }
+    return this.inRankOrder(hits, q);
+  }
+
+  /** The text-based ranking of the chosen products: it also sees brand matches of words that are in the name. */
+  private async inRankOrder(ids: readonly number[], q: ParsedQuery): Promise<number[]> {
+    const rows = await this.summaries(ids);
+    return ids
+      .map((id, i) => ({ id, rank: matchRank(q, rows[i]![1], rows[i]![2] ?? undefined) }))
+      .sort((a, b) => compareMatch(a.rank, b.rank) || a.id - b.id)
+      .map((h) => h.id);
+  }
+
+  /**
+   * Products with no words beyond the query, wherever their IDs fall: a product holding every term with
+   * as many words in total as there are terms has nothing else in its name or brand. The bands say which
+   * IDs have that word count, so the walk jumps straight to them.
+   */
+  private async usedUpMatches(terms: readonly Term[], want: number, budget: Budget): Promise<number[]> {
+    const cursors = terms.map((t) => either([t.head, t.rest, t.brand]));
+    const bands = this.meta.bands;
+    if (!bands || want <= 0 || cursors.length === 0 || cursors.some((c) => !c)) return [];
+    const hits: number[] = [];
+    for (let b = 0; b < bands.length; b++) {
+      if (bands[b]![2] !== terms.length) continue;
+      const end = bands[b + 1]?.[0] ?? this.meta.searchableDocs;
+      for await (const id of this.intersect(cursors, budget, bands[b]![0], end)) {
+        hits.push(id);
+        if (hits.length === want) return hits;
+      }
+    }
+    return hits;
+  }
+
+  /** Word count of a product's name, from its ID. Undefined in a format 2 index. */
+  private wordCount(id: number): number | undefined {
+    const bands = this.meta.bands;
+    if (!bands) return undefined;
+    let lo = 0;
+    let hi = bands.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >>> 1;
+      if (bands[mid]![0] <= id) lo = mid;
+      else hi = mid - 1;
+    }
+    return bands[lo]![1];
+  }
+
+  /**
+   * The best `want` products, not in `skip`, with every term in the name or brand and at least one
+   * in the name ("name"), or at least one saying what the food is ("head"). Ranks them from their ID
+   * and the lists they are in, so nothing else is fetched, and stops when no later product could beat
+   * the ones found.
+   */
+  private async nameMatches(terms: readonly Term[], scope: "head" | "name", want: number, skip: readonly number[], budget: Budget): Promise<number[]> {
+    if (want <= 0 || terms.length === 0) return [];
+    const inScope = either(terms.flatMap((t) => (scope === "head" ? [t.head] : [t.head, t.rest])));
+    if (!inScope) return [];
+    const anywhere = terms.map((t) => either([t.head, t.rest, t.brand]));
+    if (anywhere.some((c) => !c)) return [];
+    // With one term, being in scope already says it all.
+    const cursors = terms.length === 1 ? [inScope] : [inScope, ...(anywhere as Cursor[])];
     cursors.sort((a, b) => a.size - b.size);
 
-    const hits: number[] = [];
-    if (verify === undefined) {
-      for await (const id of this.intersect(cursors, budget)) {
-        hits.push(id);
-        if (hits.length >= limit) break;
+    const wholeTerms = terms.filter((t) => t.whole).length;
+    const brandedFrom = this.meta.brandedFrom ?? 0;
+    const best: { id: number; key: readonly number[] }[] = [];
+    for await (const id of this.intersect(cursors, budget)) {
+      const words = this.wordCount(id);
+      if (best.length === want) {
+        // Without word counts (format 2), the first matches are the best we can tell.
+        if (words === undefined) break;
+        const atBest = [Number(id >= brandedFrom), Math.max(0, words - wholeTerms), -terms.length, id];
+        if (compareMatch(best[want - 1]!.key, atBest) < 0) break;
       }
-      return hits;
+      if (skip.includes(id)) continue;
+      const inName = terms.filter((t) => t.head?.current === id || t.rest?.current === id);
+      const key = [Number(id >= brandedFrom), Math.max(0, (words ?? 0) - inName.filter((t) => t.whole).length), -inName.length, id];
+      const at = best.findIndex((b) => compareMatch(key, b.key) < 0);
+      best.splice(at < 0 ? best.length : at, 0, { id, key });
+      if (best.length > want) best.pop();
     }
+    return best.map((b) => b.id);
+  }
 
-    // Candidates from the other words, in ranking order, kept if a word in their name or brand starts with the prefix.
-    const prefixOnly: ParsedQuery = { words: [], prefix: verify };
+  /**
+   * For a short, common prefix: candidates from the other words, in ID order, kept if a word in their
+   * name or brand starts with the prefix. At most MAX_VERIFIED candidates are checked.
+   */
+  private async verified(terms: readonly Term[], prefix: string, want: number, skip: readonly number[], budget: Budget): Promise<number[]> {
+    const cursors = terms.map((t) => either([t.head, t.rest, t.brand]));
+    if (want <= 0 || cursors.length === 0 || cursors.some((c) => !c)) return [];
+    cursors.sort((a, b) => a!.size - b!.size);
+    const prefixOnly: ParsedQuery = { words: [], prefix };
+    const hits: number[] = [];
     let batch: number[] = [];
     let checked = 0;
     const check = async () => {
       const rows = await this.summaries(batch);
       rows.forEach((r, i) => {
-        if (hits.length < limit && productMatches(prefixOnly, r[1], r[2] ?? undefined)) hits.push(batch[i]!);
+        if (hits.length < want && !skip.includes(batch[i]!) && productMatches(prefixOnly, r[1], r[2] ?? undefined)) hits.push(batch[i]!);
       });
       batch = [];
     };
-    for await (const id of this.intersect(cursors, budget)) {
+    for await (const id of this.intersect(cursors as Cursor[], budget)) {
       batch.push(id);
       checked++;
       if (batch.length === VERIFY_BATCH || checked >= MAX_VERIFIED) {
         await check();
-        if (hits.length >= limit || checked >= MAX_VERIFIED) return hits;
+        if (hits.length >= want || checked >= MAX_VERIFIED) return hits;
       }
     }
     if (batch.length > 0) await check();
@@ -317,10 +481,11 @@ export class FoodIndex {
   }
 
   /** Leapfrog intersection: advances every cursor to the largest current ID until all agree, yielding IDs in ranking order. */
-  private async *intersect(cursors: readonly Cursor[], budget: Budget): AsyncGenerator<number> {
-    let target = 0;
-    outer: while (budget.scanned <= MAX_SCAN) {
+  private async *intersect(cursors: readonly (Cursor | undefined)[], budget: Budget, from = 0, to = END): AsyncGenerator<number> {
+    let target = from;
+    outer: while (target < to && budget.scanned <= MAX_SCAN) {
       for (const c of cursors) {
+        if (!c) return;
         await c.seek(target);
         if (c.current === END) return;
         if (c.current > target) {

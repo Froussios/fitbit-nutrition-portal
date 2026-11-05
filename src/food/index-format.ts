@@ -18,11 +18,16 @@ import type { BaseUnit, Portion } from "../core/units";
  *   <version>/det/<n>.json       DetailRow[], meta.detPerFile per file, by product ID
  *   <version>/code/<n>.json      barcode → product ID, bucketed by fnv1a(barcode)
  *
- * Product IDs follow the ranking (section 4.3), so every product list is in
- * ranking order and a search can stop after the first matches.
+ * Product IDs follow the fixed ranking (section 4.3), so every product list is
+ * in that order and a search can stop soon after the first matches. Each word
+ * has three lists, products where it says what the food is, products with it
+ * elsewhere in the name, and products with it only in the brand, so a search can
+ * rank matches without fetching their text.
  */
 
-export const INDEX_FORMAT = 2;
+export const INDEX_FORMAT = 3;
+/** The previous format, which the engine still reads until the first format 3 index is live. Remove with LegacyDictEntry. */
+export const LEGACY_INDEX_FORMAT = 2;
 /** Smallest number of products per summary file; the builder raises it to stay under the host's file limit. */
 export const MIN_SUMMARIES_PER_FILE = 256;
 /** Lists up to this length are stored inline in the dictionary. */
@@ -48,18 +53,32 @@ export interface IndexMeta {
   readonly detPerFile: number;
   /** First word of each dictionary shard; shard i holds words >= dict[i] and < dict[i + 1]. */
   readonly dict: readonly string[];
+  /** First ID of a branded product; lower IDs have no brand. Missing in format 2. */
+  readonly brandedFrom?: number;
+  /** Runs of IDs with the same word counts, as [first ID, words in the name, words in the name and brand], in ID order. Missing in format 2. */
+  readonly bands?: readonly (readonly [firstId: number, nameWords: number, productWords: number])[];
   readonly licence: string;
 }
 
 /**
- * One dictionary entry. Third element: delta-encoded IDs (inline list), a pack
- * number (medium list, with byte offset and length), or -1 (long list, with
- * its list number and chunk count).
+ * A sorted list of product IDs. Second element: delta-encoded IDs (inline list),
+ * a pack number (medium list, with byte offset and length), or -1 (long list,
+ * with its list number and chunk count).
  */
-export type DictEntry =
-  | readonly [word: string, count: number, ids: readonly number[]]
-  | readonly [word: string, count: number, pack: number, offset: number, length: number]
-  | readonly [word: string, count: number, big: -1, listId: number, chunks: number];
+export type ListRef =
+  | readonly [count: number, ids: readonly number[]]
+  | readonly [count: number, pack: number, offset: number, length: number]
+  | readonly [count: number, big: -1, listId: number, chunks: number];
+
+/**
+ * One dictionary entry: products where the word says what the food is ("Dark chocolate" for
+ * "chocolate"), products with it elsewhere in the name ("Chocolate milk"), and products with it
+ * only in the brand.
+ */
+export type DictEntry = readonly [word: string, head: ListRef | null, rest: ListRef | null, brand: ListRef | null];
+
+/** A format 2 entry: one list of every product with the word in its name or brand. */
+export type LegacyDictEntry = readonly [word: string, ...ListRef];
 
 /** For each 2- or 3-letter prefix: how many words start with it, and if more than MAX_EXPANSIONS, its best IDs (base64 varint deltas). */
 export type PrefixGroup = Readonly<Record<string, readonly [expansions: number, ids?: string]>>;

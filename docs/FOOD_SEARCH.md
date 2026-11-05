@@ -16,11 +16,11 @@ Set by the owner on 2 November 2026.
 |---|---|---|
 | R1 | Search happens as the user types. | Debounced search on every input event, stale responses dropped (section 8.2). |
 | R2 | Options appear below the field, like a dropdown. | An editable combobox with a listbox popup (section 3). |
-| R3 | Matching and ordering; show the top 10 best matches. Revised: no typo tolerance; every query word must be in the result, in any order; a result ranks higher the more of it the query covers ("chocolate" beats "dark chocolate"). | Exact words, last word as a prefix while typing; ranked by coverage, then popularity (section 4). |
+| R3 | Matching and ordering; show the top 10 best matches. Revised: no typo tolerance; every query word must be in the result, in any order; a result ranks higher the more of it the query covers ("chocolate" beats "dark chocolate"). Revised 5 November 2026 (DR-15): unless given evidence otherwise, assume the generic product. | Exact words, last word as a prefix while typing; ranked by where the words matched, generic before branded, then coverage, then popularity (section 4). |
 | R4 | One food source for now: Open Food Facts. | The index holds Open Food Facts products only. Generic foods (AUSNUT / OpenNutrition) move to later (DR-12). |
 | R5 | Rich visuals in the dropdown: a summary per food, starting with calories per unit. | Two-line rows with kcal per 100 g / 100 ml and per serving, built from a summary view model that can grow (section 3.3). |
 | R6 | Arrow keys move through the options; the selected row is filled into the input. | Keyboard model in section 3.2; the typed query is kept so Escape and ArrowUp can restore it. |
-| R7 | Open Food Facts is large and its APIs throttle; host our own copy of the **whole world** dataset (Australian tagging is incomplete), at no monthly cost, without the browser downloading it. The dataset may be slimmed (drop fields and dead rows). | A slimmed, pre-sorted word index built weekly by a GitHub Action and stored as static files on Cloudflare Pages. The browser fetches only the few small files each search needs, tens of KB (section 5). |
+| R7 | Open Food Facts is large and its APIs throttle; host our own copy of the **whole world** dataset (Australian tagging is incomplete), at no monthly cost, without the browser downloading it. The dataset may be slimmed (drop fields and dead rows). | A slimmed, pre-sorted word index built weekly by a GitHub Action and stored as static files on Cloudflare Pages. The browser fetches only the files each search needs, often hundreds of KB while typing (sections 5 and 9.1). |
 
 ## 2. Scope
 
@@ -103,7 +103,8 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 
 * **Line 1:** product name, with the matched parts in bold. Right: kcal per 100 g or per 100 ml (the
   food's `basis`), always shown, so rows compare like for like.
-* **Line 2:** brand · pack size (Open Food Facts `quantity`). Right: kcal per serving when the product has a
+* **Line 2:** brand · pack size (Open Food Facts `quantity`), or **Generic** · pack size for a product with no
+  brand, so a row always says what kind of product it is. Right: kcal per serving when the product has a
   serving size, e.g. `107 kcal / 30 g serving`.
 * A row is built from a `FoodSummary` view model computed from the `FoodItem` by a pure function in
   `src/core/`. The index builder runs the same function, so search results arrive as summaries and the full
@@ -147,14 +148,39 @@ Product names, brands and queries go through the same tokeniser, shared by the i
 
 ### 4.3 Ordering
 
-**Coverage** is how much of the product's name the query accounts for:
+**Principle (DR-15): unless given evidence otherwise, assume the generic product.** Brands often name a product
+after a flavour, so a word in the name says more about what a product is than the same word in its brand.
 
-```
-coverage = query words found in the name / words in the name      (stop words not counted)
-```
+Results are ordered by these rules, each one only breaking ties in the one before (`matchRank` in
+`src/core/tokens.ts`):
 
-`chocolate` → `Chocolate` 1/1, `Dark chocolate` 1/2, `Dark chocolate with almonds` 1/3. Higher coverage
-first; equal coverage is broken by **popularity**:
+| # | Rule | Example, searching `vanilla` |
+|---|---|---|
+| 1 | **Tier.** Every query word whole, in the name or brand, with at least one in the name; then the last word only as the start of a longer word (`coke` in `cokelat`); then nothing matched in the name. | `Yogurt (Vanilla Queen)` is last |
+| 2 | **The query uses up the whole product,** name and brand. There is nothing more to type to reach such a product, so nothing else may push it down. | Searching `vegemite`: `Vegemite (Vegemite)` before `Vegemite pretzels` |
+| 3 | **A query word is the food, not its flavour or an ingredient** (below). | Searching `chocolate`: `Dark chocolate` before `Chocolate milk`. Searching `vegemite`: `Vegemite (Bega)` before `Vegemite pretzels` |
+| 4 | **Generic (no brand) before branded.** | `Vanilla extract` before `Vanilla (Queen)` |
+| 5 | **Fewer extra words:** name words that are not query words. | `Vanilla (Queen)` before `Vanilla extract (Queen)` |
+| 6 | **More query words in the name.** | `Vanilla queen (Other)` before `Vanilla extract (Queen)`, searching `vanilla queen` |
+| 7 | **More query words in the brand as well.** | `Vanilla (Vanilla Queen)` before `Vanilla (Queen)` |
+| 8 | **More popular** (below). | |
+
+**Food or flavour (rule 3).** `headWords` in `src/core/tokens.ts` uses word position. English puts the food last, so
+`Dark chocolate` is a chocolate and `Chocolate milk` is a milk. Sizes (`455g`) and anything after `with`, `in`, a
+comma or a dash are ignored first. A short list of form words (`breast`, `flour`, `extract`, `whites`...) passes the
+role to the word before them, so `Chicken Breast` is still chicken. Nutrition was tried as a signal and rejected: a
+protein cookie is a cookie, but looks nothing like other cookies. Open Food Facts categories scored worse than word
+position. A wrong guess only moves a row; nothing is hidden. Measured on hand-labelled rows from foods not used to
+build the rule: 90% correct, against 45% for treating every match as the food. Known limits:
+
+* **Compound foods.** `Peanut Butter` counts as a butter. People always say both words, so a user searching `butter`
+  has not finished typing; helping further needs personal log history, which is out of scope.
+* **Flavour written last.** `Protein Puffs Vegemite` counts as Vegemite.
+* **English word order only**, for now.
+
+Popularity is estimated in two steps. First the **number of entries with exactly this name**, of any brand, with
+entries sold in Australia counting 10 times. Few records have a scan count, while every record has a name, and this
+is what brings `Milk chocolate` (334 entries) above `Probiotic chocolate`. Ties then fall to:
 
 ```
 popularity = log10(1 + unique_scans_n)       how often Open Food Facts apps have scanned it
@@ -162,16 +188,24 @@ popularity = log10(1 + unique_scans_n)       how often Open Food Facts apps have
            + completeness                    0..1, Open Food Facts' own score
 ```
 
-**Pre-sorted index.** When every query word is in the name, coverage is the same fraction for every match
-with the same number of name words. So the order is simply: fewer name words first, then more popular. That
-order does not depend on the query, so the builder numbers the products in it (document ID 0 is the
-shortest-named, most popular product). Every word's list of products is stored in ID order, and the first
-10 products that contain all query words are the top 10. A search never needs to see all the matches for a
-common word like `chocolate`, only their first few hundred. This is what makes static files fast enough.
+**Pre-sorted index.** Rules 4, 5 and 8 mostly do not depend on the query, so the builder numbers the products in
+this fixed order: generic first, then fewer distinct name words, then fewer distinct words in the name and brand
+together, then more entries with the same name, then more popular. A word has three sorted lists of product IDs:
+products where it says what the food is, products with it elsewhere in the name, and products with it only in the
+brand. Those facts are enough to rank a product without fetching its text:
+`meta.json` gives the word counts and generic or branded for any ID (`bands`, `brandedFrom`), and the lists say
+which query words are in the name. A product holding every query word, with as many words in total as the query
+has, is used up (rule 2), so the engine can jump straight to those IDs.
 
-The order is approximate in one case: a query word found only in the brand (`cadbury chocolate` against
-`Dairy Milk Chocolate`, brand Cadbury) does not lower that product's rank as the coverage formula would.
-The relevance tests (section 10) show whether that matters.
+Each tier is one pass over the lists (section 6.2). A pass stops as soon as no later product could beat the
+10 it has: a later product's extra words are at least its word count minus the number of query words. For a
+one-word search that is simply the first 10 IDs after any used-up products. Rule 7 needs the brand text, so it
+only orders the 10 chosen products; it cannot bring a product into them. Popularity only separates products with
+the same word counts, so among equally good matches a shorter brand comes first.
+
+The order is approximate in two cases: a last word of 2 or 3
+letters that many words start with (`milk ch`) checks at most 100 candidates (section 6.2), and rule 7 above.
+Tests compare the engine with a brute-force ranking of every product.
 
 ### 4.4 If exact words prove too strict
 
@@ -214,9 +248,9 @@ What one search downloads:
 | | Data over the network (est.) |
 |---|---|
 | First search of a session | 50–120 KB |
-| Each further keystroke | 0–40 KB (often 0: everything needed is cached) |
-| A whole logging session of several searches | Well under 1 MB, about one phone photo |
-| Hard cap per search | The engine stops reading lists after 256 KB and returns what it found. Only two common words that rarely appear together (`chocolate chicken`) get near it. |
+| Each further keystroke | 0–40 KB (often 0: everything needed is cached). **Superseded: see section 9.** |
+| A whole logging session of several searches | Well under 1 MB, about one phone photo. **Superseded: see section 9.** |
+| Hard cap per search | The engine stops reading lists after 200,000 product IDs (about 256 KB) and returns what it found. Only two common words that rarely appear together (`chocolate chicken`) get near it. |
 
 A search needs up to 3 round trips in sequence (dictionary → lists → summaries). The engine fetches the
 dictionary shard as soon as letters are typed, during the 100 ms debounce, which hides the first.
@@ -244,7 +278,10 @@ Worker; the index does not change.
 3. Implausible energy (below 0 or above 900 kcal per 100 g/ml).
 4. Products flagged obsolete.
 5. Duplicates (same words in name and brand, same kcal per 100) are collapsed in the word index to the most
-   popular one. All of them stay reachable by barcode.
+   popular one. Products with no brand and the same name (every word in order: `Milk chocolate` is neither
+   `Chocolate milk` nor `Milk with chocolate`) are collapsed whatever their kcal: without a brand,
+   nothing in the dropdown tells them apart, and `Vanilla` would otherwise fill every row. All of them stay
+   reachable by barcode.
 6. Only if the index exceeds the host's limit: a popularity floor (never scanned and incomplete). Never a
    country filter.
 
@@ -353,17 +390,18 @@ food-index-owner.json        ownership marker checked before each deploy
 current.json                 { "version": "20261104T085100Z-<run id>-<attempt>" }  (the only file whose content changes between builds)
 <version>/
   meta.json                  the manifest: format, build and export dates, counts, licence, file sizes
-                             (sumPerFile, detPerFile, codeBuckets) and the first word of every dictionary shard
+                             (sumPerFile, detPerFile, codeBuckets), the first word of every dictionary shard,
+                             and what ranks a product from its ID (brandedFrom, bands of word counts)
   LICENSE.txt                ODbL notice and attribution
-  dict/<n>.json              a run of consecutive words in sorted order (about 24 KB uncompressed):
-                             [word, count, IDs] for lists of up to 16, [word, count, pack, offset, length]
-                             for medium lists, [word, count, -1, list, chunks] for long ones
+  dict/<n>.json              a run of consecutive words in sorted order (about 24 KB uncompressed), each
+                             [word, food list, rest of name list, brand-only list]. A list is null, or [count, IDs] for up to 16,
+                             [count, pack, offset, length] for medium lists, [count, -1, list, chunks] for long
   post/<n>.bin               medium lists (17 to 4,096 IDs), packed in dictionary order, about 16 KB per pack
   big/<list>/<k>.bin         chunk k (4,096 IDs) of a long list
   big/<list>/skip.json       the first ID of each chunk, to jump straight to the chunk holding an ID
   pfx/<hex>.json             one file per 2-letter prefix (hex of its UTF-8 bytes): for it and each 3-letter
                              extension, the number of words it starts, and if over 16, the best 200 IDs of
-                             their union (base64 varint deltas)
+                             their food lists (base64 varint deltas)
   sum/<n>.json               row summaries, sumPerFile per file (256, more if the file budget needs it), by ID
   det/<n>.json               details, detPerFile = 2 × sumPerFile per file (512 or more), by ID
   code/<n>.json              barcode → ID, about 2,048 per file, bucketed by FNV-1a of the barcode
@@ -391,18 +429,26 @@ For a query `dark choc`:
 1. **Words.** Tokenise (section 4.1). `dark` is complete; `choc` is the last word, a prefix.
 2. **Dictionary.** Find the shards for `dark` and `choc` from the manifest and fetch them (cached after the
    first time). If a complete word is not in the dictionary, there are no results (every word must match).
-3. **Prefix expansion.** The words from `choc` up to `chod` in sorted order, most common first. Up to 16
-   are used; rarer expansions (usually misspellings) are skipped. A 2- or 3-letter last word with more
-   expansions than that uses its precomputed `pfx/` list when it is the only word. After other words
-   (`milk ch`), that list (the best 200 IDs overall) would rarely meet theirs, so the engine instead takes
-   up to 100 candidates matching the other words, in ranking order, and keeps those whose name or brand
-   has a word starting with the prefix.
-4. **Product lists.** Open a lazy iterator per complete word and a merged iterator over the prefix's
-   expansions. Each fetches the next chunk only when the walk reaches it.
-5. **Intersect** in ID order (leapfrogging from the shortest list) and stop at the first 10 matches, or at
-   the 256 KB read cap.
-6. **Summaries.** Fetch the summary files holding those IDs and compute highlight runs from the query words.
+3. **Whole words (first tier in section 4.3).** Treat `choc` as a complete word too. Open a lazy iterator per word
+   over its name and brand-only lists; each fetches the next chunk only when the walk reaches it. First walk
+   only the ID ranges (`bands`) whose products have as many words as the query, which finds the used-up products.
+   Then intersect in ID order (leapfrogging from the shortest list), first keeping products where a query word is
+   the food, then any with a query word in the name. Each walk stops once no later product could beat the 10
+   found, or at the read cap of 200,000 product IDs (about 256 KB). A list read by several passes counts once.
+4. **Longer words (second tier), if there is still room.** The words from `choc` up to `chod` in sorted order, most
+   common first. Up to 16 are used; rarer expansions (usually misspellings) are skipped. A 2- or 3-letter last
+   word with more expansions than that uses its precomputed `pfx/` list when it is the only word; that list holds
+   only products where such a word is the food, so a typed `ch` shows no flavour or brand-only matches. After other
+   words (`milk ch`), that list (the best 200 IDs overall) would rarely meet theirs, so the engine instead takes
+   up to 100 candidates matching the other words, in ID order, and keeps those whose name or brand has a word
+   starting with the prefix.
+5. **Brand only (third tier), if there is still room.** Intersect the brand-only lists. Fixed order is exact here.
+6. **Summaries.** Fetch the summary files holding the chosen IDs, put them in final order (`matchRank`) and
+   compute highlight runs from the query words.
 7. **On choosing a row**, `get()` fetches that product's detail file and assembles the `FoodItem`.
+
+The engine also reads format 2 indexes, where a word has a single list, so the app can ship before the index is
+rebuilt. Remove that (`LEGACY_INDEX_FORMAT`, `LegacyDictEntry`) once a format 3 index is live.
 
 ### 6.3 Client contract
 
@@ -529,20 +575,56 @@ A small class between the combobox and `FoodCatalog`, unit-tested with fake time
 | Last keystroke → rows on screen, Australian broadband, p95 | ≤ 250 ms (100 ms debounce + fetches + render) |
 | Data fetched per keystroke after the first search, typical | ≤ 40 KB |
 | Data fetched for the first search of a session | ≤ 150 KB |
-| Data read from product lists by any one search | ≤ 256 KB (hard cap in the engine) |
+| Data read from product lists by any one search | About 256 KB (hard cap in the engine: 200,000 product IDs) |
 | Added JavaScript for the combobox and query engine | ≤ 15 KB gzipped |
 
 Cloudflare serves Pages from Australian edge locations; measure early from a phone on mobile data. If browser execution misses the latency budget, move the engine into a Worker (section 5.2).
 
+### 9.1 Over budget, accepted for now
+
+**Search as you type fetches too much data, and we may need to revisit it.** Owner decision (5 November 2026): leave
+it for now and record it. Measured on an index rebuilt from the real names and brands, with a cold cache, gzipped and
+with no debounce, so these are worst cases for fast connections and slow typing:
+
+| Query | One complete search | Typed letter by letter | Worst keystroke |
+|---|---|---|---|
+| `milk` | 63 KB | 232 KB | 96 KB |
+| `vegemite` | 72 KB | 343 KB | 112 KB |
+| `vanilla` | 85 KB | 476 KB | 119 KB |
+| `chocolate` | 74 KB | 516 KB | 94 KB |
+| `tim tam` | 105 KB | 628 KB | 412 KB |
+| `carrefour bio` | 134 KB | about 1 MB | about 470 KB |
+| `big mac` | 619 KB | about 700 KB | about 460 KB |
+
+Against the budgets above, typical keystrokes cost about 60 KB rather than 40 KB, the worst far more, and a logging
+session of several foods can reach a few MB on a cold cache. Files are cached for the session, and browsers may keep
+them for up to a year, so later sessions cost less. A new index build replaces them all.
+
+**Why.** Each row in the dropdown needs its summary, and the 10 rows usually sit in 10 different summary files of about
+6.5 KB each. Since DR-15, each partial word (`cho`, `choc`, `choco`) also has its own whole-word matches, so each
+keystroke tends to show different rows from different files. Before DR-15, `chocolate` cost 79 KB in total.
+
+**Constraints** (owner, 5 November 2026): stay on free plans, and assume the owner is the only user. That rules out
+paid plans and makes quotas and abuse minor concerns for the Worker option.
+
+**Options when we revisit it:**
+
+* Move the engine into a Worker (section 5.2): about 3 KB per keystroke, but an exception to DR-01.
+* Keep whole-word ranking only for finished words, so rows stay stable while typing, at the cost of partial words ranking worse.
+* Cancel index fetches for a keystroke the user has already moved past. Today a stale search still fetches its files.
+* Debounce for longer than 100 ms.
+* Split out smaller summary files holding only what most rows need, or cluster products that are often shown together.
+* Check real use first: #15 measures bytes and latency on a phone.
+
 ## 10. Testing
 
-* **Unit (Vitest):** tokeniser (split, join, accents, stop words); coverage and ordering; the query engine
-  against a tiny index built in the test (exact words, any order, prefix, no-match, chunk boundaries,
-  barcode lookup); keyboard reducer (every row of section 3.2); search controller (debounce, abort, stale
+* **Unit (Vitest):** tokeniser (split, join, accents, stop words); ordering, including the owner's examples
+  from DR-15; the query engine against a tiny index built in the test (exact words, any order, prefix, no-match,
+  chunk boundaries, barcode lookup, agreement with a brute-force ranking of every product, format 2); keyboard reducer (every row of section 3.2); search controller (debounce, abort, stale
   results, cache, errors); highlight runs; `FoodSummary`.
 * **Relevance suite** (`pipeline/relevance.json`): queries with the product expected in the top N, for
   example `weet bix`, `weetbix`, `vegemite`, `coke zero`, `big mac`, `tim tam`, `sanitarium weet`,
-  `chocolate` (a plain "Chocolate" product before "Dark chocolate"). Runs against every build before deploy.
+  `chocolate` (a generic "Chocolate" product first). Runs against every build before deploy.
   The coverage test list ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) is folded into it. Each test also records the bytes and files it
   fetched, and the build fails if a query exceeds the section 9 data budgets.
 * **Manual:** keyboard-only and screen-reader pass (VoiceOver on iOS, TalkBack on Android), phone and
@@ -568,9 +650,28 @@ Cloudflare serves Pages from Australian edge locations; measure early from a pho
 * **Real bytes per search.** The relevance suite measures them; the estimates in section 5.1 are from
   back-of-envelope sizing.
 * **Browser or Worker.** Whether browser execution meets the latency budget on Australian mobile data.
+* **Whole words while typing.** A partial word that is also a word fills results with exact matches first: `choc` or
+  `vege` show products with that word before `chocolate` or `vegemite`. This is by design, but watch it in
+  [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15).
 * **Exact words in practice.** Whether misses (misspellings, `timtam` vs `Tim Tam`, plurals) are common
   enough to add the section 4.4 helpers.
-* **Brand-only matches.** Whether the approximation in section 4.3 orders `cadbury chocolate` well enough.
+* **Are unbranded products really generic?** About 30% of products have no brand, and those are often just
+  incomplete entries: `Vegemite` with no brand says 9 kcal, and outranks the real one at 191 kcal. If this
+  misleads, the options are a popularity floor for ranking as generic, or real generic data ([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38)).
+* **Australian weighting.** Entries sold in Australia count 10 times when estimating popularity, because plain
+  counts lean American (`Whole milk` 350 entries, `Full cream milk` 71). The factor of 10 is a judgement call that
+  has not been checked against real data; the first real build should show whether it is right. The country should
+  come from the client's locale instead: [#42](https://github.com/Froussios/fitbit-nutrition-portal/issues/42).
+* **Data per search.** Over budget and accepted for now: section 9.1.
+* **Candidate limit.** After other words, a 2- or 3-letter last word that starts more than 16 dictionary words checks
+  at most 100 candidates against their text (section 6.2). This can miss matches while the word is half typed
+  (`big mac` found 9 of 10, `chocolate zu` none of 12). Removing the limit fills the results, but a common word with
+  a rare last word then fetches nearly every summary file: 17 to 19 MB for one keystroke (`chocolate zu`, `sauce qi`).
+  The order still would not always be the best possible, because checking stops at the first 10 found. A cheaper fix for 3-letter words looks better: use their 16 commonest expansions, as longer
+  words do. It took `big mac` from 619 KB to 164 KB with the best possible results.
+* **Other languages.** Word order is assumed to be English. Open Food Facts records a language per product, which
+  could vary the rule when the index is built; Chrome's language detection could help with the query's language.
 * **Duplicates.** Whether collapsing same-name, same-energy products hides pack sizes people want to see.
+  Branded products with different energy still repeat: `Weet-Bix (Sanitarium)` has several rows.
 * **Per-serving kcal.** Open Food Facts serving sizes are sometimes wrong. If the coverage test finds many,
   show per-serving values only when they agree with the per-100 values.
