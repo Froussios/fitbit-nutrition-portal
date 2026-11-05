@@ -342,6 +342,14 @@ export class FoodIndex {
     if (q.prefix !== undefined && room() > 0) {
       const term = await this.prefixTerm(q.prefix, budget, entries.length === 0);
       if (term === "verify") {
+        // A 3-letter word tries its commonest expansions first, which fetches no text, and checks candidates
+        // only for what is left. Checking alone costs far more; expansions alone miss rarer words.
+        if (Array.from(q.prefix).length === 3) {
+          const words = await this.expansions(q.prefix, MAX_EXPANSIONS);
+          for (const scope of ["head", "name"] as const) {
+            hits.push(...(await this.nameMatches([...wordTerms(), this.termFor(words, false, budget)], scope, room(), hits, budget)));
+          }
+        }
         hits.push(...(await this.verified(wordTerms(), q.prefix, room(), hits, budget)));
         return this.inRankOrder(hits, q);
       }

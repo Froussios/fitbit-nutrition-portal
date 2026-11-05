@@ -323,6 +323,26 @@ describe("food index", () => {
     expect(await names(index, "fl")).toHaveLength(10);
   });
 
+  it("finds a 3-letter last word through its common expansions, beyond the candidates it would check", async () => {
+    const records = [
+      // More words starting "mac" than a short prefix expands to.
+      ...Array.from({ length: 20 }, (_, i) => product(`61${String(i).padStart(3, "0")}`, `Mac${"abcdefghijklmnopqrst"[i]}x dish`)),
+      // More candidates for "big" than get checked, all ranking ahead of the match.
+      ...Array.from({ length: 150 }, (_, i) => product(`62${String(i).padStart(3, "0")}`, `Big thing${i}`)),
+      product("63000", "Big macaroni cheese bake"),
+      product("63001", "Macaroni", { unique_scans_n: 100 }),
+      product("63002", "Macaroni", { brands: "Other", unique_scans_n: 100 }),
+    ];
+    const index = await FoodIndex.open(build(records).reader);
+    expect(await names(index, "big mac")).toEqual(["Big macaroni cheese bake"]);
+  });
+
+  it("falls back to checking candidates for a rare word beyond the common expansions", async () => {
+    // "fla" starts thousands of words here, each on one product, so this one isn't among the commonest.
+    const index = await FoodIndex.open(build([...FIXTURE, ...MANY]).reader);
+    expect(await names(index, "special fla")).toEqual([`Snack bar flavour${CHUNK_SIZE + 400} special`]);
+  });
+
   it("answers no-match prefixes without errors", async () => {
     const index = await FoodIndex.open(build(FIXTURE).reader);
     expect(await names(index, "zz")).toEqual([]);

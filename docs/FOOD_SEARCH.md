@@ -441,7 +441,10 @@ For a query `dark choc`:
    only products where such a word is the food, so a typed `ch` shows no flavour or brand-only matches. After other
    words (`milk ch`), that list (the best 200 IDs overall) would rarely meet theirs, so the engine instead takes
    up to 100 candidates matching the other words, in ID order, and keeps those whose name or brand has a word
-   starting with the prefix.
+   starting with the prefix. A 3-letter word first tries its 16 commonest expansions, which fetches no text, and checks
+   candidates only for the rows still empty. On 592 real product names typed up to 3 letters of their last word, this
+   cut the median search from 325 KB to 155 KB for common names, and found 95% of rare names, up from 90%. Rare names
+   cost a little more, a median of 165 KB up from 143 KB.
 5. **Brand only (third tier), if there is still room.** Intersect the brand-only lists. Fixed order is exact here.
 6. **Summaries.** Fetch the summary files holding the chosen IDs, put them in final order (`matchRank`) and
    compute highlight runs from the query words.
@@ -594,7 +597,7 @@ with no debounce, so these are worst cases for fast connections and slow typing:
 | `chocolate` | 74 KB | 516 KB | 94 KB |
 | `tim tam` | 105 KB | 628 KB | 412 KB |
 | `carrefour bio` | 134 KB | about 1 MB | about 470 KB |
-| `big mac` | 619 KB | about 700 KB | about 460 KB |
+| `big mac` | 164 KB | about 700 KB | about 460 KB |
 
 Against the budgets above, typical keystrokes cost about 60 KB rather than 40 KB, the worst far more, and a logging
 session of several foods can reach a few MB on a cold cache. Files are cached for the session, and browsers may keep
@@ -663,12 +666,13 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
   has not been checked against real data; the first real build should show whether it is right. The country should
   come from the client's locale instead: [#42](https://github.com/Froussios/fitbit-nutrition-portal/issues/42).
 * **Data per search.** Over budget and accepted for now: section 9.1.
-* **Candidate limit.** After other words, a 2- or 3-letter last word that starts more than 16 dictionary words checks
-  at most 100 candidates against their text (section 6.2). This can miss matches while the word is half typed
-  (`big mac` found 9 of 10, `chocolate zu` none of 12). Removing the limit fills the results, but a common word with
-  a rare last word then fetches nearly every summary file: 17 to 19 MB for one keystroke (`chocolate zu`, `sauce qi`).
-  The order still would not always be the best possible, because checking stops at the first 10 found. A cheaper fix for 3-letter words looks better: use their 16 commonest expansions, as longer
-  words do. It took `big mac` from 619 KB to 164 KB with the best possible results.
+* **Candidate limit.** After other words, a 2- or 3-letter last word that starts more than 16 dictionary words may
+  check up to 100 candidates against their text (section 6.2), which can miss matches while the word is half typed
+  (`chocolate zu` found none of 12). Removing the limit fills the results, but a common word with a rare last word then
+  fetches nearly every summary file: 17 to 19 MB for one keystroke (`chocolate zu`, `sauce qi`). The order still would
+  not always be the best possible, because checking stops at the first 10 found. 3-letter words now avoid most of this
+  by trying their commonest expansions first. 2-letter words do not: there, the first three dictionary shards rarely
+  reach the commonest words. That is why `big ma` still costs about 460 KB while typing `big mac`.
 * **Other languages.** Word order is assumed to be English. Open Food Facts records a language per product, which
   could vary the rule when the index is built; Chrome's language detection could help with the query's language.
 * **Duplicates.** Whether collapsing same-name, same-energy products hides pack sizes people want to see.
