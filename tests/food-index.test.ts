@@ -247,6 +247,10 @@ describe("food index", () => {
     const index = await FoodIndex.open(reader);
     expect(await names(index, "chocolate")).toEqual(["Chocolate", "Dark chocolate with almonds", "Milk Chocolate", "Dark Chocolate"]);
     expect(await names(index, "cadbury")).toEqual(["Dairy Milk"]);
+    // Its lists count once against the scan budget too, however many passes read them.
+    const budget = newBudget();
+    await index.search(parseQuery("chocolate"), 10, budget);
+    expect(budget.scanned).toBe(4);
   });
 
   it("needs every word, in any order, with the last one as a prefix", async () => {

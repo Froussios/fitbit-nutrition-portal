@@ -188,9 +188,16 @@ const either = (cursors: readonly (Cursor | undefined)[]): Cursor | undefined =>
   return present.length > 1 ? new UnionCursor(present) : present[0];
 };
 
+/** The list of each format 2 entry, kept so that it is the same object in every pass (see countOnce). */
+const legacyLists = new WeakMap<object, ListRef>();
+
 /** A format 2 entry holds one list, read here as food matches; a format 3 entry holds three. */
 function refsOf(e: DictEntry | LegacyDictEntry): readonly [ListRef | null, ListRef | null, ListRef | null] {
-  if (typeof e[1] === "number") return [e.slice(1) as unknown as ListRef, null, null];
+  if (typeof e[1] === "number") {
+    let list = legacyLists.get(e);
+    if (!list) legacyLists.set(e, (list = e.slice(1) as unknown as ListRef));
+    return [list, null, null];
+  }
   return [e[1] as ListRef | null, e[2] as ListRef | null, e[3] as ListRef | null];
 }
 
