@@ -250,7 +250,7 @@ What one search downloads:
 | First search of a session | 50–120 KB |
 | Each further keystroke | 0–40 KB (often 0: everything needed is cached). **Superseded: see section 9.** |
 | A whole logging session of several searches | Well under 1 MB, about one phone photo. **Superseded: see section 9.** |
-| Hard cap per search | The engine stops reading lists after 256 KB and returns what it found. Only two common words that rarely appear together (`chocolate chicken`) get near it. |
+| Hard cap per search | The engine stops reading lists after 200,000 product IDs (about 256 KB) and returns what it found. Only two common words that rarely appear together (`chocolate chicken`) get near it. |
 
 A search needs up to 3 round trips in sequence (dictionary → lists → summaries). The engine fetches the
 dictionary shard as soon as letters are typed, during the 100 ms debounce, which hides the first.
@@ -434,10 +434,11 @@ For a query `dark choc`:
    only the ID ranges (`bands`) whose products have as many words as the query, which finds the used-up products.
    Then intersect in ID order (leapfrogging from the shortest list), first keeping products where a query word is
    the food, then any with a query word in the name. Each walk stops once no later product could beat the 10
-   found, or at the 256 KB read cap.
+   found, or at the read cap of 200,000 product IDs (about 256 KB). A list read by several passes counts once.
 4. **Longer words (second tier), if there is still room.** The words from `choc` up to `chod` in sorted order, most
    common first. Up to 16 are used; rarer expansions (usually misspellings) are skipped. A 2- or 3-letter last
-   word with more expansions than that uses its precomputed `pfx/` list when it is the only word. After other
+   word with more expansions than that uses its precomputed `pfx/` list when it is the only word; that list holds
+   only products where such a word is the food, so a typed `ch` shows no flavour or brand-only matches. After other
    words (`milk ch`), that list (the best 200 IDs overall) would rarely meet theirs, so the engine instead takes
    up to 100 candidates matching the other words, in ID order, and keeps those whose name or brand has a word
    starting with the prefix.
@@ -574,7 +575,7 @@ A small class between the combobox and `FoodCatalog`, unit-tested with fake time
 | Last keystroke → rows on screen, Australian broadband, p95 | ≤ 250 ms (100 ms debounce + fetches + render) |
 | Data fetched per keystroke after the first search, typical | ≤ 40 KB |
 | Data fetched for the first search of a session | ≤ 150 KB |
-| Data read from product lists by any one search | ≤ 256 KB (hard cap in the engine) |
+| Data read from product lists by any one search | About 256 KB (hard cap in the engine: 200,000 product IDs) |
 | Added JavaScript for the combobox and query engine | ≤ 15 KB gzipped |
 
 Cloudflare serves Pages from Australian edge locations; measure early from a phone on mobile data. If browser execution misses the latency budget, move the engine into a Worker (section 5.2).
@@ -602,6 +603,9 @@ them for up to a year, so later sessions cost less. A new index build replaces t
 **Why.** Each row in the dropdown needs its summary, and the 10 rows usually sit in 10 different summary files of about
 6.5 KB each. Since DR-15, each partial word (`cho`, `choc`, `choco`) also has its own whole-word matches, so each
 keystroke tends to show different rows from different files. Before DR-15, `chocolate` cost 79 KB in total.
+
+**Constraints** (owner, 5 November 2026): stay on free plans, and assume the owner is the only user. That rules out
+paid plans and makes quotas and abuse minor concerns for the Worker option.
 
 **Options when we revisit it:**
 
@@ -646,6 +650,9 @@ keystroke tends to show different rows from different files. Before DR-15, `choc
 * **Real bytes per search.** The relevance suite measures them; the estimates in section 5.1 are from
   back-of-envelope sizing.
 * **Browser or Worker.** Whether browser execution meets the latency budget on Australian mobile data.
+* **Whole words while typing.** A partial word that is also a word fills results with exact matches first: `choc` or
+  `vege` show products with that word before `chocolate` or `vegemite`. This is by design, but watch it in
+  [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15).
 * **Exact words in practice.** Whether misses (misspellings, `timtam` vs `Tim Tam`, plurals) are common
   enough to add the section 4.4 helpers.
 * **Are unbranded products really generic?** About 30% of products have no brand, and those are often just

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { IndexBuilder, type BuildOptions, type RawProduct } from "../pipeline/index-builder";
 import { compareMatch, matchRank, parseQuery, productMatches } from "../src/core/tokens";
-import { FoodIndex, IndexNotFoundError, type IndexReader } from "../src/food/index-engine";
+import { FoodIndex, IndexNotFoundError, newBudget, type IndexReader } from "../src/food/index-engine";
 import { CHUNK_SIZE, deltas, fromSummaryRow, undeltas, type DictEntry, type SummaryRow } from "../src/food/index-format";
 import { StaticFoodCatalog } from "../src/food/static-catalog";
 
@@ -288,6 +288,17 @@ describe("food index", () => {
     expect(await names(index, "snack special")).toEqual([`Snack bar flavour${CHUNK_SIZE + 400} special`]);
     expect(big()).toEqual(["big/L/0.bin", "big/L/skip.json", "big/L/1.bin"]);
     expect(await names(index, "sn")).toHaveLength(10);
+  });
+
+  it("counts a list once against the scan budget, however many passes read it", async () => {
+    const index = await FoodIndex.open(build([...FIXTURE, ...MANY]).reader);
+    const budget = newBudget();
+    expect(await names(index, "snack")).toHaveLength(10);
+    await index.search(parseQuery("snack"), 10, budget);
+    // Several passes walk this list, but only its first chunk is ever read.
+    expect(budget.scanned).toBe(CHUNK_SIZE);
+    await index.search(parseQuery("snack"), 10, budget);
+    expect(budget.scanned).toBe(CHUNK_SIZE);
   });
 
   it("packs more products per file to stay under the file limit", async () => {

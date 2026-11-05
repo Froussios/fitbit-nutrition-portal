@@ -268,9 +268,11 @@ function extraWords(text: string, isTerm: (word: string) => boolean): number {
  * 1. Tier. 0: every query word is a whole word in the name or brand, with at
  *    least one in the name. 1: the last word only matches as the start of a
  *    longer word ("coke" in "cokelat"). 2: nothing matched in the name.
- * 2. The query uses up the whole product, name and brand. There is nothing more
- *    to type to reach such a product, so it must not be pushed down by others:
- *    "vegemite" puts "Vegemite (Vegemite)" before "Vegemite pretzels".
+ * 2. The query uses up the whole product, name and brand: it holds every query
+ *    word and has no other words. There is nothing more to type to reach such a
+ *    product, so it must not be pushed down by others: "vegemite" puts
+ *    "Vegemite (Vegemite)" before "Vegemite pretzels". A hyphenated word counts as
+ *    its parts here, as in the index: "weet bix" uses up "Weet-Bix", "weetbix" does not.
  * 3. A query word is the food, not its flavour or an ingredient (headWords):
  *    "chocolate" puts "Dark chocolate" before "Chocolate milk".
  * 4. Unbranded before branded: without evidence otherwise, assume the generic product.
@@ -288,9 +290,8 @@ export function matchRank(q: ParsedQuery, name: string, brand?: string): readonl
   const allWhole = terms.every((t) => nameW.includes(t) || brandW.includes(t));
   const tier = inName === 0 ? 2 : allWhole && wholeInName ? 0 : 1;
   const inBrand = terms.filter((t) => found(brandW, t)).length;
-  const isTerm = (w: string) => terms.includes(w);
-  const extras = extraWords(name, isTerm);
-  const usedUp = tier === 0 && extras === 0 && (!brand || extraWords(brand, isTerm) === 0);
+  const extras = extraWords(name, (w) => terms.includes(w));
+  const usedUp = tier === 0 && productWordCount(name, brand) === terms.length;
   const heads = headWords(name);
   const isFood = terms.some((t) => found(heads, t));
   return [tier, usedUp ? 0 : 1, isFood ? 0 : 1, brand ? 1 : 0, extras, -inName, -inBrand];

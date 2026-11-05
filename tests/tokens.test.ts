@@ -182,6 +182,13 @@ describe("matchRank", () => {
     expect(order("vani", [["Yogurt", "Vanilla Queen"], ["Vanilla extract"], ["Vanilla"]])).toEqual(["Vanilla", "Vanilla extract", "Yogurt (Vanilla Queen)"]);
   });
 
+  it("counts a hyphenated word as its parts when deciding what the query uses up", () => {
+    const usedUp = (query: string, name: string) => matchRank(parseQuery(query), name)[1] === 0;
+    expect(usedUp("weet bix ", "Weet-Bix")).toBe(true);
+    expect(usedUp("weetbix ", "Weet-Bix")).toBe(false);
+    expect(usedUp("weetbix ", "Weetbix")).toBe(true);
+  });
+
   it("treats a joined word as covering its parts", () => {
     expect(order("weetbix ", [["Weet-Bix Blend"], ["Weet-Bix"]])).toEqual(["Weet-Bix", "Weet-Bix Blend"]);
   });

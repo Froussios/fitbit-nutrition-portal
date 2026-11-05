@@ -59,8 +59,18 @@ const VERIFY_BATCH = 25;
 
 const END = Number.POSITIVE_INFINITY;
 
-interface Budget {
+/** How much of the product lists one search has read. A list read again by a later pass costs nothing more. */
+export interface Budget {
   scanned: number;
+  readonly counted: Set<unknown>;
+}
+
+export const newBudget = (): Budget => ({ scanned: 0, counted: new Set() });
+
+function countOnce(budget: Budget, list: unknown, ids: number): void {
+  if (budget.counted.has(list)) return;
+  budget.counted.add(list);
+  budget.scanned += ids;
 }
 
 /** A position in a sorted list of product IDs. `current` is END once exhausted. */
@@ -91,12 +101,14 @@ class ListCursor implements Cursor {
     readonly size: number,
     private readonly load: () => Promise<number[]>,
     private readonly budget: Budget,
+    /** Identifies the list across passes. */
+    private readonly list: unknown,
   ) {}
   async seek(target: number): Promise<void> {
     if (this.current >= target) return;
     if (!this.ids) {
       this.ids = await this.load();
-      this.budget.scanned += this.ids.length;
+      countOnce(this.budget, this.list, this.ids.length);
     }
     this.pos = lowerBound(this.ids, target, this.pos);
     this.current = this.pos < this.ids.length ? this.ids[this.pos]! : END;
@@ -118,8 +130,9 @@ class ChunkedCursor implements Cursor {
     private readonly budget: Budget,
   ) {}
   private async load(k: number): Promise<void> {
-    this.ids = decodeIds(await this.index.read("bytes", chunkPath(this.listId, k)));
-    this.budget.scanned += this.ids.length;
+    const path = chunkPath(this.listId, k);
+    this.ids = decodeIds(await this.index.read("bytes", path));
+    countOnce(this.budget, path, this.ids.length);
     this.k = k;
     this.pos = 0;
   }
@@ -244,10 +257,10 @@ export class FoodIndex {
   }
 
   private cursorFor(ref: ListRef, budget: Budget): Cursor {
-    if (ref.length === 2) return new ListCursor(ref[0], async () => undeltas(ref[1]), budget);
+    if (ref.length === 2) return new ListCursor(ref[0], async () => undeltas(ref[1]), budget, ref);
     const [count, where, a, b] = ref;
     if (where === -1) return new ChunkedCursor(this, count, a, b, budget);
-    return new ListCursor(count, async () => decodeIds(await this.read("bytes", packPath(where)), a, a + b), budget);
+    return new ListCursor(count, async () => decodeIds(await this.read("bytes", packPath(where)), a, a + b), budget, ref);
   }
 
   private termFor(entries: readonly DictEntry[], whole: boolean, budget: Budget): Term {
@@ -289,7 +302,7 @@ export class FoodIndex {
         // The precomputed list holds only the best IDs overall, so it rarely meets other words' lists.
         if (!alone) return "verify";
         const ids = decodeIds(fromBase64(top));
-        return { head: new ListCursor(ids.length, async () => ids, budget), whole: false };
+        return { head: new ListCursor(ids.length, async () => ids, budget, g), whole: false };
       }
     }
     const words = await this.expansions(prefix, MAX_EXPANSIONS);
@@ -302,8 +315,7 @@ export class FoodIndex {
    * over the product lists, in order, so a search stops as soon as better levels
    * have filled the results.
    */
-  async search(q: ParsedQuery, limit = 10): Promise<number[]> {
-    const budget: Budget = { scanned: 0 };
+  async search(q: ParsedQuery, limit = 10, budget: Budget = newBudget()): Promise<number[]> {
     const entries = await Promise.all(q.words.map((w) => this.lookup(w)));
     if (entries.some((e) => !e)) return [];
     const wordTerms = () => entries.map((e) => this.termFor([e!], true, budget));
