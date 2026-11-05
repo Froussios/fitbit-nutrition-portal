@@ -3,7 +3,7 @@
 Status: live since 5 November 2026 (whole world dataset; exact-word matching over a static index queried
 file by file from the browser; no server). The index is deployed to Cloudflare Pages by a GitHub Action, is
 never committed to git, and is served at `https://food-index.froussios.com/` (decision DR-14).
-Milestone M1 ([#3](https://github.com/Froussios/fitbit-nutrition-portal/issues/3)). Decision: [D3 #9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) (hosting). Work items: section 11.
+Milestone M1 ([#3](https://github.com/Froussios/fitbit-nutrition-portal/issues/3)). Decision: DR-14 (hosting; was D3, [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9)). Work items: section 11.
 
 This document covers typing a food name and picking a product from a dropdown of matches. Barcode lookup
 and recent foods reuse the same catalogue but have their own issues.
@@ -258,9 +258,12 @@ logs, split in two so search fetches only the small part:
 The builder runs `fromOffProduct()` and stores its result, so the normaliser stays the single place that
 interprets Open Food Facts data; it just runs at build time.
 
-### 5.4 Sizes on the host (estimates, measured by the first build)
+### 5.4 Sizes on the host
 
-| Part | Size |
+**Estimated before the first build**, now superseded by the measured numbers after the table (the real
+index is 195 MB in 18,009 files):
+
+| Part | Estimate |
 |---|---|
 | Products after filters | 1.5–2.5 M (from about 4 M) |
 | Summaries | 90–150 MB |
@@ -271,8 +274,8 @@ interprets Open Food Facts data; it just runs at build time.
 | **Total stored** | **~350–600 MB** |
 | Files | ~25 k |
 
-These are stored on the host; a user downloads only what section 5.1 lists. The estimates above were made
-before the first build. **Measured on the 2 November 2026 export:** 4,889,627 records read; 900,168 kept
+These are stored on the host; a user downloads only what section 5.1 lists. **Measured on the 2 November
+2026 export:** 4,889,627 records read; 900,168 kept
 (3.68 M dropped for no usable energy, 290 k for no name, 16 k for implausible energy, 2 k obsolete);
 808,377 searchable after collapsing duplicates; 197,937 distinct words. The index is 195 MB in 18,009 files,
 none over 0.1 MB, and took 44 minutes to build on a GitHub runner.
@@ -310,8 +313,9 @@ queried by an engine in the browser that fetches only what each search needs.** 
   so the app can read the index from another origin.
 * **Custom domain.** The index is served at `food-index.froussios.com`, a CNAME (at GoDaddy) to the
   project's `food-diary-index.pages.dev`. Some networks intercept `*.pages.dev`: the University of Sydney's
-  firewall re-signs its TLS with its own certificate authority, which browsers reject because of HSTS, so
-  the app saw only "Failed to fetch". A domain of our own is not treated that way.
+  firewall re-signs its TLS with its own certificate authority. Browsers don't trust that authority, and
+  HSTS (`.dev` is preloaded) leaves no way to click through, so the app saw only "Failed to fetch". The
+  custom domain is not intercepted there (tested 5 November 2026); that is an observation, not a guarantee.
 * **Share-alike for free.** The index is a derivative database under ODbL; publishing it openly, with the
   licence file at its root, is exactly what share-alike asks.
 * **Offline later.** Index files are plain cacheable files, so M2's offline mode ([#20](https://github.com/Froussios/fitbit-nutrition-portal/issues/20)) can keep the ones a

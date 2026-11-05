@@ -51,7 +51,7 @@ only with an explicit density. Household measures are Australian metric (tsp 5 m
 
 ### DR-07 Food data behind `FoodCatalog`; never query the public Open Food Facts API
 **Decision.** All food access goes through `FoodCatalog` (`search`, `get`). M0 uses local fake data in
-the Open Food Facts record format. Real data comes from a mirror (D3), never from live Open Food Facts calls.
+the Open Food Facts record format. Real data comes from our own index (D3, decided as DR-14), never from live Open Food Facts calls.
 **Why.** Open Food Facts allows about 10 searches and 15 product reads per minute per IP, far too few for
 interactive search.
 
