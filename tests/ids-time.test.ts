@@ -11,6 +11,14 @@ describe("entry ids", () => {
     expect(parseEntryId(id)).toEqual({ kind: "entry", loggedAt: new Date(now), ref: { source: "off", id: "9300633000001" } });
   });
 
+  it("keeps generic sources apart, so usage can be counted per database", () => {
+    const afcd = newEntryId({ source: "afcd", id: "F005634" });
+    const fndds = newEntryId({ source: "fndds", id: "2705385" });
+    expect(afcd).toMatch(ID_PATTERN);
+    expect(parseEntryId(afcd)?.ref).toEqual({ source: "afcd", id: "f005634" });
+    expect(parseEntryId(fndds)?.ref).toEqual({ source: "fndds", id: "2705385" });
+  });
+
   it("keeps hyphenated food ids", () => {
     const id = newEntryId({ source: "sample", id: "milk-full-cream" }, now, "zz99");
     expect(parseEntryId(id)?.ref).toEqual({ source: "sample", id: "milk-full-cream" });

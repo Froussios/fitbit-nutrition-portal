@@ -63,6 +63,7 @@ client ID instead.
 | `npm test` | Unit tests (Vitest) |
 | `npm run typecheck` | `tsc --noEmit` for the app and the index builder |
 | `npm run build:index -- --input <export.jsonl.gz>` | Build the food index into `public/food-index/` (ignored by git) from an Open Food Facts export, for local development |
+| `npm run build:generics` | Rebuild `src/food/data/generics.json` (committed) from the AFCD and USDA FNDDS downloads |
 | `npm run build` | Type-check and build the static site into `dist/` |
 | `npm run preview` | Serve `dist/` on port 4173 |
 
@@ -84,7 +85,7 @@ Any static host works. The build uses relative paths, so it can live under a sub
 Food search reads a static index of the Open Food Facts database hosted on **Cloudflare Pages** (design:
 [docs/FOOD_SEARCH.md](docs/FOOD_SEARCH.md)). `.github/workflows/food-index.yml` builds it from the Open Food
 Facts export and deploys it weekly, or when run from the Actions tab. It is never committed to git. Without
-an index the app falls back to the sample foods. Food data © Open Food Facts contributors, ODbL.
+an index the app falls back to the sample foods. Product data © Open Food Facts contributors, ODbL. Generic foods come from a small committed file of Australian and US government data, shown first and tagged with their source: © Food Standards Australia New Zealand, and USDA (see `public/generics-LICENSE.txt` and `npm run build:generics`).
 
 One-time setup:
 
@@ -116,7 +117,7 @@ src/
   auth/      Google Identity Services token flow
   food/      FoodCatalog interface, the static index engine and catalogue, sample foods
   ui/        DOM helpers, log form, food search combobox, diary table
-pipeline/    food index builder (Open Food Facts export → public/food-index/)
+pipeline/    food index builder (Open Food Facts export → public/food-index/), generic foods builder
   main.ts    app shell
 tests/       Vitest unit tests
 docs/        architecture and decisions

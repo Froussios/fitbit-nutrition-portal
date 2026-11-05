@@ -75,12 +75,12 @@ describe("food index", () => {
     });
   });
 
-  it("ranks generic products first, then by coverage, then popularity", async () => {
+  it("ranks branded products first, then by coverage, then popularity", async () => {
     const index = await FoodIndex.open(build(FIXTURE).reader);
-    expect(await names(index, "chocolate")).toEqual(["Chocolate", "Dark chocolate with almonds", "Milk Chocolate", "Dark Chocolate"]);
+    expect(await names(index, "chocolate")).toEqual(["Milk Chocolate", "Dark Chocolate", "Chocolate", "Dark chocolate with almonds"]);
   });
 
-  it("gives the owner's examples in the owner's order", async () => {
+  it("orders products as the owner's examples do, with generic foods left to the generic file", async () => {
     const queen = (code: string, name: string, brands: string | undefined, kcal: number) =>
       product(code, name, { ...(brands ? { brands } : {}), nutriments: { "energy-kcal_100g": kcal } });
     const index = await FoodIndex.open(
@@ -100,11 +100,11 @@ describe("food index", () => {
       return rows.map((r) => (r[2] ? `${r[1]} (${r[2]})` : r[1]));
     };
     expect((await labels("vanilla")).filter((l) => !l.includes("queen"))).toEqual([
-      "Vanilla extract",
-      "Vanilla bean",
       "Vanilla (Vanilla Queen)",
       "Vanilla (Queen)",
       "Vanilla extract (Queen)",
+      "Vanilla extract",
+      "Vanilla bean",
       "Yogurt (Vanilla Queen)",
     ]);
     expect(await labels("vanilla queen")).toEqual([
@@ -133,22 +133,22 @@ describe("food index", () => {
   it("ranks more entries with the same name above fewer, across brands", async () => {
     const index = await FoodIndex.open(
       build([
-        product("8101", "Probiotic chocolate", { unique_scans_n: 9000, nutriments: { "energy-kcal_100g": 450 } }),
+        product("8101", "Probiotic chocolate", { brands: "Gamma", unique_scans_n: 9000, nutriments: { "energy-kcal_100g": 450 } }),
         product("8102", "Milk chocolate", { nutriments: { "energy-kcal_100g": 540 } }),
-        product("8103", "Milk chocolate", { brands: "Brand A", nutriments: { "energy-kcal_100g": 530 } }),
-        product("8104", "Milk chocolate", { brands: "Brand B", nutriments: { "energy-kcal_100g": 550 } }),
+        product("8103", "Milk chocolate", { brands: "Alpha", nutriments: { "energy-kcal_100g": 530 } }),
+        product("8104", "Milk chocolate", { brands: "Beta", nutriments: { "energy-kcal_100g": 550 } }),
       ]).reader,
     );
-    expect((await names(index, "chocolate")).slice(0, 2)).toEqual(["Milk chocolate", "Probiotic chocolate"]);
+    expect(await names(index, "chocolate")).toEqual(["Milk chocolate", "Milk chocolate", "Probiotic chocolate", "Milk chocolate"]);
   });
 
   it("counts entries sold in Australia for more", async () => {
-    const american = Array.from({ length: 5 }, (_, i) => product(`830${i}`, "Whole milk", { brands: `Brand ${i}`, nutriments: { "energy-kcal_100g": 60 + i } }));
-    const index = await FoodIndex.open(build([...american, product("8310", "Full cream milk", { countries_tags: ["en:australia"], nutriments: { "energy-kcal_100g": 64 } })]).reader);
-    expect((await names(index, "milk"))[0]).toBe("Full cream milk");
+    const american = Array.from({ length: 5 }, (_, i) => product(`830${i}`, "Whole milk", { brands: `Maker${i}`, nutriments: { "energy-kcal_100g": 60 + i } }));
+    const index = await FoodIndex.open(build([...american, product("8310", "Lite milk", { brands: "Aussie", countries_tags: ["en:australia"], nutriments: { "energy-kcal_100g": 64 } })]).reader);
+    expect((await names(index, "milk"))[0]).toBe("Lite milk");
   });
 
-  it("puts food matches before flavour matches, even generic ones", async () => {
+  it("puts food matches before flavour matches, even with no brand listed", async () => {
     const index = await FoodIndex.open(
       build([
         product("8201", "Vegemite pressed pretzels", { nutriments: { "energy-kcal_100g": 439 } }),
@@ -157,10 +157,10 @@ describe("food index", () => {
       ]).reader,
     );
     const rows = await index.summaries(await index.search(parseQuery("vegemite")));
-    expect(rows.map((r) => [r[1], r[2]])).toEqual([["Vegemite", null], ["Vegemite", "Mondelez"], ["Vegemite pressed pretzels", null]]);
+    expect(rows.map((r) => [r[1], r[2]])).toEqual([["Vegemite", "Mondelez"], ["Vegemite", null], ["Vegemite pressed pretzels", null]]);
   });
 
-  it("finds a product the query uses up, however many generic matches come first", async () => {
+  it("puts a branded product the query uses up first, and not one with no brand", async () => {
     const generics = Array.from({ length: 30 }, (_, i) => product(`4${String(i).padStart(4, "0")}`, `Vegemite thing${i}`));
     const index = await FoodIndex.open(
       build([
@@ -171,7 +171,7 @@ describe("food index", () => {
       ]).reader,
     );
     const rows = await index.summaries(await index.search(parseQuery("vegemite")));
-    expect(rows.slice(0, 2).map((r) => [r[1], r[2]])).toEqual([["Vegemite", null], ["Vegemite", "Vegemite"]]);
+    expect(rows.slice(0, 3).map((r) => [r[1], r[2]])).toEqual([["Vegemite", "Vegemite"], ["Vegemite", "Bega"], ["Vegemite", null]]);
     expect(rows).toHaveLength(10);
   });
 
@@ -245,7 +245,7 @@ describe("food index", () => {
       bytes: async (path: string) => legacy.get(path) as Uint8Array,
     };
     const index = await FoodIndex.open(reader);
-    expect(await names(index, "chocolate")).toEqual(["Chocolate", "Dark chocolate with almonds", "Milk Chocolate", "Dark Chocolate"]);
+    expect(await names(index, "chocolate")).toEqual(["Milk Chocolate", "Dark Chocolate", "Chocolate", "Dark chocolate with almonds"]);
     expect(await names(index, "cadbury")).toEqual(["Dairy Milk"]);
     // Its lists count once against the scan budget too, however many passes read them.
     const budget = newBudget();
@@ -255,8 +255,8 @@ describe("food index", () => {
 
   it("needs every word, in any order, with the last one as a prefix", async () => {
     const index = await FoodIndex.open(build(FIXTURE).reader);
-    expect(await names(index, "chocolate dark")).toEqual(["Dark chocolate with almonds", "Dark Chocolate"]);
-    expect(await names(index, "dark choc")).toEqual(["Dark chocolate with almonds", "Dark Chocolate"]);
+    expect(await names(index, "chocolate dark")).toEqual(["Dark Chocolate", "Dark chocolate with almonds"]);
+    expect(await names(index, "dark choc")).toEqual(["Dark Chocolate", "Dark chocolate with almonds"]);
     expect(await names(index, "white chocolate ")).toEqual([]);
     expect(await names(index, "chocolat ")).toEqual([]); // complete word, no typo tolerance
   });
@@ -378,13 +378,13 @@ describe("StaticFoodCatalog", () => {
   it("searches with highlights and returns the chosen food", async () => {
     const catalog = new StaticFoodCatalog("idx/", serve(build(FIXTURE).files));
     const hits = await catalog.search("dark choc");
-    expect(hits.map((h) => h.summary.name)).toEqual(["Dark chocolate with almonds", "Dark Chocolate"]);
-    expect(hits[1]!.name).toEqual([
+    expect(hits.map((h) => h.summary.name)).toEqual(["Dark Chocolate", "Dark chocolate with almonds"]);
+    expect(hits[0]!.name).toEqual([
       { text: "Dark", match: true },
       { text: " ", match: false },
       { text: "Chocolate", match: true },
     ]);
-    expect(await catalog.get(hits[1]!.summary.ref)).toMatchObject({ name: "Dark Chocolate", brand: "Alpha" });
+    expect(await catalog.get(hits[0]!.summary.ref)).toMatchObject({ name: "Dark Chocolate", brand: "Alpha" });
     expect(catalog.label).toBe("Open Food Facts index test");
   });
 

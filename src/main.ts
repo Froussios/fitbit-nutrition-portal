@@ -6,6 +6,8 @@ import { civilDate } from "./core/time";
 import type { BaseUnit } from "./core/units";
 import { LocalFoodCatalog, type FoodCatalog } from "./food/catalog";
 import { SAMPLE_FOODS } from "./food/sample-foods";
+import { CombinedCatalog } from "./food/combined-catalog";
+import genericsUrl from "./food/data/generics.json?url";
 import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
 import { buildNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, type DiaryEntry, type LogDraft } from "./health/mapping";
@@ -451,8 +453,8 @@ function renderSetup(canCancel = false) {
 /** Where the static food index lives: Cloudflare Pages in production (VITE_FOOD_INDEX_URL), else next to the app (public/food-index/ in development). */
 const FOOD_INDEX_URL = ((import.meta.env.VITE_FOOD_INDEX_URL as string | undefined)?.trim() || `${import.meta.env.BASE_URL}food-index`).replace(/\/?$/, "/");
 
-/** The Open Food Facts index if it is deployed, otherwise the built-in sample foods. */
-async function openCatalog(): Promise<FoodCatalog> {
+/** Products from the Open Food Facts index if it is deployed, otherwise the built-in sample foods. */
+async function openProducts(): Promise<FoodCatalog> {
   const index = new StaticFoodCatalog(FOOD_INDEX_URL);
   try {
     const { meta } = await index.open();
@@ -462,6 +464,12 @@ async function openCatalog(): Promise<FoodCatalog> {
     appLog.warn("No food index found; using the sample foods", { url: FOOD_INDEX_URL, error: describeError(e) });
     return new LocalFoodCatalog(SAMPLE_FOODS);
   }
+}
+
+async function openCatalog(): Promise<FoodCatalog> {
+  const catalog = new CombinedCatalog(genericsUrl, await openProducts(), `${import.meta.env.BASE_URL}generics-LICENSE.txt`);
+  catalog.load().catch((e: unknown) => appLog.warn("Generic foods are unavailable", { error: describeError(e) }));
+  return catalog;
 }
 
 const clientId = getClientId();

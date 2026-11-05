@@ -53,7 +53,9 @@ export interface IndexMeta {
   readonly detPerFile: number;
   /** First word of each dictionary shard; shard i holds words >= dict[i] and < dict[i + 1]. */
   readonly dict: readonly string[];
-  /** First ID of a branded product; lower IDs have no brand. Missing in format 2. */
+  /** First ID of a product with no brand; lower IDs are branded. Missing in indexes built before that order. */
+  readonly unbrandedFrom?: number;
+  /** The same boundary in earlier format 3 indexes, where products with no brand came first. Remove with the format 2 code. */
   readonly brandedFrom?: number;
   /** Runs of IDs with the same word counts, as [first ID, words in the name, words in the name and brand], in ID order. Missing in format 2. */
   readonly bands?: readonly (readonly [firstId: number, nameWords: number, productWords: number])[];

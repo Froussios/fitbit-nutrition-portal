@@ -12,7 +12,9 @@ export interface DiaryTableOptions {
 
 const SOURCE_LABELS: Record<string, string> = {
   off: "Open Food Facts",
+  afcd: "AFCD",
   ausnut: "AUSNUT",
+  fndds: "USDA FNDDS",
   usda: "USDA",
   sample: "sample food",
   manual: "custom food",

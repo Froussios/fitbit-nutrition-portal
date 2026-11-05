@@ -17,7 +17,7 @@ Set by the owner on 2 November 2026.
 | R1 | Search happens as the user types. | Debounced search on every input event, stale responses dropped (section 8.2). |
 | R2 | Options appear below the field, like a dropdown. | An editable combobox with a listbox popup (section 3). |
 | R3 | Matching and ordering; show the top 10 best matches. Revised: no typo tolerance; every query word must be in the result, in any order; a result ranks higher the more of it the query covers ("chocolate" beats "dark chocolate"). Revised 5 November 2026 (DR-15): unless given evidence otherwise, assume the generic product. | Exact words, last word as a prefix while typing; ranked by where the words matched, generic before branded, then coverage, then popularity (section 4). |
-| R4 | One food source for now: Open Food Facts. | The index holds Open Food Facts products only. Generic foods (AUSNUT / OpenNutrition) move to later (DR-12). |
+| R4 | One food source for now: Open Food Facts. Revised 5 November 2026 (DR-16): generic foods come from authoritative sources, and every row shows its source. | Open Food Facts holds products only. A small file of AFCD and USDA FNDDS foods is searched in the browser and shown first (section 13). |
 | R5 | Rich visuals in the dropdown: a summary per food, starting with calories per unit. | Two-line rows with kcal per 100 g / 100 ml and per serving, built from a summary view model that can grow (section 3.3). |
 | R6 | Arrow keys move through the options; the selected row is filled into the input. | Keyboard model in section 3.2; the typed query is kept so Escape and ArrowUp can restore it. |
 | R7 | Open Food Facts is large and its APIs throttle; host our own copy of the **whole world** dataset (Australian tagging is incomplete), at no monthly cost, without the browser downloading it. The dataset may be slimmed (drop fields and dead rows). | A slimmed, pre-sorted word index built weekly by a GitHub Action and stored as static files on Cloudflare Pages. The browser fetches only the files each search needs, often hundreds of KB while typing (sections 5 and 9.1). |
@@ -31,8 +31,7 @@ index builder; publishing the index; a `FoodCatalog` that queries it.
 
 * Barcode scanning ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)). It uses `FoodCatalog.get()`, which this design provides (a barcode map in the index).
 * Recent foods ([#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14)). The dropdown is where they would appear when the field is empty; not built here.
-* Generic foods (AUSNUT / OpenNutrition): parked as [#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38). If the coverage test ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15))
-  misses the target, they are the first thing to add.
+* AUSNUT 2023 and more USDA data: [#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38), and section 13.
 * Typo tolerance. Dropped from R3; section 4.4 lists cheap additions if misses show it is needed.
 * Product images, Nutri-Score, macro bars. The row layout leaves room for them (section 3.3).
 * kJ display preference ([#21](https://github.com/Froussios/fitbit-nutrition-portal/issues/21)). Rows show kcal for now.
@@ -103,9 +102,10 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 
 * **Line 1:** product name, with the matched parts in bold. Right: kcal per 100 g or per 100 ml (the
   food's `basis`), always shown, so rows compare like for like.
-* **Line 2:** brand · pack size (Open Food Facts `quantity`), or **Generic** · pack size for a product with no
-  brand, so a row always says what kind of product it is. Right: kcal per serving when the product has a
-  serving size, e.g. `107 kcal / 30 g serving`.
+* **Line 2:** brand · pack size (Open Food Facts `quantity`), or **Generic** for a food from an authoritative
+  source, or **No brand listed** for an Open Food Facts product with no brand. Then a tag naming the row's source:
+  `AFCD`, `FNDDS` or `OFF`, so a bad value can be traced to its database. Right: kcal per serving when the
+  product has a serving size, e.g. `107 kcal / 30 g serving`.
 * A row is built from a `FoodSummary` view model computed from the `FoodItem` by a pure function in
   `src/core/`. The index builder runs the same function, so search results arrive as summaries and the full
   food is fetched only when chosen. Later visuals (a thumbnail, a macro bar, Nutri-Score) are new fields on that model and new
@@ -151,15 +151,16 @@ Product names, brands and queries go through the same tokeniser, shared by the i
 **Principle (DR-15): unless given evidence otherwise, assume the generic product.** Brands often name a product
 after a flavour, so a word in the name says more about what a product is than the same word in its brand.
 
-Results are ordered by these rules, each one only breaking ties in the one before (`matchRank` in
+Generic foods come from authoritative sources and are shown first (section 13, DR-16). Open Food Facts products
+follow, ordered by these rules, each one only breaking ties in the one before (`matchRank` in
 `src/core/tokens.ts`):
 
 | # | Rule | Example, searching `vanilla` |
 |---|---|---|
 | 1 | **Tier.** Every query word whole, in the name or brand, with at least one in the name; then the last word only as the start of a longer word (`coke` in `cokelat`); then nothing matched in the name. | `Yogurt (Vanilla Queen)` is last |
-| 2 | **The query uses up the whole product,** name and brand. There is nothing more to type to reach such a product, so nothing else may push it down. | Searching `vegemite`: `Vegemite (Vegemite)` before `Vegemite pretzels` |
+| 2 | **The query uses up the whole branded product,** name and brand. There is nothing more to type to reach such a product, so nothing else may push it down. | Searching `vegemite`: `Vegemite (Vegemite)` before `Vegemite pretzels` |
 | 3 | **A query word is the food, not its flavour or an ingredient** (below). | Searching `chocolate`: `Dark chocolate` before `Chocolate milk`. Searching `vegemite`: `Vegemite (Bega)` before `Vegemite pretzels` |
-| 4 | **Generic (no brand) before branded.** | `Vanilla extract` before `Vanilla (Queen)` |
+| 4 | **Branded before no brand listed.** A crowdsourced product with no brand is just incomplete; it is not generic. | `Vanilla extract (Queen)` before `Vanilla extract` |
 | 5 | **Fewer extra words:** name words that are not query words. | `Vanilla (Queen)` before `Vanilla extract (Queen)` |
 | 6 | **More query words in the name.** | `Vanilla queen (Other)` before `Vanilla extract (Queen)`, searching `vanilla queen` |
 | 7 | **More query words in the brand as well.** | `Vanilla (Vanilla Queen)` before `Vanilla (Queen)` |
@@ -189,11 +190,11 @@ popularity = log10(1 + unique_scans_n)       how often Open Food Facts apps have
 ```
 
 **Pre-sorted index.** Rules 4, 5 and 8 mostly do not depend on the query, so the builder numbers the products in
-this fixed order: generic first, then fewer distinct name words, then fewer distinct words in the name and brand
+this fixed order: branded first, then fewer distinct name words, then fewer distinct words in the name and brand
 together, then more entries with the same name, then more popular. A word has three sorted lists of product IDs:
 products where it says what the food is, products with it elsewhere in the name, and products with it only in the
 brand. Those facts are enough to rank a product without fetching its text:
-`meta.json` gives the word counts and generic or branded for any ID (`bands`, `brandedFrom`), and the lists say
+`meta.json` gives the word counts and branded or not for any ID (`bands`, `unbrandedFrom`), and the lists say
 which query words are in the name. A product holding every query word, with as many words in total as the query
 has, is used up (rule 2), so the engine can jump straight to those IDs.
 
@@ -391,7 +392,7 @@ current.json                 { "version": "20261104T085100Z-<run id>-<attempt>" 
 <version>/
   meta.json                  the manifest: format, build and export dates, counts, licence, file sizes
                              (sumPerFile, detPerFile, codeBuckets), the first word of every dictionary shard,
-                             and what ranks a product from its ID (brandedFrom, bands of word counts)
+                             and what ranks a product from its ID (unbrandedFrom, bands of word counts)
   LICENSE.txt                ODbL notice and attribution
   dict/<n>.json              a run of consecutive words in sorted order (about 24 KB uncompressed), each
                              [word, food list, rest of name list, brand-only list]. A list is null, or [count, IDs] for up to 16,
@@ -591,15 +592,18 @@ with no debounce, so these are worst cases for fast connections and slow typing:
 
 | Query | One complete search | Typed letter by letter | Worst keystroke |
 |---|---|---|---|
-| `milk` | 63 KB | 232 KB | 96 KB |
-| `vegemite` | 72 KB | 343 KB | 112 KB |
-| `vanilla` | 85 KB | 476 KB | 119 KB |
-| `chocolate` | 74 KB | 516 KB | 94 KB |
-| `tim tam` | 105 KB | 628 KB | 412 KB |
-| `carrefour bio` | 134 KB | about 1 MB | about 470 KB |
-| `big mac` | 164 KB | about 700 KB | about 460 KB |
+| `milk` | 47 KB | 150 KB | 68 KB |
+| `vegemite` | 67 KB | 233 KB | 74 KB |
+| `vanilla` | 41 KB | 271 KB | 74 KB |
+| `chocolate` | 43 KB | 302 KB | 67 KB |
+| `tim tam` | 96 KB | 323 KB | 149 KB |
+| `big mac` | 135 KB | about 710 KB | about 500 KB |
 
-Against the budgets above, typical keystrokes cost about 60 KB rather than 40 KB, the worst far more, and a logging
+Since DR-16, generic rows take up to 5 of the 10 rows, so a search fetches fewer product summaries, and the
+generic file adds about 310 KB gzipped, once, which the table leaves out. Typed letter by letter, `chocolate` drops
+from 516 KB to 302 KB of products.
+
+Against the budgets above, typical keystrokes cost about 35 KB rather than 40 KB, the worst far more, and a logging
 session of several foods can reach a few MB on a cold cache. Files are cached for the session, and browsers may keep
 them for up to a year, so later sessions cost less. A new index build replaces them all.
 
@@ -658,9 +662,9 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
   [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15).
 * **Exact words in practice.** Whether misses (misspellings, `timtam` vs `Tim Tam`, plurals) are common
   enough to add the section 4.4 helpers.
-* **Are unbranded products really generic?** About 30% of products have no brand, and those are often just
-  incomplete entries: `Vegemite` with no brand says 9 kcal, and outranks the real one at 191 kcal. If this
-  misleads, the options are a popularity floor for ranking as generic, or real generic data ([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38)).
+* **Reconciling products.** Identical Open Food Facts entries still disagree (`Vegemite (Vegemite)`: 6 and 177
+  kcal). Generic foods now cover the worst cases, and they no longer carry the unbranded ones' values
+  ([#41](https://github.com/Froussios/fitbit-nutrition-portal/issues/41)).
 * **Australian weighting.** Entries sold in Australia count 10 times when estimating popularity, because plain
   counts lean American (`Whole milk` 350 entries, `Full cream milk` 71). The factor of 10 is a judgement call that
   has not been checked against real data; the first real build should show whether it is right. The country should
@@ -682,3 +686,76 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
   Branded products with different energy still repeat: `Weet-Bix (Sanitarium)` has several rows.
 * **Per-serving kcal.** Open Food Facts serving sizes are sometimes wrong. If the coverage test finds many,
   show per-serving values only when they agree with the per-100 values.
+
+## 13. Generic foods
+
+Decision: DR-16. Open Food Facts is crowdsourced: about 30% of its products have no brand, and those are often just
+incomplete (`Vegemite` with no brand says 9 kcal). Generic foods come instead from authoritative food composition
+tables, in one small file that the browser downloads once and searches locally.
+
+### 13.1 Sources
+
+| Source | Tag | Foods | Basis | Licence |
+|---|---|---|---|---|
+| Australian Food Composition Database, Release 3 (FSANZ) | `AFCD` | 1,587 | 66% analysed | Based on CC BY-SA 3.0 AU; statements in `public/generics-LICENSE.txt` must travel with the data |
+| USDA FNDDS 2021-2023 (FoodData Central) | `FNDDS` | 5,371 | Survey data from USDA's own tables and recipes | US public domain |
+
+About 310 KB gzipped. Candidates tested and left out for now:
+
+| Added to AFCD | Extra size | Gain | Why not yet |
+|---|---|---|---|
+| AUSNUT 2023 (FSANZ) | About 110 KB | Australian mixed dishes, serving measures | Licence for the 2023 release not confirmed. Shares FSANZ food keys with AFCD, so it joins on those and needs no name matching |
+| SR Legacy (USDA) | About 340 KB | More raw ingredients | Frozen in 2018, and adds little to everyday coverage |
+| Foundation Foods (USDA) | About 15 KB | Lab-measured values | Only 374 usable foods |
+
+On a list of 40 everyday Australian foods, AFCD alone finds 28 and AFCD + FNDDS 35. On the 300 most common unbranded
+Open Food Facts names, 126 and 194. Crowdsourced sources such as OpenNutrition are ruled out: Open Food Facts is
+the only crowdsourced source.
+
+### 13.2 Building the file
+
+`npm run build:generics` (`pipeline/build-generics.ts`, logic in `pipeline/generics-builder.ts`) writes
+`src/food/data/generics.json`, which is committed: sources change at most a few times a year. Rerun it when a
+source publishes a release, after updating its URL. Sources go straight to the app's food model, not through the
+Open Food Facts format.
+
+* kJ to kcal, and mg to g. The builder fails if an AFCD column is renamed, instead of silently losing a nutrient.
+* **Carbohydrate:** USDA's includes fibre and the Australian figure doesn't, so fibre is taken out of USDA's.
+* AFCD liquids use their per-100-ml row. FNDDS has only per-100-g values, and has serving measures in grams.
+* FNDDS uses USDA's older nutrient numbers (`208` for energy, not `1008`).
+* Foods for infants, human milk, and serving measures such as `Guideline amount` are left out.
+
+**Sources are concatenated, never joined on names, and values are never combined.** Authorities really do disagree
+(white bread: 251 kcal in AFCD, 293 in FNDDS), so an average would describe no measurement. Names don't work as a
+join key either: AFCD and AUSNUT share 1,201 food keys, and only 482 of those have the same name.
+
+### 13.3 Searching
+
+`GenericIndex` in `src/food/generic-search.ts`, in order:
+
+1. **Whole words** before a longer word that starts the same. The last word may be half typed. Plurals are ignored.
+2. **The food before its flavour.** These names put the food first, so it is the words before the first comma:
+   `Milk, cow, fluid` is a milk, `Chocolate, milk` is not. The opposite of product names (section 4.3).
+3. **Australian before US.** FNDDS foods appear only when AFCD has fewer than 3 foods for the query.
+4. **The plain form:** fewest words other than plain ones such as `raw` and `regular fat`, then names with such a word.
+
+A row with exactly the same name as a higher-priority row is dropped. Its values are not merged.
+
+**Synonyms** cover spelling conventions, because they split the sources: `yoghurt` appears only in AFCD and `yogurt`
+only in FNDDS. A small table applied to the query also searches the other spelling (`ketchup` and `tomato sauce`,
+`ground` and `mince`, `full cream` and `regular fat`). It changes nothing in the data, and does not apply to product
+search.
+
+### 13.4 Combining with products
+
+`CombinedCatalog` in `src/food/combined-catalog.ts` shows up to 5 generic rows, then products up to 10 rows in
+total, then more generic rows if products leave rows empty. It asks the product index only for the rows it can
+show, which saves fetching a summary file for each of the others. If one side fails the other still answers.
+
+### 13.5 Which database is used most
+
+Each diary entry's ID records its source and food ID (`e-<time>-<rand>-afcd-f005634`), and `aus`, `fnds`, `afcd`
+and `usda` are separate codes, so usage per database can be counted from the diary in Google Health, with no
+telemetry. Not built yet: the app reads one day at a time, so a report needs a date range. It covers only what was
+logged through this app, not what was shown and passed over, nor deleted entries.
+

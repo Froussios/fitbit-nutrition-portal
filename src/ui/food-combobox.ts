@@ -1,4 +1,4 @@
-import { foodLabel } from "../core/food";
+import { foodLabel, isGenericSource, SOURCE_TAGS } from "../core/food";
 import type { FoodSummary } from "../core/food-summary";
 import type { TextRun } from "../core/tokens";
 import type { FoodCatalog, FoodSearchHit } from "../food/catalog";
@@ -86,8 +86,14 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
 
     const rows: HTMLElement[] = hits.map((hit, i) => {
       const s = hit.summary;
-      const maker = s.brand ? runs(hit.brand ?? [{ text: s.brand, match: false }]) : [el("span", { class: "opt-generic" }, "Generic")];
-      const sub = [...maker, ...(s.packSize ? [document.createTextNode(` · ${s.packSize}`)] : [])];
+      const maker = s.brand
+        ? runs(hit.brand ?? [{ text: s.brand, match: false }])
+        : [el("span", { class: "opt-nobrand" }, isGenericSource(s.ref.source) ? "Generic" : "No brand listed")];
+      const sub = [
+        ...maker,
+        ...(s.packSize ? [document.createTextNode(` · ${s.packSize}`)] : []),
+        el("span", { class: "opt-source", title: "Where this food's data comes from" }, SOURCE_TAGS[s.ref.source]),
+      ];
       return el(
         "li",
         { id: optionId(i), role: "option", class: "opt", "aria-selected": String(i === state.active) },
@@ -115,8 +121,12 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
         { id: optionId(custom), role: "option", class: "opt opt-custom", "aria-selected": String(state.active === custom) },
         `+ Custom food "${state.query.trim()}"`,
       ),
-      catalog.attribution
-        ? el("li", { class: "opt-note attribution", role: "presentation" }, el("a", { href: catalog.attribution.href, target: "_blank", rel: "noopener" }, catalog.attribution.text))
+      catalog.attributions?.length
+        ? el(
+            "li",
+            { class: "opt-note attribution", role: "presentation" },
+            ...catalog.attributions.flatMap((a, i) => [i > 0 ? " · " : null, el("a", { href: a.href, target: "_blank", rel: "noopener" }, a.text)]),
+          )
         : null,
     );
     list.querySelector(`[aria-selected="true"]`)?.scrollIntoView({ block: "nearest" });

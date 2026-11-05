@@ -22,6 +22,8 @@ export function fold(text: string): string {
 
 /** Chunks separated by anything except letters, digits, hyphens and apostrophes. */
 const CHUNK = /[\p{L}\p{N}'’-]+/gu;
+/** Runs of letters and digits, for names whose words need no joined forms. */
+export const CHUNK_FOR_WORDS = /[\p{L}\p{N}]+/gu;
 /** Joiners inside a chunk: "weet-bix", "mcdonald's". */
 const JOINER = /['’-]+/;
 
@@ -231,7 +233,7 @@ export interface RankedProduct {
 
 /**
  * The fixed order products are numbered in (docs/FOOD_SEARCH.md section 4.3):
- * unbranded before branded, then fewer words in the name, then fewer words in
+ * branded before no brand listed, then fewer words in the name, then fewer words in
  * the name and brand together, then more entries with the same name, then more
  * popular. It does not depend on the query, so the index can store every product
  * list in this order. matchRank() refines it for a particular query.
@@ -241,7 +243,7 @@ export function compareRank(
   b: RankedProduct,
 ): number {
   return (
-    Number(a.branded) - Number(b.branded) ||
+    Number(b.branded) - Number(a.branded) ||
     a.nameWordCount - b.nameWordCount ||
     a.productWordCount - b.productWordCount ||
     b.sameNameCount - a.sameNameCount ||
@@ -268,14 +270,15 @@ function extraWords(text: string, isTerm: (word: string) => boolean): number {
  * 1. Tier. 0: every query word is a whole word in the name or brand, with at
  *    least one in the name. 1: the last word only matches as the start of a
  *    longer word ("coke" in "cokelat"). 2: nothing matched in the name.
- * 2. The query uses up the whole product, name and brand: it holds every query
- *    word and has no other words. There is nothing more to type to reach such a
- *    product, so it must not be pushed down by others: "vegemite" puts
+ * 2. The query uses up the whole branded product, name and brand: it holds every
+ *    query word and has no other words. There is nothing more to type to reach such
+ *    a product, so it must not be pushed down by others: "vegemite" puts
  *    "Vegemite (Vegemite)" before "Vegemite pretzels". A hyphenated word counts as
- *    its parts here, as in the index: "weet bix" uses up "Weet-Bix", "weetbix" does not.
+ *    its parts here, as in the index: "weet bix" uses up "Weet-Bix (Bix)", "weetbix" does not.
  * 3. A query word is the food, not its flavour or an ingredient (headWords):
  *    "chocolate" puts "Dark chocolate" before "Chocolate milk".
- * 4. Unbranded before branded: without evidence otherwise, assume the generic product.
+ * 4. Branded before no brand listed. Generic foods come from authoritative sources
+ *    (generic-search.ts); a crowdsourced product with no brand is just incomplete.
  * 5. Fewer name words that are not query words.
  * 6. More query words in the name.
  * 7. More query words in the brand as well.
@@ -291,10 +294,10 @@ export function matchRank(q: ParsedQuery, name: string, brand?: string): readonl
   const tier = inName === 0 ? 2 : allWhole && wholeInName ? 0 : 1;
   const inBrand = terms.filter((t) => found(brandW, t)).length;
   const extras = extraWords(name, (w) => terms.includes(w));
-  const usedUp = tier === 0 && productWordCount(name, brand) === terms.length;
+  const usedUp = tier === 0 && Boolean(brand) && productWordCount(name, brand) === terms.length;
   const heads = headWords(name);
   const isFood = terms.some((t) => found(heads, t));
-  return [tier, usedUp ? 0 : 1, isFood ? 0 : 1, brand ? 1 : 0, extras, -inName, -inBrand];
+  return [tier, usedUp ? 0 : 1, isFood ? 0 : 1, brand ? 0 : 1, extras, -inName, -inBrand];
 }
 
 /** Orders two matchRank() results, or any number lists of the same shape. */

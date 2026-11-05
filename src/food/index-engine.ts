@@ -400,6 +400,8 @@ export class FoodIndex {
     const hits: number[] = [];
     for (let b = 0; b < bands.length; b++) {
       if (bands[b]![2] !== terms.length) continue;
+      // Only branded products count as used up.
+      if (this.meta.unbrandedFrom !== undefined && bands[b]![0] >= this.meta.unbrandedFrom) continue;
       const end = bands[b + 1]?.[0] ?? this.meta.searchableDocs;
       for await (const id of this.intersect(cursors, budget, bands[b]![0], end)) {
         hits.push(id);
@@ -440,19 +442,20 @@ export class FoodIndex {
     cursors.sort((a, b) => a.size - b.size);
 
     const wholeTerms = terms.filter((t) => t.whole).length;
-    const brandedFrom = this.meta.brandedFrom ?? 0;
+    // The ID where the second group starts, whichever group that is: word counts restart there.
+    const secondGroup = this.meta.unbrandedFrom ?? this.meta.brandedFrom ?? 0;
     const best: { id: number; key: readonly number[] }[] = [];
     for await (const id of this.intersect(cursors, budget)) {
       const words = this.wordCount(id);
       if (best.length === want) {
         // Without word counts (format 2), the first matches are the best we can tell.
         if (words === undefined) break;
-        const atBest = [Number(id >= brandedFrom), Math.max(0, words - wholeTerms), -terms.length, id];
+        const atBest = [Number(id >= secondGroup), Math.max(0, words - wholeTerms), -terms.length, id];
         if (compareMatch(best[want - 1]!.key, atBest) < 0) break;
       }
       if (skip.includes(id)) continue;
       const inName = terms.filter((t) => t.head?.current === id || t.rest?.current === id);
-      const key = [Number(id >= brandedFrom), Math.max(0, (words ?? 0) - inName.filter((t) => t.whole).length), -inName.length, id];
+      const key = [Number(id >= secondGroup), Math.max(0, (words ?? 0) - inName.filter((t) => t.whole).length), -inName.length, id];
       const at = best.findIndex((b) => compareMatch(key, b.key) < 0);
       best.splice(at < 0 ? best.length : at, 0, { id, key });
       if (best.length > want) best.pop();
