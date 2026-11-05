@@ -674,7 +674,8 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
   by trying their commonest expansions first. 2-letter words do not. For most of them the first three dictionary
   shards the engine reads would be enough (311 of 345), but not for the ones people type most: `chocolate` is in the
   6th shard for `ch`, and `market` in the 7th for `ma`. That is why `big ma` still costs about 460 KB while typing
-  `big mac`.
+  `big mac`. A 2-letter word whose words are never the food in a name (3 of 2,963 short prefixes, such as `1x`) goes
+  straight to checking too, so it finds brand-only matches only among those candidates.
 * **Other languages.** Word order is assumed to be English. Open Food Facts records a language per product, which
   could vary the rule when the index is built; Chrome's language detection could help with the query's language.
 * **Duplicates.** Whether collapsing same-name, same-energy products hides pack sizes people want to see.
