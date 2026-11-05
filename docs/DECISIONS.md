@@ -9,7 +9,6 @@ labelled `decision`; when one closes, its outcome is added here. Supporting fact
 | ID | Question | Milestone | Issue | Current leaning |
 |---|---|---|---|---|
 | D1 | How to provide long-lived sessions | M3 | [#22](https://github.com/Froussios/fitbit-nutrition-portal/issues/22) | Stateless token broker (option A2) plus OAuth app in Production |
-| D3 | Design of the food data mirror | M1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) | A slimmed, pre-sorted word index of the whole world dataset, built weekly by a GitHub Action and deployed as static files to Cloudflare Pages (~350–600 MB, under 20,000 files). Never committed to git: every rebuild would stay in the history (owner, 2 Nov 2026). Search runs in the browser, which fetches only the few small files each query needs (tens of KB), never the index; no server, so no DR-01 exception. The same engine can move into a free Cloudflare Worker if mobile latency needs it. Owner requirements (2 Nov 2026): no monthly bill; whole world dataset (Australian tagging is incomplete); the dataset may be slimmed; exact-word matching (DR-13); the browser must not download the dataset. Free database tiers (D1, Supabase, Turso) cannot hold or rebuild the whole dataset. See [FOOD_SEARCH.md](FOOD_SEARCH.md#5-hosting-and-execution-r7-decision-d3). |
 
 ## Decided
 
@@ -52,7 +51,7 @@ only with an explicit density. Household measures are Australian metric (tsp 5 m
 
 ### DR-07 Food data behind `FoodCatalog`; never query the public Open Food Facts API
 **Decision.** All food access goes through `FoodCatalog` (`search`, `get`). M0 uses local fake data in
-the Open Food Facts record format. Real data comes from a mirror (D3), never from live Open Food Facts calls.
+the Open Food Facts record format. Real data comes from our own index (D3, decided as DR-14), never from live Open Food Facts calls.
 **Why.** Open Food Facts allows about 10 searches and 15 product reads per minute per IP, far too few for
 interactive search.
 
@@ -95,3 +94,16 @@ words in the name), then popularity: "chocolate" ranks a product called "Chocola
 search engine or server ([FOOD_SEARCH.md](FOOD_SEARCH.md#4-matching-and-ordering-r3)).
 **Reopen if.** Misspellings or word-form misses are common in the coverage test ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) or daily use; try
 the cheap helpers (synonyms, "did you mean", plurals) first.
+
+### DR-14 Food index: a static, pre-sorted word index on Cloudflare Pages
+**Decision.** Closes D3 ([#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9)). A weekly GitHub Action slims the whole Open Food Facts export, numbers products
+in ranking order and deploys a sharded word index (195 MB, 18 k files) to the Cloudflare Pages project
+`food-diary-index`, served at `https://food-index.froussios.com/`. Search runs in the browser and fetches only
+the files a query needs. The index is never committed to git. Design: [FOOD_SEARCH.md](FOOD_SEARCH.md).
+**Why.** Owner requirements (2 November 2026): no monthly bill, the whole world dataset, no download of the
+dataset to the browser, and no index in git history (each rebuild would stay there for good). With
+exact-word matching (DR-13) a pre-sorted static index needs no server, so DR-01 holds without an exception.
+Free database tiers could not hold or rebuild the dataset; paid search hosting was ruled out on cost. The
+custom domain replaced `*.pages.dev` after the University of Sydney's firewall was found intercepting it.
+**Reopen if.** Typo tolerance becomes a requirement (Meilisearch on a home server is the documented path),
+the index outgrows Cloudflare Pages' 20,000 files, or mobile latency needs the engine in a Worker.

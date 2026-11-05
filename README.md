@@ -100,8 +100,12 @@ One-time setup:
    the repository variable `CLOUDFLARE_PAGES_PROJECT` to use another name). It refuses to deploy to an
    existing project that is not this repository's index: every deploy carries a `food-index-owner.json`
    marker, which the next deploy checks first.
-5. Set the repository variable `FOOD_INDEX_URL` to the project's URL (shown in the job summary, normally
-   `https://food-diary-index.pages.dev/`), so the CI build points the app at it.
+5. Give the project a custom domain: Workers & Pages → the project → **Custom domains** → set up
+   `food-index.froussios.com` with **My DNS provider**, then add the CNAME it asks for at the DNS host
+   (`food-index` → `food-diary-index.pages.dev`). Some networks intercept `*.pages.dev` (the University of
+   Sydney's firewall does), and a domain of your own avoids that.
+6. Set the **repository variable** (not a secret or an environment variable) `FOOD_INDEX_URL` to
+   `https://food-index.froussios.com/`, so the CI build points the app at it. Re-run CI after changing it.
 
 ## Project layout
 

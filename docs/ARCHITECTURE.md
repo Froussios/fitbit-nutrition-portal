@@ -167,16 +167,17 @@ The app **never queries the public Open Food Facts API**. Its read limits (about
 * **M1:** search-as-you-type over Open Food Facts using exact words in any order, ranked by how much of
   the product name the query covers (DR-13). A weekly GitHub Action slims the Open Food Facts export
   of the whole world dataset (dead rows and unused fields dropped), sorts products in ranking order and
-  publishes a sharded word index as static files on Cloudflare Pages (never in git). The browser runs the search itself but
+  publishes a sharded word index as static files on Cloudflare Pages (never in git), served at
+  `food-index.froussios.com`. The browser runs the search itself but
   fetches only the few small index files each query needs (tens of KB), never the whole index. ODbL allows this, with
-  attribution and share-alike on the database. No server and no monthly cost (decision D3). Generic
+  attribution and share-alike on the database. No server and no monthly cost (DR-14). Generic
   foods (AUSNUT / OpenNutrition) come later (DR-12). Full design: [FOOD_SEARCH.md](FOOD_SEARCH.md).
 
 ## 7. Decisions, milestones and spikes
 
 These are maintained separately, so they stay in sync with the GitHub issues:
 
-* [DECISIONS.md](DECISIONS.md): recorded decisions (DR-01…) and open ones (D1 long-lived sessions,
-  D3 food data mirror). D2 (live updates) is decided as polling: DR-08.
+* [DECISIONS.md](DECISIONS.md): recorded decisions (DR-01…) and open ones (D1 long-lived sessions).
+  D2 (live updates) is decided as polling: DR-08; D3 (food data mirror) as DR-14.
 * [ROADMAP.md](ROADMAP.md): the MVP (M0) and its targets, post-MVP milestones M1–M4 with their issues, spikes, and
   work saved for later.

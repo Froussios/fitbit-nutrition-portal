@@ -107,4 +107,4 @@ jobs:
           npx --yes wrangler@4 pages deploy food-index-dist --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true
           subdomain=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PAGES_PROJECT" | jq -r '.result.subdomain')
-          echo "Deployed to Cloudflare Pages project **$PAGES_PROJECT**: https://$subdomain/ (set the FOOD_INDEX_URL repository variable to this URL)." | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Deployed to Cloudflare Pages project **$PAGES_PROJECT** (https://$subdomain/). The app reads it through the custom domain in the FOOD_INDEX_URL repository variable." | tee -a "$GITHUB_STEP_SUMMARY"
