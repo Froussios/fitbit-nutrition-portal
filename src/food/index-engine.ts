@@ -472,11 +472,12 @@ export class FoodIndex {
     const check = async () => {
       const rows = await this.summaries(batch);
       rows.forEach((r, i) => {
-        if (hits.length < want && !skip.includes(batch[i]!) && productMatches(prefixOnly, r[1], r[2] ?? undefined)) hits.push(batch[i]!);
+        if (hits.length < want && productMatches(prefixOnly, r[1], r[2] ?? undefined)) hits.push(batch[i]!);
       });
       batch = [];
     };
     for await (const id of this.intersect(cursors as Cursor[], budget)) {
+      if (skip.includes(id)) continue;
       batch.push(id);
       checked++;
       if (batch.length === VERIFY_BATCH || checked >= MAX_VERIFIED) {

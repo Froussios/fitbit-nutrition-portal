@@ -343,6 +343,18 @@ describe("food index", () => {
     expect(await names(index, "special fla")).toEqual([`Snack bar flavour${CHUNK_SIZE + 400} special`]);
   });
 
+  it("doesn't let products already found use up the candidates it checks", async () => {
+    const records = [
+      ...Array.from({ length: 20 }, (_, i) => product(`64${String(i).padStart(3, "0")}`, `Mac${"abcdefghijklmnopqrst"[i]}x dish`)),
+      // 97 candidates that don't match, then 5 found through the expansions, then the one only checking can find.
+      ...Array.from({ length: 97 }, (_, i) => product(`65${String(i).padStart(3, "0")}`, `Big thing${i}`)),
+      ...Array.from({ length: 5 }, (_, i) => product(`66${String(i).padStart(3, "0")}`, `Big macaroni v${i}`)),
+      product("67000", "Big macz one two"),
+    ];
+    const index = await FoodIndex.open(build(records).reader);
+    expect(await names(index, "big mac")).toContain("Big macz one two");
+  });
+
   it("answers no-match prefixes without errors", async () => {
     const index = await FoodIndex.open(build(FIXTURE).reader);
     expect(await names(index, "zz")).toEqual([]);
