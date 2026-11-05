@@ -671,8 +671,10 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
   (`chocolate zu` found none of 12). Removing the limit fills the results, but a common word with a rare last word then
   fetches nearly every summary file: 17 to 19 MB for one keystroke (`chocolate zu`, `sauce qi`). The order still would
   not always be the best possible, because checking stops at the first 10 found. 3-letter words now avoid most of this
-  by trying their commonest expansions first. 2-letter words do not: there, the first three dictionary shards rarely
-  reach the commonest words. That is why `big ma` still costs about 460 KB while typing `big mac`.
+  by trying their commonest expansions first. 2-letter words do not. For most of them the first three dictionary
+  shards the engine reads would be enough (311 of 345), but not for the ones people type most: `chocolate` is in the
+  6th shard for `ch`, and `market` in the 7th for `ma`. That is why `big ma` still costs about 460 KB while typing
+  `big mac`.
 * **Other languages.** Word order is assumed to be English. Open Food Facts records a language per product, which
   could vary the rule when the index is built; Chrome's language detection could help with the query's language.
 * **Duplicates.** Whether collapsing same-name, same-energy products hides pack sizes people want to see.
