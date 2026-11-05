@@ -1,8 +1,8 @@
 # Food search: design
 
-Status: implemented, 2 November 2026 (whole world dataset; exact-word matching over a static index queried
-file by file from the browser; no server). The index is deployed to Cloudflare Pages by a GitHub Action and
-is never committed to git.
+Status: live since 5 November 2026 (whole world dataset; exact-word matching over a static index queried
+file by file from the browser; no server). The index is deployed to Cloudflare Pages by a GitHub Action, is
+never committed to git, and is served at `https://food-index.froussios.com/` (decision DR-14).
 Milestone M1 ([#3](https://github.com/Froussios/fitbit-nutrition-portal/issues/3)). Decision: [D3 #9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) (hosting). Work items: section 11.
 
 This document covers typing a food name and picking a product from a dropdown of matches. Barcode lookup
@@ -271,9 +271,11 @@ interprets Open Food Facts data; it just runs at build time.
 | **Total stored** | **~350–600 MB** |
 | Files | ~25 k |
 
-These are stored on the host; a user downloads only what section 5.1 lists. Network access to Open Food
-Facts was blocked when this was written; the product count comes from search results (about 4 M products
-in 2025).
+These are stored on the host; a user downloads only what section 5.1 lists. The estimates above were made
+before the first build. **Measured on the 2 November 2026 export:** 4,889,627 records read; 900,168 kept
+(3.68 M dropped for no usable energy, 290 k for no name, 16 k for implausible energy, 2 k obsolete);
+808,377 searchable after collapsing duplicates; 197,937 distinct words. The index is 195 MB in 18,009 files,
+none over 0.1 MB, and took 44 minutes to build on a GitHub runner.
 
 ### 5.5 Free hosts compared (whole dataset)
 
@@ -305,7 +307,11 @@ queried by an engine in the browser that fetches only what each search needs.** 
   this repository's `food-index-owner.json` marker (or to a new, empty one).
 * **No git history.** Each deploy replaces the previous one (Direct Upload with Wrangler, which uploads only
   changed files). The app stays on GitHub Pages; Pages sends `Access-Control-Allow-Origin: *` by default,
-  so the app can read the index from its `*.pages.dev` origin.
+  so the app can read the index from another origin.
+* **Custom domain.** The index is served at `food-index.froussios.com`, a CNAME (at GoDaddy) to the
+  project's `food-diary-index.pages.dev`. Some networks intercept `*.pages.dev`: the University of Sydney's
+  firewall re-signs its TLS with its own certificate authority, which browsers reject because of HSTS, so
+  the app saw only "Failed to fetch". A domain of our own is not treated that way.
 * **Share-alike for free.** The index is a derivative database under ODbL; publishing it openly, with the
   licence file at its root, is exactly what share-alike asks.
 * **Offline later.** Index files are plain cacheable files, so M2's offline mode ([#20](https://github.com/Froussios/fitbit-nutrition-portal/issues/20)) can keep the ones a
@@ -327,7 +333,7 @@ flowchart LR
     FC --> SFC["StaticFoodCatalog<br/>query engine"]
     FC -.->|"no index configured<br/>(dev, tests)"| Local["LocalFoodCatalog"]
   end
-  SFC -- "GET a few small files per search<br/>(CORS)" --> Pages["Cloudflare Pages<br/>food-diary-index.pages.dev<br/>~350–600 MB stored"]
+  SFC -- "GET a few small files per search<br/>(CORS)" --> Pages["Cloudflare Pages<br/>food-index.froussios.com<br/>195 MB stored"]
   subgraph GHA["GitHub Actions: food-index.yml"]
     Dump["Open Food Facts<br/>JSONL export"] --> Build["build-index<br/>slim · fromOffProduct · sort · tokenise"]
     Build --> Deploy["wrangler pages deploy"]
@@ -445,7 +451,7 @@ leading 0; the lookup tries both forms.
 
 | Variable | Meaning |
 |---|---|
-| `VITE_FOOD_INDEX_URL` | Base URL of the index, e.g. `https://food-diary-index.pages.dev/`. CI sets it from the `FOOD_INDEX_URL` repository variable. Default: `food-index/` next to the app, for a locally built index in `public/food-index/` (ignored by git). |
+| `VITE_FOOD_INDEX_URL` | Base URL of the index: `https://food-index.froussios.com/`. CI sets it from the `FOOD_INDEX_URL` repository variable (a repository variable, not a secret or an environment variable). Default: `food-index/` next to the app, for a locally built index in `public/food-index/` (ignored by git). |
 
 If no index is found there, the app logs a warning and uses `LocalFoodCatalog` over the sample foods.
 
@@ -459,8 +465,8 @@ If no index is found there, the app logs a warning and uses `LocalFoodCatalog` o
 
 A Node script (`pipeline/build-index.ts`, logic in `pipeline/index-builder.ts`) run by
 `.github/workflows/food-index.yml`, weekly and by hand. The workflow streams the export through the builder
-and deploys the output to the Cloudflare Pages project `food-diary-index` with `wrangler pages deploy`. Nothing
-is committed. To build locally from a downloaded export (into `public/food-index/`, ignored by git):
+and deploys the output to the Cloudflare Pages project `food-diary-index` with `wrangler pages deploy`, which
+serves it at `https://food-index.froussios.com/`. Nothing is committed. To build locally from a downloaded export (into `public/food-index/`, ignored by git):
 `npm run build:index -- --input openfoodfacts-products.jsonl.gz`.
 
 1. **Download** the Open Food Facts JSONL export, streamed and decompressed on the fly. If the runner is too
@@ -540,20 +546,21 @@ Cloudflare serves Pages from Australian edge locations; measure early from a pho
 
 ## 11. Work items
 
-| Order | Issue | What |
+| Issue | What | Status |
 |---|---|---|
-| 1 | [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) Decision D3 | Static index on Cloudflare Pages; no server |
-| 2 | [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) Index builder and `StaticFoodCatalog` | Sections 4, 5, 6, 7 |
-| 2 | [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Coverage spike | As soon as the builder runs locally |
-| 3 | [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Publish the food index | `food-index.yml` deploys to Cloudflare Pages weekly; CI points the app at it |
-| 4 | [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) Search-as-you-type UI | Sections 3, 8 |
-| 5 | [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Camera and manual entry, via `get()` |
-| 6 | [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) Recent foods | Unchanged; shows in the empty dropdown |
+| [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) Decision D3 | Static index on Cloudflare Pages; no server | Done (DR-14) |
+| [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) Index builder and `StaticFoodCatalog` | Sections 4, 5, 6, 7 | Done |
+| [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Publish the food index | `food-index.yml` deploys to Cloudflare Pages weekly; CI points the app at it | Done |
+| [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) Search-as-you-type UI | Sections 3, 8 | Done |
+| [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Verify M1 on the real index | Coverage list, relevance suite, bytes and latency on mobile, screen-reader pass, first scheduled refresh | Open |
+| [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Camera and manual entry, via `get()` | Open |
+| [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) Recent foods | Shows in the empty dropdown | Open |
 
 ## 12. Open questions
 
-* **Real sizes.** Products surviving the filters, the index size and its file count against Cloudflare
-  Pages' 20,000. Measured by the first build.
+* **File-count headroom.** The first real build used 18,009 of the 19,000-file budget; 11,365 of those are
+  prefix groups (many scripts and languages). The builder grows summary files to fit, but merging prefix
+  groups would restore headroom.
 * **Real bytes per search.** The relevance suite measures them; the estimates in section 5.1 are from
   back-of-envelope sizing.
 * **Browser or Worker.** Whether browser execution meets the latency budget on Australian mobile data.
