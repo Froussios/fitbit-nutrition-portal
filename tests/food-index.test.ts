@@ -323,6 +323,40 @@ describe("food index", () => {
     expect(await names(index, "fl")).toHaveLength(10);
   });
 
+  it("finds a 3-letter last word through its common expansions, beyond the candidates it would check", async () => {
+    const records = [
+      // More words starting "mac" than a short prefix expands to.
+      ...Array.from({ length: 20 }, (_, i) => product(`61${String(i).padStart(3, "0")}`, `Mac${"abcdefghijklmnopqrst"[i]}x dish`)),
+      // More candidates for "big" than get checked, all ranking ahead of the match.
+      ...Array.from({ length: 150 }, (_, i) => product(`62${String(i).padStart(3, "0")}`, `Big thing${i}`)),
+      product("63000", "Big macaroni cheese bake"),
+      product("63001", "Macaroni", { unique_scans_n: 100 }),
+      product("63002", "Macaroni", { brands: "Other", unique_scans_n: 100 }),
+    ];
+    const index = await FoodIndex.open(build(records).reader);
+    expect(await names(index, "big mac")).toEqual(["Big macaroni cheese bake"]);
+  });
+
+  it("falls back to checking candidates for a rare word beyond the common expansions", async () => {
+    // "fla" starts thousands of words here, each on one product, so this one isn't among the commonest.
+    const index = await FoodIndex.open(build([...FIXTURE, ...MANY]).reader);
+    expect(await names(index, "special fla")).toEqual([`Snack bar flavour${CHUNK_SIZE + 400} special`]);
+  });
+
+  it("doesn't let products already found use up the candidates it checks", async () => {
+    const records = [
+      // 20 words on two products each, so "macz" on one product is clearly not among the commonest expansions.
+      ...Array.from({ length: 20 }, (_, i) => product(`640${String(i).padStart(3, "0")}`, `Mac${"abcdefghijklmnopqrst"[i]}x dish`)),
+      ...Array.from({ length: 20 }, (_, i) => product(`641${String(i).padStart(3, "0")}`, `Mac${"abcdefghijklmnopqrst"[i]}x side`)),
+      // 97 candidates that don't match, then 5 found through the expansions, then the one only checking can find.
+      ...Array.from({ length: 97 }, (_, i) => product(`65${String(i).padStart(3, "0")}`, `Big thing${i}`)),
+      ...Array.from({ length: 5 }, (_, i) => product(`66${String(i).padStart(3, "0")}`, `Big macaroni v${i}`)),
+      product("67000", "Big macz one two"),
+    ];
+    const index = await FoodIndex.open(build(records).reader);
+    expect(await names(index, "big mac")).toContain("Big macz one two");
+  });
+
   it("answers no-match prefixes without errors", async () => {
     const index = await FoodIndex.open(build(FIXTURE).reader);
     expect(await names(index, "zz")).toEqual([]);

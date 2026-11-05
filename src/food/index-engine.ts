@@ -305,11 +305,14 @@ export class FoodIndex {
       const g = group[prefix];
       if (!g) return undefined;
       const [n, top] = g;
-      if (n > MAX_EXPANSIONS && top) {
+      if (n > MAX_EXPANSIONS) {
         // The precomputed list holds only the best IDs overall, so it rarely meets other words' lists.
         if (!alone) return "verify";
-        const ids = decodeIds(fromBase64(top));
-        return { head: new ListCursor(ids.length, async () => ids, budget, g), whole: false };
+        // It is empty when none of these words is the food in any product name.
+        if (top) {
+          const ids = decodeIds(fromBase64(top));
+          return { head: new ListCursor(ids.length, async () => ids, budget, g), whole: false };
+        }
       }
     }
     const words = await this.expansions(prefix, MAX_EXPANSIONS);
@@ -342,6 +345,14 @@ export class FoodIndex {
     if (q.prefix !== undefined && room() > 0) {
       const term = await this.prefixTerm(q.prefix, budget, entries.length === 0);
       if (term === "verify") {
+        // A 3-letter word tries its commonest expansions first, which fetches no text, and checks candidates
+        // only for what is left. Checking alone costs far more; expansions alone miss rarer words.
+        if (Array.from(q.prefix).length === 3) {
+          const words = await this.expansions(q.prefix, MAX_EXPANSIONS);
+          for (const scope of ["head", "name"] as const) {
+            hits.push(...(await this.nameMatches([...wordTerms(), this.termFor(words, false, budget)], scope, room(), hits, budget)));
+          }
+        }
         hits.push(...(await this.verified(wordTerms(), q.prefix, room(), hits, budget)));
         return this.inRankOrder(hits, q);
       }
@@ -464,11 +475,12 @@ export class FoodIndex {
     const check = async () => {
       const rows = await this.summaries(batch);
       rows.forEach((r, i) => {
-        if (hits.length < want && !skip.includes(batch[i]!) && productMatches(prefixOnly, r[1], r[2] ?? undefined)) hits.push(batch[i]!);
+        if (hits.length < want && productMatches(prefixOnly, r[1], r[2] ?? undefined)) hits.push(batch[i]!);
       });
       batch = [];
     };
     for await (const id of this.intersect(cursors as Cursor[], budget)) {
+      if (skip.includes(id)) continue;
       batch.push(id);
       checked++;
       if (batch.length === VERIFY_BATCH || checked >= MAX_VERIFIED) {
