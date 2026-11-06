@@ -228,6 +228,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       status.textContent = `Logged ${food.name}.`;
       timeTouched = false;
       time.value = toDateTimeLocalValue(new Date());
+      mealSelect.value = "";
     } catch (e) {
       status.textContent = errorMessage(e);
       status.classList.add("error");
