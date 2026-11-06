@@ -223,6 +223,14 @@ describe("toLoggedFoods", () => {
     expect(toLoggedFoods([point("e-mgx-ab12-off-123", "Oats (Blend 40)")])[0]!.label).toBe("Oats (Blend 40)");
   });
 
+  it("drops the amount however buildNutritionLogPoint formats it", () => {
+    for (const quantity of [40, 12.5, 1000, 1234.5]) {
+      const written = buildNutritionLogPoint({ food: oats, quantity, unit: "g", time }, { id: "e-mgx-ab12-smp-oats" });
+      expect(written.nutritionLog!.foodDisplayName).not.toBe(oats.name);
+      expect(toLoggedFoods([written])[0]!.label).toBe(oats.name);
+    }
+  });
+
   it("leaves out what the catalogue cannot load: custom foods, no food in the ID, other apps", () => {
     expect(toLoggedFoods([point("e-mgx-ab12-man-custom")])).toEqual([]);
     expect(toLoggedFoods([point("e-mgx-ab12-off")])).toEqual([]);
