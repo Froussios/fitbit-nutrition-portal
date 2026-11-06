@@ -21,6 +21,11 @@ export class HealthApiError extends Error {
   get accountNotLinked(): boolean {
     return this.reasons.includes("ACCOUNT_NOT_LINKED") || /ACCOUNT_NOT_LINKED/.test(this.message);
   }
+
+  /** The request got no answer: no connection, a CORS failure or a timeout. A write may still have arrived. */
+  get connectionFailed(): boolean {
+    return this.status === "NETWORK" || this.status === "TIMEOUT";
+  }
 }
 
 export type TokenProvider = (opts?: { forceRefresh?: boolean }) => Promise<string>;
@@ -41,6 +46,9 @@ export interface ListOptions {
  * The API sends CORS headers for any origin, so no proxy is needed.
  */
 export class HealthClient {
+  /** Told after each request whether it got an answer. Any HTTP response counts, even an error. */
+  onRequestDone?: (answered: boolean) => void;
+
   constructor(
     private readonly getToken: TokenProvider,
     private readonly fetchImpl: typeof fetch = (...a) => fetch(...a),
@@ -148,11 +156,13 @@ export class HealthClient {
             new HealthApiError(`Could not reach Google Health (${e.message}; ${call}).`, 0, "NETWORK")
           : e;
       log.error(`✗ ${call} failed after ${ms} ms`, describeError(error));
+      if (error instanceof HealthApiError) this.onRequestDone?.(false);
       throw error;
     } finally {
       clearTimeout(timer);
     }
     const ms = Math.round(performance.now() - started);
+    this.onRequestDone?.(true);
 
     let json: unknown;
     try {

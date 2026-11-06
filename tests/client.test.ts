@@ -83,7 +83,53 @@ describe("HealthClient errors", () => {
     };
     const err = (await new HealthClient(token, fail).getIdentity().catch((e: unknown) => e)) as HealthApiError;
     expect(err.status).toBe("NETWORK");
+    expect(err.connectionFailed).toBe(true);
     expect(err.message).toContain("Failed to fetch");
+  });
+});
+
+describe("HealthClient connection reporting", () => {
+  function reports(fetchImpl: typeof fetch, getToken: () => Promise<string> = token, timeoutMs?: number) {
+    const seen: boolean[] = [];
+    const client = new HealthClient(getToken, fetchImpl, undefined, timeoutMs);
+    client.onRequestDone = (answered) => seen.push(answered);
+    return { client, seen };
+  }
+
+  it("reports an answer for any HTTP response, even an error", async () => {
+    const ok = reports(respond(200, "{}"));
+    await ok.client.getIdentity();
+    expect(ok.seen).toEqual([true]);
+
+    const failed = reports(respond(500, "{}"));
+    const err = (await failed.client.getIdentity().catch((e: unknown) => e)) as HealthApiError;
+    expect(err.connectionFailed).toBe(false);
+    expect(failed.seen).toEqual([true]);
+  });
+
+  it("reports no answer when the network fails", async () => {
+    const { client, seen } = reports(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    await client.getIdentity().catch(() => undefined);
+    expect(seen).toEqual([false]);
+  });
+
+  it("reports no answer on a timeout", async () => {
+    const never: typeof fetch = (_i, init) =>
+      new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
+    const { client, seen } = reports(never, token, 50);
+    const err = (await client.getIdentity().catch((e: unknown) => e)) as HealthApiError;
+    expect(err.connectionFailed).toBe(true);
+    expect(seen).toEqual([false]);
+  });
+
+  it("says nothing about the connection when sign-in is needed", async () => {
+    const { client, seen } = reports(respond(200, "{}"), async () => {
+      throw new Error("sign in");
+    });
+    await client.getIdentity().catch(() => undefined);
+    expect(seen).toEqual([]);
   });
 });
 

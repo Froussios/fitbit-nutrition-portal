@@ -13,7 +13,7 @@ food definitions come from existing food databases.
   there and nowhere else. Syncing that log with other platforms is Google Health's job, not the app's.
 * **No custom backend.** Everything runs in the browser as a static site. Where that is not possible, the
   trade-off is written down in [DECISIONS.md](DECISIONS.md) instead of quietly adding a server.
-* **MVP = proof of concept:** sign in, write minimal entries, show the day. Food search, offline use,
+* **MVP = proof of concept:** sign in, write minimal entries, show the day. Food search,
   long-lived sessions and meals are post-MVP milestones (see [ROADMAP.md](ROADMAP.md)).
 
 ## 2. Verified facts

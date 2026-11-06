@@ -356,8 +356,8 @@ queried by an engine in the browser that fetches only what each search needs.** 
   custom domain is not intercepted there (tested 5 November 2026); that is an observation, not a guarantee.
 * **Share-alike for free.** The index is a derivative database under ODbL; publishing it openly, with the
   licence file at its root, is exactly what share-alike asks.
-* **Offline later.** Index files are plain cacheable files, so M2's offline mode ([#20](https://github.com/Froussios/fitbit-nutrition-portal/issues/20)) can keep the ones a
-  user has fetched.
+* **No offline search.** The app assumes a connection ([DR-18](DECISIONS.md)), so index files are not kept for
+  offline use. They are plain cacheable files, should that ever change.
 * **Privacy.** No query text leaves the browser. The host sees which index files are fetched, which hints at
   words searched, but nothing ties them to a person beyond the IP address.
 * **A way out.** If mobile latency disappoints, the Worker option (section 5.2) uses the same index and

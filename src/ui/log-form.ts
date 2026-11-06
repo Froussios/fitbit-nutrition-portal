@@ -12,11 +12,17 @@ import { summary } from "./format";
 
 const log = logger("log-form");
 
+export interface LogForm {
+  readonly element: HTMLElement;
+  /** Blocks submitting while the browser is offline; what the user entered stays in the form. */
+  setOffline(offline: boolean): void;
+}
+
 /**
  * Form for one diary entry. The food is found by searching the catalogue as
  * you type (docs/FOOD_SEARCH.md), or entered as a custom food per 100 g / 100 ml.
  */
-export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) => Promise<void>): HTMLElement {
+export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) => Promise<void>): LogForm {
   /** The chosen catalogue food, once its full nutrients have loaded. */
   let chosen: FoodItem | undefined;
   /** The custom-food row was chosen. */
@@ -24,6 +30,8 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
   /** A chosen food whose nutrients are still loading. */
   let loading: string | undefined;
   let choice = 0;
+  let saving = false;
+  let offline = false;
 
   // Custom food fields, values per 100 g or 100 ml.
   const cName = el("input", { id: "c-name", type: "text", placeholder: "e.g. Homemade muesli", maxlength: 80 });
@@ -55,6 +63,13 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
   const preview = el("p", { class: "preview", "aria-live": "polite" });
   const submit = el("button", { type: "submit", class: "primary" }, "Log entry");
   const status = el("p", { class: "status", role: "status" });
+  const offlineNote = el("p", { class: "status error", hidden: true }, "Logging needs a connection.");
+
+  const syncSubmit = () => {
+    submit.disabled = saving || offline;
+    submit.classList.toggle("saving", saving);
+    offlineNote.hidden = !offline;
+  };
 
   const currentFood = (): FoodItem | undefined => {
     if (!custom) return chosen;
@@ -207,6 +222,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     el("div", { class: "row" }, field("Meal", mealSelect), field("Time", time)),
     preview,
     el("div", { class: "actions" }, submit),
+    offlineNote,
     status,
   );
 
@@ -220,7 +236,8 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       status.classList.add("error");
       return;
     }
-    submit.disabled = true;
+    saving = true;
+    syncSubmit();
     status.textContent = "Saving to Google Health…";
     status.classList.remove("error");
     try {
@@ -233,14 +250,21 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       status.textContent = errorMessage(e);
       status.classList.add("error");
     } finally {
-      submit.disabled = false;
+      saving = false;
+      syncSubmit();
     }
   });
 
   syncCustomFields();
   refreshUnits();
   refreshPreview();
-  return form;
+  return {
+    element: form,
+    setOffline: (value) => {
+      offline = value;
+      syncSubmit();
+    },
+  };
 }
 
 function numberInput(id: string, min: string, step: string): HTMLInputElement {
