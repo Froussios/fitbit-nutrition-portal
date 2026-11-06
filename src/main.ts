@@ -10,7 +10,7 @@ import { CombinedCatalog } from "./food/combined-catalog";
 import genericsUrl from "./food/data/generics.json?url";
 import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
-import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, connectionBanner, type ConnectionState } from "./health/connection";
+import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, connectionBanner, deleteFailed, type ConnectionState } from "./health/connection";
 import { buildNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, type DiaryEntry, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
@@ -56,7 +56,11 @@ class App {
   private notice = "";
   private signInError = "";
   private loading = false;
+  /** The connection came back during a load that may have failed: load again when it ends. */
+  private reloadAfterLoad = false;
   private listError = "";
+  /** A delete lost to the connection; shown until the next refresh, as the banner may clear at once. */
+  private deleteError = "";
   private ready = false;
   /** Why connecting to Google Health failed; shown with a Retry button instead of "Connecting…". */
   private connectError = "";
@@ -120,7 +124,8 @@ class App {
   /** The browser is back online: pick up what the outage interrupted. */
   private reconnect() {
     if (!this.auth.isSignedIn) return;
-    if (this.ready) void this.loadToday();
+    if (this.loading) this.reloadAfterLoad = true;
+    else if (this.ready) void this.loadToday();
     else if (this.connectError) void this.afterSignIn();
   }
 
@@ -215,6 +220,7 @@ class App {
     if (this.loading) return;
     this.loading = true;
     this.listError = "";
+    this.deleteError = "";
     this.renderDiary();
     try {
       const today = civilDate(new Date());
@@ -246,6 +252,10 @@ class App {
     } finally {
       this.loading = false;
       this.renderDiary();
+      if (this.reloadAfterLoad) {
+        this.reloadAfterLoad = false;
+        if (this.auth.isSignedIn) void this.loadToday();
+      }
     }
   }
 
@@ -285,6 +295,7 @@ class App {
   private async remove(entry: DiaryEntry) {
     if (!confirm(`Delete "${entry.displayName}" from Google Health?`)) return;
     appLog.info(`Deleting ${entry.name}`);
+    let failure = "";
     try {
       await this.api.deleteNutritionLogs([entry.name]);
       this.dropPending(entry.id);
@@ -292,9 +303,12 @@ class App {
       this.renderDiary();
     } catch (e) {
       appLog.error("Deleting the entry failed", describeError(e));
-      this.handleError(e);
+      if (isConnectionFailure(e)) failure = deleteFailed(entry.displayName);
+      else this.handleError(e);
     }
     await this.loadToday();
+    this.deleteError = failure;
+    this.renderDiary();
   }
 
   private dropPending(key: string) {
@@ -321,8 +335,7 @@ class App {
       this.render();
       return;
     }
-    // A connection failure is already on show in the connection banner.
-    if (rerender && !isConnectionFailure(e)) {
+    if (rerender) {
       this.notice = errorMessage(e);
       this.render();
     }
@@ -414,8 +427,9 @@ class App {
   }
 
   private renderDiary() {
-    this.diaryStatus.textContent = this.loading ? "Loading…" : this.listError;
-    this.diaryStatus.classList.toggle("error", !this.loading && Boolean(this.listError));
+    const problem = [this.deleteError, this.listError].filter(Boolean).join(" ");
+    this.diaryStatus.textContent = this.loading ? "Loading…" : problem;
+    this.diaryStatus.classList.toggle("error", !this.loading && Boolean(problem));
     // With nothing loaded, an error must not read as "Nothing logged today yet".
     const unknown = this.entries.length === 0 && Boolean(this.listError);
     replaceChildren(

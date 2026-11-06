@@ -57,7 +57,7 @@ export function connectionBanner(state: ConnectionState): string | undefined {
     case "offline":
       return "You are offline. Logging and deleting will not work until your connection is back. Nothing is saved on this device.";
     case "unreachable":
-      return "Google Health cannot be reached. Logging and deleting will not work until the connection is back. Nothing is saved on this device.";
+      return "Google Health is not answering, so logging and deleting may not work right now. Nothing is saved on this device.";
   }
 }
 
@@ -66,8 +66,12 @@ export function connectionBanner(state: ConnectionState): string | undefined {
  * and logging again creates a second entry, so the user has to check rather than just retry.
  */
 export const LOG_NOT_CONFIRMED =
-  "Google Health could not be reached, so this entry may not have been saved. When you are back online, check today's diary before logging it again.";
+  "Google Health did not answer, so this entry may not have been saved. When the connection is back, check today's diary before logging it again.";
 
-export const DIARY_NOT_LOADED = "Could not load today's diary because Google Health could not be reached. Any entries shown may be out of date.";
+export const DIARY_NOT_LOADED = "Could not load today's diary because Google Health did not answer. Any entries shown may be out of date.";
 
-export const CONNECT_FAILED = "Google Health could not be reached. Check your connection, then press Retry.";
+export const CONNECT_FAILED = "Google Health did not answer. Check your connection, then press Retry.";
+
+export function deleteFailed(name: string): string {
+  return `Could not delete "${name}" because Google Health did not answer.`;
+}

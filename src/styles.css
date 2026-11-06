@@ -106,6 +106,7 @@ button {
   cursor: pointer;
 }
 button:disabled { opacity: 0.6; cursor: not-allowed; }
+button.saving { cursor: progress; }
 button.primary {
   background: var(--accent);
   border-color: var(--accent);

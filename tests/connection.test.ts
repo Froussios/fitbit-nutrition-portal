@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConnectionMonitor, connectionBanner, type ConnectionEnv, type ConnectionState } from "../src/health/connection";
+import { ConnectionMonitor, connectionBanner, deleteFailed, type ConnectionEnv, type ConnectionState } from "../src/health/connection";
 
 function setup(onLine = true) {
   const listeners: Partial<Record<"online" | "offline", () => void>> = {};
@@ -72,9 +72,15 @@ describe("ConnectionMonitor", () => {
 });
 
 describe("connectionBanner", () => {
-  it("says logging will not work whenever the connection is down", () => {
+  it("says logging will not work when offline, and may not work when requests go unanswered", () => {
     expect(connectionBanner("online")).toBeUndefined();
     expect(connectionBanner("offline")).toMatch(/offline.*Logging .*will not work/);
-    expect(connectionBanner("unreachable")).toMatch(/cannot be reached.*Logging .*will not work/);
+    expect(connectionBanner("unreachable")).toMatch(/not answering.*logging .*may not work/);
+  });
+});
+
+describe("deleteFailed", () => {
+  it("names the entry", () => {
+    expect(deleteFailed("Toast")).toBe('Could not delete "Toast" because Google Health did not answer.');
   });
 });

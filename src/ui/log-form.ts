@@ -67,6 +67,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
 
   const syncSubmit = () => {
     submit.disabled = saving || offline;
+    submit.classList.toggle("saving", saving);
     offlineNote.hidden = !offline;
   };
 
