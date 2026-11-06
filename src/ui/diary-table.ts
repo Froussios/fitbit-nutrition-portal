@@ -1,3 +1,4 @@
+import { SOURCE_TAGS } from "../core/food";
 import { sumProfiles } from "../core/nutrients";
 import { mealLabel, type DiaryEntry } from "../health/mapping";
 import { el } from "./dom";
@@ -11,11 +12,7 @@ export interface DiaryTableOptions {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  off: "Open Food Facts",
-  afcd: "AFCD",
-  ausnut: "AUSNUT",
-  fndds: "USDA FNDDS",
-  usda: "USDA",
+  ...SOURCE_TAGS,
   sample: "sample food",
   manual: "custom food",
 };
