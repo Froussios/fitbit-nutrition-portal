@@ -12,11 +12,7 @@ export interface DiaryTableOptions {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  off: SOURCE_TAGS.off,
-  afcd: SOURCE_TAGS.afcd,
-  ausnut: SOURCE_TAGS.ausnut,
-  fndds: SOURCE_TAGS.fndds,
-  usda: SOURCE_TAGS.usda,
+  ...SOURCE_TAGS,
   sample: "sample food",
   manual: "custom food",
 };
