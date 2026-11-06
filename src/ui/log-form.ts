@@ -2,7 +2,7 @@ import { nutrientsForAmount, type FoodItem } from "../core/food";
 import { kjToKcal } from "../core/nutrients";
 import { toDateTimeLocalValue } from "../core/time";
 import { PORTION_PREFIX, selectableUnits, type BaseUnit } from "../core/units";
-import { defaultMealType, MEAL_TYPES, type LogDraft } from "../health/mapping";
+import { MEAL_TYPES, type LogDraft } from "../health/mapping";
 import type { MealType } from "../health/types";
 import type { FoodCatalog } from "../food/catalog";
 import { describeError, logger } from "../debug/log";
@@ -48,7 +48,8 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
   const mealSelect = el(
     "select",
     { id: "meal" },
-    ...MEAL_TYPES.map((m) => el("option", { value: m.value, selected: m.value === defaultMealType(now) }, m.label)),
+    el("option", { value: "" }, "No meal"),
+    ...MEAL_TYPES.map((m) => el("option", { value: m.value }, m.label)),
   );
   const time = el("input", { id: "time", type: "datetime-local", value: toDateTimeLocalValue(now), required: true });
   const preview = el("p", { class: "preview", "aria-live": "polite" });
@@ -223,7 +224,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     status.textContent = "Saving to Google Health…";
     status.classList.remove("error");
     try {
-      await onSubmit({ food, quantity: Number(quantity.value), unit: unitSelect.value, mealType: mealSelect.value as MealType, time: when });
+      await onSubmit({ food, quantity: Number(quantity.value), unit: unitSelect.value, ...(mealSelect.value ? { mealType: mealSelect.value as MealType } : {}), time: when });
       status.textContent = `Logged ${food.name}.`;
       timeTouched = false;
       time.value = toDateTimeLocalValue(new Date());
