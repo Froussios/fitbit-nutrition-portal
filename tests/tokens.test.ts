@@ -77,7 +77,7 @@ describe("headWords", () => {
 });
 
 describe("fixed ranking", () => {
-  it("puts unbranded products first, then shorter names, then shorter brands, then popular ones", () => {
+  it("puts branded products first, then shorter names, then shorter brands, then popular ones", () => {
     const items = [
       { branded: true, nameWordCount: 1, productWordCount: 3, sameNameCount: 1, popularity: 9, key: "long brand" },
       { branded: true, nameWordCount: 1, productWordCount: 2, sameNameCount: 1, popularity: 0, key: "short brand" },
@@ -86,7 +86,7 @@ describe("fixed ranking", () => {
       { branded: false, nameWordCount: 2, productWordCount: 2, sameNameCount: 1, popularity: 3, key: "roses chocolate" },
       { branded: false, nameWordCount: 1, productWordCount: 1, sameNameCount: 1, popularity: 0, key: "chocolate" },
     ];
-    expect([...items].sort(compareRank).map((i) => i.key)).toEqual(["chocolate", "milk chocolate", "probiotic chocolate", "roses chocolate", "short brand", "long brand"]);
+    expect([...items].sort(compareRank).map((i) => i.key)).toEqual(["short brand", "long brand", "chocolate", "milk chocolate", "probiotic chocolate", "roses chocolate"]);
   });
 
   it("counts a repeated word once", () => {
@@ -109,7 +109,7 @@ describe("matchRank", () => {
       .map(([name, brand]) => (brand ? `${name} (${brand})` : name));
   };
 
-  it("orders a one-word search: generic, then branded names, then brand-only", () => {
+  it("orders a one-word search: branded names, then no brand listed, then brand-only", () => {
     expect(
       order("vanilla", [
         ["Yogurt", "Vanilla Queen"],
@@ -118,7 +118,7 @@ describe("matchRank", () => {
         ["Vanilla", "Vanilla Queen"],
         ["Vanilla extract"],
       ]),
-    ).toEqual(["Vanilla extract", "Vanilla (Vanilla Queen)", "Vanilla (Queen)", "Vanilla extract (Queen)", "Yogurt (Vanilla Queen)"]);
+    ).toEqual(["Vanilla (Vanilla Queen)", "Vanilla (Queen)", "Vanilla extract (Queen)", "Vanilla extract", "Yogurt (Vanilla Queen)"]);
   });
 
   it("orders a two-word search by what the query leaves unexplained", () => {
@@ -140,7 +140,7 @@ describe("matchRank", () => {
         ["Vegemite", "Vegemite"],
         ["Vegemite"],
       ]),
-    ).toEqual(["Vegemite", "Vegemite (Vegemite)", "Vegemite (Bega)", "Vegemite pretzels"]);
+    ).toEqual(["Vegemite (Vegemite)", "Vegemite (Bega)", "Vegemite", "Vegemite pretzels"]);
     expect(
       order("chocolate", [
         ["Chocolate milk"],
@@ -148,7 +148,7 @@ describe("matchRank", () => {
         ["Dark chocolate", "Lindt"],
         ["Milk chocolate"],
       ]),
-    ).toEqual(["Milk chocolate", "Chocolate (Lindt)", "Dark chocolate (Lindt)", "Chocolate milk"]);
+    ).toEqual(["Chocolate (Lindt)", "Dark chocolate (Lindt)", "Milk chocolate", "Chocolate milk"]);
     expect(order("milk", [["Milk chocolate"], ["Whole milk"]])).toEqual(["Whole milk", "Milk chocolate"]);
   });
 
@@ -160,17 +160,17 @@ describe("matchRank", () => {
         ["Vegemite", "Vegemite"],
         ["Vegemite"],
       ]),
-    ).toEqual(["Vegemite", "Vegemite (Vegemite)", "Vegemite (Bega)", "Vegemite pretzels (Bega)"]);
+    ).toEqual(["Vegemite (Vegemite)", "Vegemite (Bega)", "Vegemite", "Vegemite pretzels (Bega)"]);
     expect(order("vegemite", [["Vegemite scroll"], ["Vegemite", "Vegemite"]])).toEqual(["Vegemite (Vegemite)", "Vegemite scroll"]);
   });
 
   it("puts whole words before longer words that start the same, even generic ones", () => {
-    expect(order("coke", [["Krim cokelat"], ["Coke", "Coca-Cola"], ["Coke"]])).toEqual(["Coke", "Coke (Coca-Cola)", "Krim cokelat"]);
+    expect(order("coke", [["Krim cokelat"], ["Coke", "Coca-Cola"], ["Coke"]])).toEqual(["Coke (Coca-Cola)", "Coke", "Krim cokelat"]);
     expect(order("big mac", [["Macaroni", "Big Win"], ["Big Mac", "Maccas"], ["Big Mac Bowl"]])).toEqual(["Big Mac (Maccas)", "Big Mac Bowl", "Macaroni (Big Win)"]);
   });
 
   it("does not treat a brand with no countable words as used up", () => {
-    expect(order("chocolate", [["Chocolate", "M&M's"], ["Dark chocolate"], ["Chocolate", "Chocolate"]])).toEqual(["Chocolate (Chocolate)", "Dark chocolate", "Chocolate (M&M's)"]);
+    expect(order("chocolate", [["Chocolate", "M&M's"], ["Dark chocolate"], ["Chocolate", "Chocolate"]])).toEqual(["Chocolate (Chocolate)", "Chocolate (M&M's)", "Dark chocolate"]);
   });
 
   it("does not treat a name with stray letters as used up", () => {
@@ -183,10 +183,10 @@ describe("matchRank", () => {
   });
 
   it("counts a hyphenated word as its parts when deciding what the query uses up", () => {
-    const usedUp = (query: string, name: string) => matchRank(parseQuery(query), name)[1] === 0;
-    expect(usedUp("weet bix ", "Weet-Bix")).toBe(true);
-    expect(usedUp("weetbix ", "Weet-Bix")).toBe(false);
-    expect(usedUp("weetbix ", "Weetbix")).toBe(true);
+    const usedUp = (query: string, name: string, brand: string) => matchRank(parseQuery(query), name, brand)[1] === 0;
+    expect(usedUp("weet bix ", "Weet-Bix", "Bix")).toBe(true);
+    expect(usedUp("weetbix ", "Weet-Bix", "Weetbix")).toBe(false);
+    expect(usedUp("weetbix ", "Weetbix", "Weetbix")).toBe(true);
   });
 
   it("treats a joined word as covering its parts", () => {
@@ -205,5 +205,12 @@ describe("highlightRuns", () => {
 
   it("marks a hyphenated word whose joined form matched", () => {
     expect(highlightRuns("Weet-Bix", parseQuery("weetbix"))).toEqual([{ text: "Weet-Bix", match: true }]);
+  });
+});
+
+describe("matchRank and products with no brand", () => {
+  it("doesn't count a product with no brand as used up, because generic foods cover that", () => {
+    expect(matchRank(parseQuery("vegemite "), "Vegemite")[1]).toBe(1);
+    expect(matchRank(parseQuery("vegemite "), "Vegemite", "Vegemite")[1]).toBe(0);
   });
 });

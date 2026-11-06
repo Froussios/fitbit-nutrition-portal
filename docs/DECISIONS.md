@@ -81,6 +81,7 @@ features (M2), long-lived sessions (M3) and custom meals (M4) are post-MVP miles
 data (M1).
 
 ### DR-12 Food search starts with Open Food Facts only
+Revised by DR-16.
 **Decision.** M1 food search indexes Open Food Facts products only. Generic foods (AUSNUT / OpenNutrition)
 are parked ([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38)).
 **Why.** Owner decision (2 November 2026): one source first, to get search working end to end.
@@ -110,6 +111,7 @@ custom domain replaced `*.pages.dev` after the University of Sydney's firewall w
 the index outgrows Cloudflare Pages' 20,000 files, or mobile latency needs the engine in a Worker.
 
 ### DR-15 Food search assumes the generic product
+Where generic foods come from, and the order of products with no brand, revised by DR-16.
 **Decision.** Unless given evidence otherwise, assume the generic product. Whole-word matches in the name come
 first; among them, products the query uses up entirely, then products where a query word is the food and not its
 flavour (judged by word position), then products with no brand before branded ones, then the fewest name words the
@@ -123,3 +125,22 @@ there is nothing more to type to reach it: `Vegemite (Vegemite)` can't be reache
 without fetching their text. Index format 3. "No brand" is the only available signal for generic, and it is an imperfect one.
 **Reopen if.** Unbranded entries prove too unreliable to rank first; a popularity floor or real generic data
 ([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38)) would be the next step.
+
+### DR-16 Generic foods come from authoritative sources, in a small file searched in the browser
+**Decision.** Generic foods come from AFCD (FSANZ) and USDA FNDDS, concatenated into one committed file of about
+310 KB gzipped that the browser downloads once and searches locally, and they are shown first. Open Food Facts holds
+products: those with no brand are labelled "No brand listed", rank below branded ones, and no longer count as
+generic. Every row shows a tag naming its source. Sources are never joined on names and their values are never
+combined. USDA foods appear only when AFCD has fewer than 3 foods where a query word is the food. Only authoritative
+sources are added, and each diary entry's ID records its source
+([FOOD_SEARCH.md](FOOD_SEARCH.md#13-generic-foods)).
+**Why.** Owner decisions (5 November 2026). Open Food Facts' crowdsourced entries disagree and many are wrong:
+unbranded `Vegemite` says 9 kcal, `Dark chocolate` 1 kcal. The tag lets the owner tell which database causes a
+problem. Name matching fails even within one agency (AFCD and AUSNUT share 1,201 keys, 482 of them with the same
+name), and authorities' values differ for real reasons. FNDDS is included because US sources are acceptable if they
+are high quality, and it finds foods AFCD lacks.
+**Consequence.** AFCD's licence requires its statements to travel with the data (`public/generics-LICENSE.txt`).
+Only the Australian foods have few serving measures until AUSNUT is added.
+**Reopen if.** FSANZ confirms AUSNUT 2023 can be redistributed
+([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38)), or the file grows enough to matter.
+

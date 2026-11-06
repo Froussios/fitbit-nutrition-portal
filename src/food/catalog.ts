@@ -27,13 +27,13 @@ export interface SearchOptions {
  * order, the last word may be a prefix, no typo tolerance. Ordering (DR-15):
  * see matchRank(). Whole-word matches in the name come first, products the query
  * uses up entirely first among them, then products where a query word is the food
- * and not its flavour, then unbranded before branded, then the fewest name words
+ * and not its flavour, then branded before no brand listed, then the fewest name words
  * the query does not account for; products that only matched on their brand come last.
  */
 export interface FoodCatalog {
   /** Shown in the debug log and attribution line. */
   readonly label: string;
-  readonly attribution?: { readonly text: string; readonly href: string };
+  readonly attributions?: readonly { readonly text: string; readonly href: string }[];
   search(query: string, options?: SearchOptions): Promise<FoodSearchHit[]>;
   /** The full food: on choosing a search hit, or by barcode. */
   get(ref: FoodRef, options?: { readonly signal?: AbortSignal }): Promise<FoodItem | undefined>;

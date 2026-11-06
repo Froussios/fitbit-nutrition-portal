@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.pipeline.json",
     "test": "vitest run",
-    "build:index": "node --max-old-space-size=6144 --import tsx pipeline/build-index.ts"
+    "build:index": "node --max-old-space-size=6144 --import tsx pipeline/build-index.ts",
+    "build:generics": "node --import tsx pipeline/build-generics.ts"
   },
   "devDependencies": {
     "@types/google.accounts": "^0.0.18",

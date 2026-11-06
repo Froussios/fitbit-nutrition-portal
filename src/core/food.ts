@@ -8,10 +8,28 @@ import { toBaseAmount, type BaseUnit, type Measurable, type Portion } from "./un
  */
 export type FoodSource =
   | "off" // Open Food Facts, id = barcode
-  | "ausnut" // AUSNUT / AFCD, id = food key
-  | "usda" // USDA FoodData Central, id = fdcId
+  | "afcd" // Australian Food Composition Database (FSANZ), id = public food key
+  | "ausnut" // AUSNUT (FSANZ), id = public food key
+  | "fndds" // USDA Food and Nutrient Database for Dietary Studies, id = fdcId
+  | "usda" // Other USDA FoodData Central data, id = fdcId
   | "sample" // Built-in sample catalogue (proof of concept)
   | "manual"; // Typed in by the user
+
+/** The short tag shown wherever a food appears, so a bad value can be traced to its database. */
+export const SOURCE_TAGS: Readonly<Record<FoodSource, string>> = {
+  off: "OFF",
+  afcd: "AFCD",
+  ausnut: "AUSNUT",
+  fndds: "FNDDS",
+  usda: "USDA",
+  sample: "Sample",
+  manual: "Custom",
+};
+
+/** Authoritative food composition data: only these count as generic foods, not whatever lacks a brand. */
+export function isGenericSource(source: FoodSource): boolean {
+  return source === "afcd" || source === "ausnut" || source === "fndds" || source === "usda";
+}
 
 export interface FoodRef {
   readonly source: FoodSource;

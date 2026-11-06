@@ -20,7 +20,9 @@ const MAX_LEN = 63;
 
 const SOURCE_CODES: Record<FoodSource, string> = {
   off: "off",
+  afcd: "afcd",
   ausnut: "aus",
+  fndds: "fnds",
   usda: "usda",
   sample: "smp",
   manual: "man",

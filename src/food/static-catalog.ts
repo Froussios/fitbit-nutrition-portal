@@ -10,7 +10,7 @@ import { fromSummaryRow, isBarcode } from "./index-format";
  * browser, fetching only the few small index files each query needs.
  */
 export class StaticFoodCatalog implements FoodCatalog {
-  readonly attribution = { text: "Food data: Open Food Facts (ODbL)", href: "https://world.openfoodfacts.org" };
+  readonly attributions = [{ text: "Products: Open Food Facts (ODbL)", href: "https://world.openfoodfacts.org" }];
   private index?: Promise<FoodIndex>;
   /** Product IDs of recent search hits, so choosing one skips the barcode lookup. */
   private readonly idByCode = new Map<string, number>();

@@ -56,7 +56,7 @@ Not scheduled in any milestone. Tracked under [#7 Later](https://github.com/Frou
 | [#27](https://github.com/Froussios/fitbit-nutrition-portal/issues/27) Contribute missing foods back to Open Food Facts | Depends on the mirror (M1); best done with the user's own Open Food Facts account |
 | [#28](https://github.com/Froussios/fitbit-nutrition-portal/issues/28) OAuth verification and security assessment | Only needed beyond 100 users |
 | [#29](https://github.com/Froussios/fitbit-nutrition-portal/issues/29) Identified logs against Google `food` resources | Depends on what `food` list returns; cannot replace our catalogue |
-| [#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38) Generic foods (AUSNUT / OpenNutrition) | M1 starts with Open Food Facts only (DR-12); first lever if coverage falls short |
+| [#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38) More generic food sources (AUSNUT 2023) | AFCD and USDA FNDDS are in (DR-16); AUSNUT adds Australian dishes and serving measures once FSANZ confirms its licence |
 
 ## Not planned
 

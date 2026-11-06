@@ -1,0 +1,28 @@
+Generic foods in this app come from two sources. Each row keeps the values of its one source.
+
+AUSTRALIAN FOOD COMPOSITION DATABASE, RELEASE 3 (source tag: AFCD)
+(c) Food Standards Australia New Zealand. https://www.foodstandards.gov.au/science-data/food-nutrient-databases/afcd
+Licensed under the AFCD Data User Licence Agreement, which is based on a Creative Commons
+Attribution-ShareAlike 3.0 Australia licence, and this derived data is distributed under the same agreement:
+https://foodstandards.gov.au/science-data/monitoringnutrients/afcd/datauserlicenceagreement
+
+Limitation of data: There are limitations associated with food composition databases. Food composition
+data used in the database or databases may represent an average of the nutrient content of a particular
+sample of foods and ingredients, determined at a particular time. The nutrient composition of foods and
+ingredients can vary substantially between batches and brands because of a number of factors, including
+changes in season, processing practices and ingredient source, and methods of calculation.
+
+This work is based on Australian data, and Australian data may not be appropriate for use in other countries.
+
+Changes made: energy converted from kJ to kcal; a subset of nutrients selected and converted to grams;
+foods for infants and human milk removed. FSANZ does not endorse this app or this use of the data.
+
+USDA FOOD AND NUTRIENT DATABASE FOR DIETARY STUDIES 2021-2023 (source tag: FNDDS)
+From USDA FoodData Central, https://fdc.nal.usda.gov/. U.S. Public Domain.
+
+Changes made: a subset of nutrients selected and converted to grams; fibre subtracted from carbohydrate
+to match the Australian definition; foods for infants and human milk removed. USDA does not endorse this
+app or this use of the data.
+
+Branded products in this app come from Open Food Facts (https://world.openfoodfacts.org), under the Open
+Database License. They are published separately from this data, in the food index.

@@ -99,7 +99,7 @@ Google `food` resources. Anonymous logs cannot be updated, so a future edit is d
 e-<logged-at base36>-<random4>-<source>[-<food id>]     e.g. e-mvxb00vd-9gcl-smp-oats
 ```
 
-`source` is `off`, `aus`, `usda`, `smp` (sample) or `man` (manual). The food ID is dropped when it does not
+`source` is `off`, `afcd`, `aus` (AUSNUT), `fnds` (USDA FNDDS), `usda`, `smp` (sample) or `man` (manual), so usage per database can be counted from the diary. The food ID is dropped when it does not
 fit in 63 characters or is not ID-safe.
 
 ### 4.4 Reading the diary
@@ -171,7 +171,7 @@ The app **never queries the public Open Food Facts API**. Its read limits (about
   `food-index.froussios.com`. The browser runs the search itself but
   fetches only the index files each query needs, never the whole index (data use: FOOD_SEARCH.md section 9.1). ODbL allows this, with
   attribution and share-alike on the database. No server and no monthly cost (DR-14). Generic
-  foods (AUSNUT / OpenNutrition) come later (DR-12). Full design: [FOOD_SEARCH.md](FOOD_SEARCH.md).
+  foods come from authoritative sources, AFCD and USDA FNDDS, in a small file searched in the browser (DR-16). Full design: [FOOD_SEARCH.md](FOOD_SEARCH.md).
 
 ## 7. Decisions, milestones and spikes
 

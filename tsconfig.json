@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "tests", "pipeline/index-builder.ts", "vite.config.ts"]
+  "include": ["src", "tests", "pipeline/index-builder.ts", "pipeline/generics-builder.ts", "vite.config.ts"]
 }

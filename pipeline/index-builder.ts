@@ -189,11 +189,11 @@ export class IndexBuilder {
     this.counts.duplicates = duplicates.length;
 
     // What a search needs to rank a product from its ID alone.
-    const brandedFrom = searchable.findIndex((d) => d.sum[2]);
+    const unbrandedFrom = searchable.findIndex((d) => !d.sum[2]);
     const bands: [number, number, number][] = [];
     searchable.forEach((d, id) => {
       const last = bands[bands.length - 1];
-      if (!last || last[1] !== d.nameWordCount || last[2] !== d.productWordCount) bands.push([id, d.nameWordCount, d.productWordCount]);
+      if (!last || id === unbrandedFrom || last[1] !== d.nameWordCount || last[2] !== d.productWordCount) bands.push([id, d.nameWordCount, d.productWordCount]);
     });
 
     // Product lists: built in ID order, so each list is already sorted by rank.
@@ -347,7 +347,7 @@ export class IndexBuilder {
       sumPerFile,
       detPerFile,
       dict: dictStarts,
-      brandedFrom: brandedFrom < 0 ? searchable.length : brandedFrom,
+      unbrandedFrom: unbrandedFrom < 0 ? searchable.length : unbrandedFrom,
       bands,
       licence:
         "Contains information from Open Food Facts (https://world.openfoodfacts.org), made available under the Open Database License (ODbL) 1.0.",

@@ -1,2 +1,4 @@
 # Generated food index (pipeline/build-index.ts): no text diffs, collapsed in GitHub's diff view.
 public/food-index/** -diff linguist-generated=true
+# Generated generic foods (pipeline/build-generics.ts).
+src/food/data/generics.json -diff linguist-generated=true
