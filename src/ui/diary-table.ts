@@ -8,6 +8,8 @@ export interface DiaryTableOptions {
   readonly entries: readonly DiaryEntry[];
   /** IDs written in this session that the API has not returned yet. */
   readonly pendingIds: ReadonlySet<string>;
+  /** Deleting needs a connection, so the buttons are disabled while the browser is offline. */
+  readonly offline: boolean;
   readonly onDelete: (entry: DiaryEntry) => void;
 }
 
@@ -17,7 +19,7 @@ const SOURCE_LABELS: Record<string, string> = {
   manual: "custom food",
 };
 
-export function renderDiaryTable({ entries, pendingIds, onDelete }: DiaryTableOptions): HTMLElement {
+export function renderDiaryTable({ entries, pendingIds, offline, onDelete }: DiaryTableOptions): HTMLElement {
   if (entries.length === 0) {
     return el("p", { class: "empty" }, "Nothing logged today yet.");
   }
@@ -54,7 +56,11 @@ export function renderDiaryTable({ entries, pendingIds, onDelete }: DiaryTableOp
               {},
               // The write scope only covers entries this app created.
               e.own &&
-                el("button", { type: "button", class: "icon", title: "Delete entry", "aria-label": `Delete ${e.displayName}`, onclick: () => onDelete(e) }, "✕"),
+                el(
+                  "button",
+                  { type: "button", class: "icon", title: offline ? "Deleting needs a connection" : "Delete entry", "aria-label": `Delete ${e.displayName}`, disabled: offline, onclick: () => onDelete(e) },
+                  "✕",
+                ),
             ),
           ),
         ),

@@ -154,3 +154,15 @@ while listing only the other four values for this field.
 Google does not allow editing logs created from a typed-in food. The diary shows them with a dash.
 **Reopen if.** Google Health rejects or misplaces entries with no meal.
 
+### DR-18 No offline queue: the app assumes a connection and says when it has none
+**Decision.** Entries are never queued or stored on the device. When the browser is offline or Google Health cannot
+be reached, a banner says logging will not work and nothing is saved on the device. While the browser reports offline,
+logging and deleting are disabled, and background refreshes wait until it is back. When requests only go unanswered,
+the controls stay enabled, because that can be a blip and trying is how the app finds out it has passed.
+What the user typed stays in the form. Automatic retries are out too.
+**Why.** Owner decision ([#20](https://github.com/Froussios/fitbit-nutrition-portal/issues/20), 6 November 2026): this is a website, so assume a connection, and if there
+is none, fail cleanly and show it.
+**Consequence.** A write whose answer is lost may still have been saved, and logging again sends a new ID, so it would
+create a second entry. The error therefore asks the user to check the diary first. Client-supplied IDs still carry the
+food reference, but nothing relies on them for idempotency.
+**Reopen if.** Logging without a connection becomes a real need, for example once the app is an installed PWA ([#16](https://github.com/Froussios/fitbit-nutrition-portal/issues/16)).
