@@ -6,7 +6,7 @@ import { genericToFoodItem, GENERICS_FORMAT, type GenericRow, type GenericsFile 
 import { GenericIndex, MIN_PRIMARY_FOODS, queryVariants, singular } from "../src/food/generic-search";
 import { parseQuery } from "../src/core/tokens";
 import { fromOffProduct, type OffProduct } from "../src/core/off";
-import type { FoodSource } from "../src/core/food";
+import { SOURCE_TAGS, type FoodSource } from "../src/core/food";
 
 /** Values are made up; only the shape and the conversions matter here. */
 const afcdRow = (key: string, name: string, kj: string, extra: Record<string, string> = {}): TableRow => ({
@@ -301,5 +301,13 @@ describe("the committed generic foods file", () => {
     expect(milk[2]).toMatch(/^Milk, cow, fluid, regular fat/);
     expect(milk[4]).toBeGreaterThan(55);
     expect(milk[4]).toBeLessThan(75);
+  });
+});
+
+describe("source tags", () => {
+  it("spell out Open Food Facts, because \"OFF\" reads as the word", () => {
+    expect(SOURCE_TAGS.off).toBe("Open Food Facts");
+    expect(SOURCE_TAGS.afcd).toBe("AFCD");
+    expect(SOURCE_TAGS.fndds).toBe("FNDDS");
   });
 });

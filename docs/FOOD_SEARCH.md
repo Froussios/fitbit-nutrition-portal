@@ -103,8 +103,8 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 * **Line 1:** product name, with the matched parts in bold. Right: kcal per 100 g or per 100 ml (the
   food's `basis`), always shown, so rows compare like for like.
 * **Line 2:** brand · pack size (Open Food Facts `quantity`), or **Generic** for a food from an authoritative
-  source, or **No brand listed** for an Open Food Facts product with no brand. Then a tag naming the row's source:
-  `AFCD`, `FNDDS` or `OFF`, so a bad value can be traced to its database. Right: kcal per serving when the
+  source, or **No brand listed** for an Open Food Facts product with no brand. Then a tag naming the row's source,
+  so a bad value can be traced to its database: `Open Food Facts`, `AFCD` or `FNDDS`. Right: kcal per serving when the
   product has a serving size, e.g. `107 kcal / 30 g serving`.
 * A row is built from a `FoodSummary` view model computed from the `FoodItem` by a pure function in
   `src/core/`. The index builder runs the same function, so search results arrive as summaries and the full

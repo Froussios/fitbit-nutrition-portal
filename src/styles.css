@@ -222,7 +222,7 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .opt-sub, .opt-serving { font-size: 0.85rem; color: var(--muted); }
 .opt-sub { overflow-wrap: anywhere; }
 .opt-nobrand { font-style: italic; }
-.opt-source { margin-left: 8px; padding: 0 5px; border: 1px solid currentColor; border-radius: 3px; font-size: 0.7rem; opacity: 0.75; }
+.opt-source { display: inline-block; margin-left: 8px; padding: 0 5px; border: 1px solid currentColor; border-radius: 3px; font-size: 0.7rem; opacity: 0.75; white-space: nowrap; }
 .opt-serving { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .opt mark { background: none; color: inherit; font-weight: 700; }
 .opt-custom { display: block; color: var(--accent); }

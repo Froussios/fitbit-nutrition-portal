@@ -15,9 +15,12 @@ export type FoodSource =
   | "sample" // Built-in sample catalogue (proof of concept)
   | "manual"; // Typed in by the user
 
-/** The short tag shown wherever a food appears, so a bad value can be traced to its database. */
+/**
+ * The tag shown wherever a food appears, so a bad value can be traced to its database. A name
+ * someone can look up is enough, but not "OFF", which reads as the word "off".
+ */
 export const SOURCE_TAGS: Readonly<Record<FoodSource, string>> = {
-  off: "OFF",
+  off: "Open Food Facts",
   afcd: "AFCD",
   ausnut: "AUSNUT",
   fndds: "FNDDS",
