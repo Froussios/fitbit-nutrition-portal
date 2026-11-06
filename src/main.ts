@@ -60,8 +60,8 @@ class App {
   private notice = "";
   private signInError = "";
   private loading = false;
-  /** Whether food search has the recent entries; if an outage cost them, they are read again when it ends. */
-  private loggedFoodsRead = false;
+  /** Set while reading recent entries for food search, and after. Unset if a read failed, or the user signed out. */
+  private loggedFoodsRead?: object;
   /** The connection came back during a load that may have failed: load again when it ends. */
   private reloadAfterLoad = false;
   private listError = "";
@@ -133,7 +133,7 @@ class App {
     if (this.loading) this.reloadAfterLoad = true;
     else if (this.ready) void this.loadToday();
     else if (this.connectError) void this.afterSignIn();
-    if (this.ready && !this.loggedFoodsRead) void this.loadLoggedFoods();
+    if (this.ready) void this.loadLoggedFoods();
   }
 
   private async signIn(prompt: "" | "consent" | "select_account" = "") {
@@ -187,14 +187,16 @@ class App {
 
   /** Food search favours foods logged before. It must not depend on this, so failure only costs the boost. */
   private async loadLoggedFoods() {
+    if (this.loggedFoodsRead) return;
+    const read = (this.loggedFoodsRead = {});
     try {
       const points = await this.api.listOwnRecentNutritionLogs(HISTORY_ENTRIES);
-      if (!this.auth.isSignedIn) return;
+      if (this.loggedFoodsRead !== read) return; // signed out meanwhile: these may be another account's
       const foods = toLoggedFoods(points, this.clientId);
       appLog.info(`Read ${points.length} recent entries for food search, ${foods.length} with a food to boost`);
       this.catalog.merge(foods);
-      this.loggedFoodsRead = true;
     } catch (e) {
+      if (this.loggedFoodsRead === read) this.loggedFoodsRead = undefined;
       appLog.warn("Could not read recent entries; food search will not favour foods logged before", describeError(e));
     }
   }
@@ -347,7 +349,7 @@ class App {
     this.pending.clear();
     this.pendingSince.clear();
     this.catalog.clear();
-    this.loggedFoodsRead = false;
+    this.loggedFoodsRead = undefined;
     this.entries = [];
     this.notice = "";
     this.connectError = "";

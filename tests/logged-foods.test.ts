@@ -254,6 +254,29 @@ describe("LoggedFoodsCatalog", () => {
     expect((await names(c, "chocolate"))[0]).toBe("Chocolate milk");
   });
 
+  it("does not bring back a deleted entry from a diary read already under way", async () => {
+    const { c } = catalog([milk, biscuit]);
+    const e = entry(biscuit);
+    c.merge([e]);
+    c.remove(e.id);
+    c.merge([e, entry(milk)]);
+    expect((await names(c, "chocolate"))[0]).toBe("Chocolate milk");
+    expect(await names(c, "chocolate")).toHaveLength(2);
+    c.clear();
+    c.merge([e]);
+    expect((await names(c, "chocolate"))[0]).toBe("Chocolate biscuit");
+  });
+
+  it("leaves no timer behind once a search has answered", async () => {
+    vi.useFakeTimers();
+    const { c } = catalog();
+    c.merge([entry(biscuit)]);
+    const search = c.search("chocolate");
+    await vi.advanceTimersByTimeAsync(0);
+    await search;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("keeps a food boosted while it has another entry", async () => {
     const { c } = catalog([biscuit, milk]);
     const newest = entry(biscuit, 1);

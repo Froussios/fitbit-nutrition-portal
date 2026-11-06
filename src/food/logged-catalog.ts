@@ -17,6 +17,8 @@ export const LOGGED_WAIT_MS = 300;
  */
 export class LoggedFoodsCatalog implements FoodCatalog {
   private entries: readonly LoggedFood[] = [];
+  /** Entries the user deleted, so that a diary read already under way does not bring them back. */
+  private readonly deleted = new Set<string>();
   /** By food. Null when the catalogue no longer has the food. */
   private readonly summaries = new Map<string, FoodSummary | null>();
   private readonly lookups = new Map<string, Promise<void>>();
@@ -38,7 +40,7 @@ export class LoggedFoodsCatalog implements FoodCatalog {
   /** Adds entries from the diary. Entries already known stay, so one logged while the diary was loading is kept. */
   merge(entries: readonly LoggedFood[]): void {
     const known = new Set(this.entries.map((e) => e.id));
-    const added = entries.filter((e) => !known.has(e.id));
+    const added = entries.filter((e) => !known.has(e.id) && !this.deleted.has(e.id));
     if (added.length === 0) return;
     this.entries = [...this.entries, ...added];
     this.changed();
@@ -52,6 +54,7 @@ export class LoggedFoodsCatalog implements FoodCatalog {
 
   /** The user deleted this diary entry. */
   remove(id: string): void {
+    this.deleted.add(id);
     this.entries = this.entries.filter((e) => e.id !== id);
     this.changed();
   }
@@ -59,6 +62,7 @@ export class LoggedFoodsCatalog implements FoodCatalog {
   /** The user signed out. */
   clear(): void {
     this.entries = [];
+    this.deleted.clear();
     this.summaries.clear();
     this.changed();
   }
@@ -96,10 +100,12 @@ export class LoggedFoodsCatalog implements FoodCatalog {
     const lookups = Promise.all(unknown.map((f) => this.lookUp(f.ref)));
 
     // Asks for every row, because the foods above may be among the ones it returns.
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const [found] = await Promise.allSettled([
       this.inner.search(query, options),
-      unknown.length > 0 ? Promise.race([lookups, new Promise((resolve) => setTimeout(resolve, LOGGED_WAIT_MS))]) : undefined,
+      unknown.length > 0 ? Promise.race([lookups, new Promise((resolve) => (timer = setTimeout(resolve, LOGGED_WAIT_MS)))]) : undefined,
     ]);
+    clearTimeout(timer);
     options.signal?.throwIfAborted();
 
     const late = unknown.filter((f) => !this.summaries.has(foodKey(f.ref)));

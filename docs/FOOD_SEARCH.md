@@ -830,5 +830,7 @@ open list (section 8.2). A failed lookup costs only that row, and a later search
 The catalogue is still asked for all 10 rows, because the foods above may be among them. That can cost one more
 summary file for each boosted row (section 9.1).
 
-A food logged in this session counts straight away. Deleting an entry stops it counting, unless the food has another
-entry. Signing out forgets all of it.
+A food logged in this session counts straight away, as soon as Google Health accepts the entry and before a listing
+confirms it, so an entry the API never lists stays boosted until the next page load. So does a food whose ID didn't
+fit in the data point ID, which can't be boosted after a reload. Deleting an entry stops it counting, unless the food
+has another entry. Signing out forgets all of it.
