@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PORTION_PREFIX } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { buildNutritionLogPoint, findServingUnits, mealLabel, MEAL_TYPES, reconcilePending, toDiaryEntries, toDiaryEntry, unitNamesOf } from "../src/health/mapping";
+import { buildNutritionLogPoint, findServingUnits, mealLabel, MEAL_TYPES, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf } from "../src/health/mapping";
 import type { DataPoint } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
@@ -199,5 +199,35 @@ describe("reconcilePending", () => {
   it("keeps entries the listing does not contain yet", () => {
     const other: DataPoint = { ...sent, name: "x/1", nutritionLog: { ...sent.nutritionLog!, foodDisplayName: "Banana" } };
     expect(reconcilePending(pending, [other]).stillPending).toEqual(["e-mgx-ab12-smp-oats"]);
+  });
+});
+
+describe("toLoggedFoods", () => {
+  const point = (id: string, name = "Oats (Uncle Tobys)", writer?: string): DataPoint => ({
+    name: `users/me/dataTypes/nutrition-log/dataPoints/${id}`,
+    ...(writer ? { dataSource: { application: { googleWebClientId: writer } } } : {}),
+    nutritionLog: { interval: { startTime: "2026-11-01T07:30:00+11:00", endTime: "2026-11-01T07:31:00+11:00" }, foodDisplayName: name },
+  }) as DataPoint;
+
+  it("takes the food from the entry's ID and the name from the entry", () => {
+    expect(toLoggedFoods([point("e-mgx-ab12-afcd-f005634")])).toEqual([
+      { id: "e-mgx-ab12-afcd-f005634", ref: { source: "afcd", id: "f005634" }, label: "Oats (Uncle Tobys)", at: Date.parse("2026-11-01T07:30:00+11:00") },
+    ]);
+  });
+
+  it("drops an amount the entry had to carry in its name", () => {
+    for (const amount of ["40 g", "1,000 ml", "12.5 g"]) {
+      expect(toLoggedFoods([point("e-mgx-ab12-off-123", `Oats (${amount})`)])[0]!.label).toBe("Oats");
+    }
+    expect(toLoggedFoods([point("e-mgx-ab12-off-123", "Oats (Uncle Tobys) (40 g)")])[0]!.label).toBe("Oats (Uncle Tobys)");
+    expect(toLoggedFoods([point("e-mgx-ab12-off-123", "Oats (Blend 40)")])[0]!.label).toBe("Oats (Blend 40)");
+  });
+
+  it("leaves out what the catalogue cannot load: custom foods, no food in the ID, other apps", () => {
+    expect(toLoggedFoods([point("e-mgx-ab12-man-custom")])).toEqual([]);
+    expect(toLoggedFoods([point("e-mgx-ab12-off")])).toEqual([]);
+    expect(toLoggedFoods([point("12345")])).toEqual([]);
+    expect(toLoggedFoods([point("e-mgx-ab12-off-123", "Oats", "other-client")], "our-client")).toEqual([]);
+    expect(toLoggedFoods([point("e-mgx-ab12-off-123", "Oats", "our-client")], "our-client")).toHaveLength(1);
   });
 });

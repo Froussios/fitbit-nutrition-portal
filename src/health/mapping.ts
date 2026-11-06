@@ -1,5 +1,6 @@
 import { foodLabel, nutrientsForAmount, type FoodItem, type FoodRef } from "../core/food";
 import { idFromName, parseEntryId } from "../core/ids";
+import type { LoggedFood } from "../core/logged-foods";
 import { NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "../core/nutrients";
 import { utcOffsetDuration } from "../core/time";
 import { formatNumber, metricAmount, type BaseUnit } from "../core/units";
@@ -242,6 +243,21 @@ export function toDiaryEntries(points: readonly DataPoint[], ctx: DiaryContext =
     .map((p) => toDiaryEntry(p, ctx))
     .filter((e): e is DiaryEntry => e !== undefined)
     .sort((a, b) => a.start.getTime() - b.start.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** The amount buildNutritionLogPoint puts in the name when the API's unit could not be resolved. */
+const AMOUNT_IN_NAME = / \([\d,.]+ (?:g|ml)\)$/;
+
+/**
+ * The entries a search can boost: this app's, with a food the catalogue can load again.
+ * That leaves out other apps' entries, which have no food reference, and custom foods.
+ */
+export function toLoggedFoods(points: readonly DataPoint[], ownClientId?: string): LoggedFood[] {
+  return points.flatMap((point) => {
+    const entry = toDiaryEntry(point, ownClientId === undefined ? {} : { ownClientId });
+    if (!entry?.ref || entry.ref.source === "manual") return [];
+    return [{ id: entry.id, ref: entry.ref, label: entry.displayName.replace(AMOUNT_IN_NAME, ""), at: entry.start.getTime() }];
+  });
 }
 
 /** Finds the gram and millilitre units among the API's food-measurement-unit points. */

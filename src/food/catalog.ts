@@ -37,6 +37,8 @@ export interface FoodCatalog {
   search(query: string, options?: SearchOptions): Promise<FoodSearchHit[]>;
   /** The full food: on choosing a search hit, or by barcode. */
   get(ref: FoodRef, options?: { readonly signal?: AbortSignal }): Promise<FoodItem | undefined>;
+  /** For a catalogue whose answers can change: `listener` runs when an earlier search might now answer differently. */
+  onChange?(listener: () => void): void;
 }
 
 export const DEFAULT_LIMIT = 10;

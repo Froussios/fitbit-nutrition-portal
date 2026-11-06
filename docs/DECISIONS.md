@@ -166,3 +166,16 @@ is none, fail cleanly and show it.
 create a second entry. The error therefore asks the user to check the diary first. Client-supplied IDs still carry the
 food reference, but nothing relies on them for idempotency.
 **Reopen if.** Logging without a connection becomes a real need, for example once the app is an installed PWA ([#16](https://github.com/Froussios/fitbit-nutrition-portal/issues/16)).
+
+### DR-19 Food search favours foods the user logged before, from a short look at the history
+**Decision.** The last 20 distinct foods logged, and anything logged in the last 2 weeks, go first in the suggestions
+whenever they match. Any other logged food goes next, in at most 3 rows, and only if it is a good match: a query word
+is the food, not its flavour or brand. These rows go ahead of generic foods. History comes from one request for the
+newest 300 entries this app wrote, in the background, and is not stored between page loads
+([FOOD_SEARCH.md](FOOD_SEARCH.md#14-foods-logged-before)).
+**Why.** Owner decision (6 November 2026): recently logged products are likely to be what the user wants to log again,
+and the history must not be searched exhaustively, because that can be expensive and block the main path.
+**Consequence.** A logged food can outrank a better match, and a wrong entry stays boosted until it is deleted. Foods
+logged in other apps and custom foods can't be boosted, because the catalogue can't load them again.
+**Reopen if.** One page proves too short or too slow in daily use, or the boosts crowd out foods the user wants.
+

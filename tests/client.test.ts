@@ -174,3 +174,20 @@ describe("HealthClient paging", () => {
     expect(requests).toHaveLength(3);
   });
 });
+
+describe("HealthClient.listOwnRecentNutritionLogs", () => {
+  it("makes one request for this app's newest entries, however many more there are", async () => {
+    const requests: URL[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      requests.push(new URL(String(input)));
+      return new Response(JSON.stringify({ dataPoints: [{ name: "a" }, { name: "b" }], nextPageToken: "more" }));
+    };
+    const points = await new HealthClient(token, fetchImpl).listOwnRecentNutritionLogs(300);
+    expect(points).toHaveLength(2);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.pathname).toMatch(/users\/me\/dataTypes\/nutrition-log\/dataPoints$/);
+    expect(requests[0]!.searchParams.get("pageSize")).toBe("300");
+    expect(requests[0]!.searchParams.get("dataSourceFamily")).toBe("users/me/dataSourceFamilies/self-sources");
+    expect(requests[0]!.searchParams.has("filter")).toBe(false);
+  });
+});

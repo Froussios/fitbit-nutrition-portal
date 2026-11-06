@@ -151,6 +151,8 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
     if (u.status === "error") log.warn("Food search failed", { query: u.query, error: describeError(u.error) });
     dispatch({ type: "results", hits: hits.length });
   });
+  // Rows must not move under a row the user has already picked with the arrow keys: the next keystroke updates them.
+  catalog.onChange?.(() => controller.invalidate(state.open && state.active < 0));
 
   const choose = (row: number) => {
     if (row < hits.length) {

@@ -21,6 +21,7 @@ Set by the owner on 2 November 2026.
 | R5 | Rich visuals in the dropdown: a summary per food, starting with calories per unit. | Two-line rows with kcal per 100 g / 100 ml and per serving, built from a summary view model that can grow (section 3.3). |
 | R6 | Arrow keys move through the options; the selected row is filled into the input. | Keyboard model in section 3.2; the typed query is kept so Escape and ArrowUp can restore it. |
 | R7 | Open Food Facts is large and its APIs throttle; host our own copy of the **whole world** dataset (Australian tagging is incomplete), at no monthly cost, without the browser downloading it. The dataset may be slimmed (drop fields and dead rows). | A slimmed, pre-sorted word index built weekly by a GitHub Action and stored as static files on Cloudflare Pages. The browser fetches only the files each search needs, often hundreds of KB while typing (sections 5 and 9.1). |
+| R8 | Set 6 November 2026: products logged recently are likely to be logged again. A major boost for the last 20 products and for the last 2 weeks: they appear in the suggestions. A minor boost for a food logged at any time: favoured only if a good match. The history must not be searched exhaustively. | One request for the newest entries, in the background; matching foods go first (section 14). |
 
 ## 2. Scope
 
@@ -30,7 +31,7 @@ index builder; publishing the index; a `FoodCatalog` that queries it.
 **Not in this design:**
 
 * Barcode scanning ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)). It uses `FoodCatalog.get()`, which this design provides (a barcode map in the index).
-* Recent foods ([#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14)). The dropdown is where they would appear when the field is empty; not built here.
+* Recent foods in the empty dropdown, and "log again" ([#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14)). Not built here. Foods logged before already rank higher once something is typed (section 14).
 * AUSNUT 2023 and more USDA data: [#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38), and section 13.
 * Typo tolerance. Dropped from R3; section 4.4 lists cheap additions if misses show it is needed.
 * Product images, Nutri-Score, macro bars. The row layout leaves room for them (section 3.3).
@@ -151,8 +152,8 @@ Product names, brands and queries go through the same tokeniser, shared by the i
 **Principle (DR-15): unless given evidence otherwise, assume the generic product.** Brands often name a product
 after a flavour, so a word in the name says more about what a product is than the same word in its brand.
 
-Generic foods come from authoritative sources and are shown first (section 13, DR-16). Open Food Facts products
-follow, ordered by these rules, each one only breaking ties in the one before (`matchRank` in
+Foods the user logged before come first (section 14, DR-19). Generic foods come from authoritative sources and are
+shown next (section 13, DR-16). Open Food Facts products follow, ordered by these rules, each one only breaking ties in the one before (`matchRank` in
 `src/core/tokens.ts`):
 
 | # | Rule | Example, searching `vanilla` |
@@ -175,7 +176,7 @@ position. A wrong guess only moves a row; nothing is hidden. Measured on hand-la
 build the rule: 90% correct, against 45% for treating every match as the food. Known limits:
 
 * **Compound foods.** `Peanut Butter` counts as a butter. People always say both words, so a user searching `butter`
-  has not finished typing; helping further needs personal log history, which is out of scope.
+  has not finished typing. Personal log history helps once the user has logged the food (section 14).
 * **Flavour written last.** `Protein Puffs Vegemite` counts as Vegemite.
 * **English word order only**, for now.
 
@@ -484,6 +485,8 @@ export interface FoodCatalog {
   search(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<FoodSearchHit[]>;
   /** The full food: on choosing a search hit, or by barcode. */
   get(ref: FoodRef, options?: { signal?: AbortSignal }): Promise<FoodItem | undefined>;
+  /** For a catalogue whose answers can change, such as when the user logs a food (section 14). */
+  onChange?(listener: () => void): void;
 }
 ```
 
@@ -571,6 +574,9 @@ A small class between the combobox and `FoodCatalog`, unit-tested with fake time
 * **Cache** the last 50 queries (LRU), so Backspace and repeated searches are instant. Index files are also
   cached in memory by the query engine for the session.
 * **Errors**: one error state; never throw into the UI; retry on the next keystroke.
+* **Catalogue changes** (section 14): forget the cache. If the list is open and no row is active, also update the
+  rows straight away, with no "searching" state. With an active row the rows stay put until the next keystroke, so
+  Enter can't choose a different food from the one the field shows.
 
 ## 9. Performance budgets
 
@@ -648,6 +654,7 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
 | [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Verify M1 on the real index | Coverage list, relevance suite, bytes and latency on mobile, screen-reader pass, first scheduled refresh | Open |
 | [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Camera and manual entry, via `get()` | Open |
 | [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) Recent foods | Shows in the empty dropdown | Open |
+| [#51](https://github.com/Froussios/fitbit-nutrition-portal/issues/51) Boost foods logged before | Section 14 | Done |
 
 ## 12. Open questions
 
@@ -767,3 +774,61 @@ and `usda` are separate codes, so usage per database can be counted from the dia
 telemetry. Not built yet: the app reads one day at a time, so a report needs a date range. It covers only what was
 logged through this app, not what was shown and passed over, nor deleted entries.
 
+## 14. Foods logged before
+
+Decision: DR-19. A food the user logged recently is likely to be what they want to log again.
+
+### 14.1 Boosts
+
+| Boost | Which foods | Effect |
+|---|---|---|
+| **Major** | The last 20 distinct foods logged, and anything logged in the last 2 weeks | Shown whenever it matches the query by the normal rule (section 4.2), even as a flavour or brand match |
+| **Minor** | Any other food the short search found | Shown only if it is a good match, in at most 3 rows |
+
+A **good match** means a query word is the food, not its flavour or brand (`headWords`, section 4.3), and every word is
+whole or the last word has at least 3 letters. Only searches change: with fewer than 2 characters the list stays
+closed ([#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14)).
+
+| Logged long ago | Query | Favoured? |
+|---|---|---|
+| `Dark chocolate` | `chocolate`, `choco` | Yes |
+| `Dark chocolate` | `ch` | No: too few letters |
+| `Chocolate milk` | `chocolate` | No: a flavour here |
+| `Chocolate milk` | `chocolate milk` | Yes |
+| `Yogurt (Vanilla Queen)` | `vanilla` | No: only the brand |
+
+The list is major foods, then minor foods, then the normal results (section 13.4), with repeats removed and at most 10
+rows. Within each group: whole words, then foods where a query word is the food, then the most recent. Major foods
+have no cap, so a user who logged 10 chocolates this fortnight sees only those for `chocolate`.
+
+### 14.2 The short search
+
+The history must never be searched exhaustively, so the app makes one request, in the background after sign-in, once
+per page load. It has no date filter and reads the newest 300 entries of `self-sources`; the API returns them newest
+first. Only this app's entries say which food they were (`docs/ARCHITECTURE.md` section 4.3), so entries from other
+apps would only use up the page. At up to 15 entries a day, 300 entries covers the 2 weeks. The minor boost reaches as
+far back as the page happens to go.
+
+No search waits for this request. If it fails, or nothing has been logged, search answers as it would otherwise.
+
+**What can't be boosted.** Entries from other apps, entries whose food ID didn't fit in the data point ID, and custom
+foods, because the catalogue can't load them again. Nothing is stored between page loads.
+
+### 14.3 Showing a row
+
+`LoggedFoodsCatalog` in `src/food/logged-catalog.ts` wraps the other catalogues; the ranking is `boostedFoods` in
+`src/core/logged-foods.ts`. Matching uses the name stored in the entry, so checking the history costs no network, and
+a word in the brand counts as a word in the name for ordering, because the entry holds only the label.
+
+A row also needs kcal and the rest of the summary, which come from `FoodCatalog.get()`. Only foods that match are looked up, once
+each per page load. Generic foods need no network; a product needs a few small index files, which the browser may
+already have cached. A food the user just logged needs no lookup. A food the catalogue no longer has is left out.
+
+A search waits up to 300 ms for lookups, beyond the catalogue's own answer. A row that arrives later is added to the
+open list (section 8.2). A failed lookup costs only that row, and a later search tries it again.
+
+The catalogue is still asked for all 10 rows, because the foods above may be among them. That can cost one more
+summary file for each boosted row (section 9.1).
+
+A food logged in this session counts straight away. Deleting an entry stops it counting, unless the food has another
+entry. Signing out forgets all of it.

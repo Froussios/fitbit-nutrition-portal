@@ -66,6 +66,14 @@ export class HealthClient {
     return this.listAll("users/me/dataTypes/nutrition-log/dataPoints", { filter: nutritionDayFilter(date) });
   }
 
+  /**
+   * The newest nutrition logs this app wrote, newest first, in one request: however far
+   * back `count` entries reach. Only this app's entries say which food they were.
+   */
+  listOwnRecentNutritionLogs(count: number): Promise<DataPoint[]> {
+    return this.listAll("users/me/dataTypes/nutrition-log/dataPoints", { dataSourceFamily: "users/me/dataSourceFamilies/self-sources" }, { pageSize: count, stopWhen: () => true });
+  }
+
   createNutritionLog(point: DataPoint): Promise<Operation> {
     return this.request("POST", "users/me/dataTypes/nutrition-log/dataPoints", { body: point });
   }
