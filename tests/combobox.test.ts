@@ -113,4 +113,60 @@ describe("SearchController", () => {
     expect(search).not.toHaveBeenCalled();
     expect(updates.at(-1)!.status).toBe("idle");
   });
+
+  describe("when the catalogue's answers change", () => {
+    it("forgets cached results", async () => {
+      const { c, search } = setup();
+      c.setQuery("milk");
+      await vi.advanceTimersByTimeAsync(150);
+      c.invalidate(false);
+      c.setQuery("milk");
+      await vi.advanceTimersByTimeAsync(150);
+      expect(search).toHaveBeenCalledTimes(2);
+    });
+
+    it("updates what the field shows straight away, with no searching state", async () => {
+      const { c, updates, search } = setup();
+      c.setQuery("milk");
+      await vi.advanceTimersByTimeAsync(150);
+      updates.length = 0;
+      c.invalidate(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(search).toHaveBeenCalledTimes(2);
+      expect(updates.map((u) => u.status)).toEqual(["done"]);
+    });
+
+    it("searches only once if a keystroke is still waiting", async () => {
+      const { c, search } = setup();
+      c.setQuery("milk");
+      c.invalidate(true);
+      await vi.advanceTimersByTimeAsync(150);
+      expect(search).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not search when asked not to, or when the field has too little text", async () => {
+      const { c, search } = setup();
+      c.setQuery("milk");
+      await vi.advanceTimersByTimeAsync(150);
+      c.invalidate(false);
+      c.setQuery("m");
+      c.invalidate(true);
+      await vi.advanceTimersByTimeAsync(150);
+      expect(search).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not cache an answer from before the change", async () => {
+      let release: (hits: FoodSearchHit[]) => void = () => {};
+      const slow: FoodCatalog = { label: "x", search: () => new Promise((resolve) => (release = resolve)), get: async () => undefined };
+      const { c, search } = setup(slow);
+      c.setQuery("milk");
+      await vi.advanceTimersByTimeAsync(150);
+      c.invalidate(false);
+      release([]);
+      await vi.advanceTimersByTimeAsync(0);
+      c.setQuery("milk");
+      await vi.advanceTimersByTimeAsync(150);
+      expect(search).toHaveBeenCalledTimes(2);
+    });
+  });
 });

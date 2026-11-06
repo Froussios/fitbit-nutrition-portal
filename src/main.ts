@@ -1,6 +1,7 @@
 import "./styles.css";
 import { GoogleAuth, SignInRequiredError } from "./auth/google-auth";
 import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE, SCOPES, setClientId } from "./config";
+import { foodLabel } from "./core/food";
 import { idFromName, newEntryId } from "./core/ids";
 import { civilDate } from "./core/time";
 import type { BaseUnit } from "./core/units";
@@ -11,7 +12,8 @@ import genericsUrl from "./food/data/generics.json?url";
 import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
 import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, connectionBanner, deleteFailed, type ConnectionState } from "./health/connection";
-import { buildNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, type DiaryEntry, type LogDraft } from "./health/mapping";
+import { LoggedFoodsCatalog } from "./food/logged-catalog";
+import { buildNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toLoggedFoods, type DiaryEntry, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
@@ -23,6 +25,8 @@ import { describeError, installGlobalErrorHandlers, logger } from "./debug/log";
 const POLL_MS = 5 * 60_000;
 /** How long a written entry may stay unlisted before its pending row is dropped. */
 const PENDING_TTL_MS = 10 * 60_000;
+/** How many diary entries one request reads to find foods logged before (docs/FOOD_SEARCH.md section 14). */
+const HISTORY_ENTRIES = 300;
 
 const root = document.getElementById("app")!;
 const appLog = logger("app");
@@ -56,6 +60,8 @@ class App {
   private notice = "";
   private signInError = "";
   private loading = false;
+  /** Set while reading recent entries for food search, and after. Unset if a read failed, or the user signed out. */
+  private loggedFoodsRead?: object;
   /** The connection came back during a load that may have failed: load again when it ends. */
   private reloadAfterLoad = false;
   private listError = "";
@@ -74,7 +80,7 @@ class App {
 
   constructor(
     private readonly clientId: string,
-    catalog: FoodCatalog,
+    private readonly catalog: LoggedFoodsCatalog,
   ) {
     this.form = createLogForm(catalog, (d) => this.log(d));
     // Logging needs the write scope; the read scope (whole diary) is asked for but optional.
@@ -127,6 +133,7 @@ class App {
     if (this.loading) this.reloadAfterLoad = true;
     else if (this.ready) void this.loadToday();
     else if (this.connectError) void this.afterSignIn();
+    if (this.ready) void this.loadLoggedFoods();
   }
 
   private async signIn(prompt: "" | "consent" | "select_account" = "") {
@@ -174,7 +181,24 @@ class App {
     this.render();
     // The gram/ml units only matter for `serving`; find them without holding up the diary.
     void this.loadServingUnits(healthUserId);
+    void this.loadLoggedFoods();
     await this.loadToday();
+  }
+
+  /** Food search favours foods logged before. It must not depend on this, so failure only costs the boost. */
+  private async loadLoggedFoods() {
+    if (this.loggedFoodsRead) return;
+    const read = (this.loggedFoodsRead = {});
+    try {
+      const points = await this.api.listOwnRecentNutritionLogs(HISTORY_ENTRIES);
+      if (this.loggedFoodsRead !== read) return; // signed out meanwhile: these may be another account's
+      const foods = toLoggedFoods(points, this.clientId);
+      appLog.info(`Read ${points.length} recent entries for food search, ${foods.length} with a food to boost`);
+      this.catalog.merge(foods);
+    } catch (e) {
+      if (this.loggedFoodsRead === read) this.loggedFoodsRead = undefined;
+      appLog.warn("Could not read recent entries; food search will not favour foods logged before", describeError(e));
+    }
   }
 
   /**
@@ -284,6 +308,9 @@ class App {
       const key = idFromName(created.name ?? point.name!);
       this.pending.set(key, created);
       this.pendingSince.set(key, Date.now());
+      if (draft.food.ref.source !== "manual") {
+        this.catalog.add({ id: key, ref: draft.food.ref, label: foodLabel(draft.food), at: draft.time.getTime() }, draft.food);
+      }
     } catch (e) {
       appLog.error("Logging the entry failed", describeError(e));
       this.handleError(e, false);
@@ -299,6 +326,7 @@ class App {
     try {
       await this.api.deleteNutritionLogs([entry.name]);
       this.dropPending(entry.id);
+      this.catalog.remove(entry.id);
       this.entries = this.entries.filter((e) => e.id !== entry.id);
       this.renderDiary();
     } catch (e) {
@@ -320,6 +348,8 @@ class App {
   private signOut() {
     this.pending.clear();
     this.pendingSince.clear();
+    this.catalog.clear();
+    this.loggedFoodsRead = undefined;
     this.entries = [];
     this.notice = "";
     this.connectError = "";
@@ -530,10 +560,10 @@ async function openProducts(): Promise<FoodCatalog> {
   }
 }
 
-async function openCatalog(): Promise<FoodCatalog> {
+async function openCatalog(): Promise<LoggedFoodsCatalog> {
   const catalog = new CombinedCatalog(genericsUrl, await openProducts(), `${import.meta.env.BASE_URL}generics-LICENSE.txt`);
   catalog.load().catch((e: unknown) => appLog.warn("Generic foods are unavailable", { error: describeError(e) }));
-  return catalog;
+  return new LoggedFoodsCatalog(catalog);
 }
 
 const clientId = getClientId();

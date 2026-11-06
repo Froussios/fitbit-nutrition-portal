@@ -110,6 +110,9 @@ another app's package name. A delete button appears only on this app's entries, 
 covers only data the app added. If the user unticks the read permission on Google's consent screen, the
 app falls back to its own entries and says so.
 
+Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
+background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-foods-logged-before)).
+
 ## 5. Authentication
 
 ### 5.1 Current: Google Identity Services, token model

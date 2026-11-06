@@ -18,6 +18,8 @@ export class SearchController {
   private current = "";
   private abort: AbortController | undefined;
   private readonly cache = new Map<string, readonly FoodSearchHit[]>();
+  /** Goes up when the catalogue's answers change, so a search already running does not fill the cache. */
+  private generation = 0;
 
   constructor(
     private readonly catalog: FoodCatalog,
@@ -31,11 +33,15 @@ export class SearchController {
     return text.toLowerCase().replace(/\s+/g, " ").trimStart();
   }
 
+  private static searchable(text: string): boolean {
+    return SearchController.key(text).trim().length >= MIN_QUERY || isBarcode(text);
+  }
+
   setQuery(text: string): void {
     clearTimeout(this.timer);
     this.current = text;
     const key = SearchController.key(text);
-    if (key.trim().length < MIN_QUERY && !isBarcode(text)) {
+    if (!SearchController.searchable(text)) {
       this.abort?.abort();
       this.onUpdate({ status: "idle", query: text });
       return;
@@ -52,13 +58,29 @@ export class SearchController {
     this.timer = setTimeout(() => void this.run(text, key), this.delayMs);
   }
 
+  /**
+   * The catalogue's answers changed, so forget the cached ones. With `searchAgain`, also
+   * updates the results of what the field shows, with no "searching" state in between.
+   */
+  invalidate(searchAgain: boolean): void {
+    this.generation++;
+    this.cache.clear();
+    if (searchAgain && SearchController.searchable(this.current)) {
+      clearTimeout(this.timer);
+      void this.run(this.current, SearchController.key(this.current));
+    }
+  }
+
   private async run(text: string, key: string): Promise<void> {
     this.abort?.abort();
     const abort = (this.abort = new AbortController());
+    const generation = this.generation;
     try {
       const hits = await this.catalog.search(text, { signal: abort.signal });
-      this.cache.set(key, hits);
-      if (this.cache.size > this.cacheSize) this.cache.delete(this.cache.keys().next().value!);
+      if (generation === this.generation) {
+        this.cache.set(key, hits);
+        if (this.cache.size > this.cacheSize) this.cache.delete(this.cache.keys().next().value!);
+      }
       if (text === this.current && !abort.signal.aborted) this.onUpdate({ status: "done", query: text, hits });
     } catch (error) {
       if (text === this.current && !abort.signal.aborted) this.onUpdate({ status: "error", query: text, error });
