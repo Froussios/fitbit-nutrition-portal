@@ -135,8 +135,8 @@ Product names, brands and queries go through the same tokeniser, shared by the i
 * Stop words dropped: `and`, `with`, `of`, `the`, `in`, `&`, and a few more (list in the repo).
 * Hyphenated and apostrophe words are indexed both split and joined: `Weet-Bix` → `weet`, `bix`, `weetbix`;
   `McDonald's` → `mcdonald`, `s`, `mcdonalds`. So `weetbix`, `weet bix` and `weet-bix` all find it.
-* Query: trimmed and tokenised the same way. Fewer than 2 characters in total: no search. A query of only
-  8, 12, 13 or 14 digits is also treated as a barcode (section 6.4): an exact hit is shown first.
+* Query: trimmed and tokenised the same way. Fewer than 2 characters in total: no search. Typing a barcode into the
+  search field is not a requirement (dropped on #36: manual entry is not practical); barcodes come from the camera scan only.
 
 ### 4.2 Matching
 
@@ -646,8 +646,8 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
 | [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Publish the food index | `food-index.yml` deploys to Cloudflare Pages weekly; CI points the app at it | Done |
 | [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) Search-as-you-type UI | Sections 3, 8 | Done |
 | [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Verify M1 on the real index | Coverage list, relevance suite, bytes and latency on mobile, screen-reader pass, first scheduled refresh | Open |
-| [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Camera and manual entry, via `get()` | Open |
 | [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) Recent foods | Shows in the empty dropdown | Open |
+| [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Camera scan only, via `get()`; last in the feature queue. Manual entry dropped | Open |
 
 ## 12. Open questions
 
