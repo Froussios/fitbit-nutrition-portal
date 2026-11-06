@@ -81,7 +81,7 @@ A `FoodItem` stores nutrients **per 100 g or per 100 ml** (its `basis`), plus na
 | Draft | `NutritionLog` field |
 |---|---|
 | time eaten | `interval.startTime` (+1 min for `endTime`), local offset in `startUtcOffset` / `endUtcOffset` |
-| meal | `mealType` (`BREAKFAST`, `LUNCH`, `DINNER`, `SNACK`, `ANYTIME`) |
+| meal | `mealType` (`BREAKFAST`, `LUNCH`, `DINNER`, `SNACK`), left out when the user picks no meal, which is the default. The legacy `ANYTIME` is never written. |
 | food name | `foodDisplayName`, e.g. `Rolled oats` or `Cola soft drink (Sample Drinks Co)` |
 | amount | `serving` = the API's *gram* or *millilitre* `food-measurement-unit` plus an amount, keeping the kind of unit the user chose (250 g of milk stays 250 g). If the API's units cannot be resolved, the amount goes into the name instead (`Rolled oats (40 g)`). |
 | energy | `energy.kcal` (`userProvidedUnit: KILOCALORIE`). The UI shows both kcal and kJ. |

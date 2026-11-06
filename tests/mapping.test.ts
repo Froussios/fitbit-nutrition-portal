@@ -1,11 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { PORTION_PREFIX } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { buildNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, unitNamesOf } from "../src/health/mapping";
+import { buildNutritionLogPoint, findServingUnits, mealLabel, MEAL_TYPES, reconcilePending, toDiaryEntries, toDiaryEntry, unitNamesOf } from "../src/health/mapping";
 import type { DataPoint } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
 const time = new Date("2026-11-01T07:30:00+11:00");
+
+describe("meal", () => {
+  it("leaves mealType out of the request when no meal is picked", () => {
+    const p = buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", time }, { id: "e-test-0006-smp-oats" });
+    expect(JSON.parse(JSON.stringify(p)).nutritionLog).not.toHaveProperty("mealType");
+  });
+
+  it("shows an entry with no meal as a dash", () => {
+    const p = buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", time }, { id: "e-test-0007-smp-oats" });
+    const entry = toDiaryEntry(p)!;
+    expect(entry.mealType).toBe("MEAL_TYPE_UNSPECIFIED");
+    expect(mealLabel(entry.mealType)).toBe("–");
+  });
+
+  it("does not offer the legacy ANYTIME value, but can still label one logged elsewhere", () => {
+    expect(MEAL_TYPES.map((m) => m.value)).not.toContain("ANYTIME");
+    expect(mealLabel("ANYTIME")).toBe("anytime");
+  });
+});
 
 describe("buildNutritionLogPoint", () => {
   it("builds an anonymous nutrition-log data point", () => {

@@ -13,7 +13,8 @@ export interface LogDraft {
   readonly quantity: number;
   /** A unit key (g, ml, cup...) or `portion:<name>`. */
   readonly unit: string;
-  readonly mealType: MealType;
+  /** Left out when the user picks no meal: the API field is optional. */
+  readonly mealType?: MealType;
   readonly time: Date;
 }
 
@@ -53,7 +54,7 @@ export function buildNutritionLogPoint(draft: LogDraft, opts: BuildOptions): Dat
     },
     // The amount belongs in `serving`; it goes into the name only when the API's unit could not be resolved.
     foodDisplayName: servingUnit ? foodLabel(food) : `${foodLabel(food)} (${formatNumber(metric.amount)} ${metric.unit})`,
-    mealType: draft.mealType,
+    ...(draft.mealType ? { mealType: draft.mealType } : {}),
     energy: { kcal: round(profile.energyKcal, 1), userProvidedUnit: "KILOCALORIE" },
     ...profileToLogFields(profile),
   };
@@ -264,18 +265,9 @@ export const MEAL_TYPES: readonly { value: MealType; label: string }[] = [
   { value: "LUNCH", label: "Lunch" },
   { value: "DINNER", label: "Dinner" },
   { value: "SNACK", label: "Snack" },
-  { value: "ANYTIME", label: "Anytime" },
 ];
 
 export function mealLabel(type: MealType): string {
+  if (type === "MEAL_TYPE_UNSPECIFIED") return "–";
   return MEAL_TYPES.find((m) => m.value === type)?.label ?? type.replace(/_/g, " ").toLowerCase();
-}
-
-/** Default meal for a time of day (local). */
-export function defaultMealType(d: Date): MealType {
-  const h = d.getHours();
-  if (h >= 4 && h < 11) return "BREAKFAST";
-  if (h >= 11 && h < 15) return "LUNCH";
-  if (h >= 17 && h < 22) return "DINNER";
-  return "SNACK";
 }
