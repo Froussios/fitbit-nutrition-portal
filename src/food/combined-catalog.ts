@@ -15,6 +15,24 @@ export const GENERICS_WAIT_MS = 1500;
 /** When a download of the generic file is given up, so that a later search can try again. */
 const GENERICS_TIMEOUT_MS = 60_000;
 
+/** `work`, but rejecting as soon as `signal` is aborted. */
+async function unlessAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return work;
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason);
+        if (signal.aborted) onAbort();
+        else signal.addEventListener("abort", onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
+
 /**
  * The foods the app can search: generic foods from the small file first, then
  * products from `products` (docs/FOOD_SEARCH.md section 13). Rows keep their one
@@ -71,22 +89,11 @@ export class CombinedCatalog implements FoodCatalog {
   private async generics(query: string, signal: AbortSignal | undefined): Promise<GenericRow[]> {
     if (this.ready) return this.ready.search(query);
     const loading = this.load();
-    if (this.waited) {
-      loading.catch(() => {});
-      return [];
-    }
+    if (this.waited) return [];
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let onAbort: (() => void) | undefined;
     try {
-      const outcome = await Promise.race([
-        loading,
-        new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), GENERICS_WAIT_MS))),
-        new Promise<never>((_, reject) => {
-          onAbort = () => reject(signal!.reason);
-          if (signal?.aborted) onAbort();
-          else signal?.addEventListener("abort", onAbort, { once: true });
-        }),
-      ]);
+      const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), GENERICS_WAIT_MS)));
+      const outcome = await unlessAborted(Promise.race([loading, late]), signal);
       if (outcome === "late") {
         this.waited = true;
         return [];
@@ -98,7 +105,6 @@ export class CombinedCatalog implements FoodCatalog {
       return [];
     } finally {
       clearTimeout(timer);
-      if (onAbort) signal?.removeEventListener("abort", onAbort);
     }
   }
 
@@ -125,7 +131,7 @@ export class CombinedCatalog implements FoodCatalog {
   }
 
   async get(ref: FoodRef, options: { readonly signal?: AbortSignal } = {}): Promise<FoodItem | undefined> {
-    if (isGenericSource(ref.source)) return (await this.load()).get(ref.source, ref.id);
+    if (isGenericSource(ref.source)) return (this.ready ?? (await unlessAborted(this.load(), options.signal))).get(ref.source, ref.id);
     return this.products.get(ref, options);
   }
 }

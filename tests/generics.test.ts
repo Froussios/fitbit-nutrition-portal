@@ -249,6 +249,15 @@ describe("CombinedCatalog", () => {
       await expect(search).rejects.toThrow();
     });
 
+    it("doesn't hold up a cancelled lookup of a generic food", async () => {
+      const { fetchImpl } = stalled();
+      const catalog = new CombinedCatalog("generics", inner(), "licence", fetchImpl);
+      const abort = new AbortController();
+      const lookup = catalog.get({ source: "afcd", id: "1" }, { signal: abort.signal });
+      abort.abort();
+      await expect(lookup).rejects.toThrow();
+    });
+
     it("tries again after a failed download, and waits for that attempt too", async () => {
       let calls = 0;
       const fetchImpl = (async () => {
