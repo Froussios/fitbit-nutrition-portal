@@ -5,8 +5,8 @@
  *
  * Downloads the sources below (or reads them from the cache folder) and writes
  * src/food/data/generics.json, which is committed: the sources change at most a
- * few times a year, and the file is only about 1 MB. Run it when a source
- * publishes a new release, after updating its URL here.
+ * few times a year, and the file is about 1.4 MB (about 310 KB gzipped, as it is
+ * served). Run it when a source publishes a new release, after updating its URL here.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

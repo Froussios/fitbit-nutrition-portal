@@ -736,10 +736,14 @@ join key either: AFCD and AUSNUT share 1,201 food keys, and only 482 of those ha
 1. **Whole words** before a longer word that starts the same. The last word may be half typed. Plurals are ignored.
 2. **The food before its flavour.** These names put the food first, so it is the words before the first comma:
    `Milk, cow, fluid` is a milk, `Chocolate, milk` is not. The opposite of product names (section 4.3).
-3. **Australian before US.** FNDDS foods appear only when AFCD has fewer than 3 foods for the query.
+3. **Australian before US.** FNDDS foods appear only when AFCD has fewer than 3 foods where a query word is the
+   food by rule 2. `Biscuit, chocolate` doesn't count towards the 3 for `chocolate`.
 4. **The plain form:** fewest words other than plain ones such as `raw` and `regular fat`, then names with such a word.
 
 A row with exactly the same name as a higher-priority row is dropped. Its values are not merged.
+
+An index built before DR-16 has products with no brand first, so until it is rebuilt those are the candidates a search
+finds first; the 10 chosen are still put in the order above, so the order looks mixed.
 
 **Synonyms** cover spelling conventions, because they split the sources: `yoghurt` appears only in AFCD and `yogurt`
 only in FNDDS. A small table applied to the query also searches the other spelling (`ketchup` and `tomato sauce`,
@@ -751,6 +755,10 @@ search.
 `CombinedCatalog` in `src/food/combined-catalog.ts` shows up to 5 generic rows, then products up to 10 rows in
 total, then more generic rows if products leave rows empty. It asks the product index only for the rows it can
 show, which saves fetching a summary file for each of the others. If one side fails the other still answers.
+
+The app starts downloading the generic file when it opens. The first search waits up to 1.5 seconds for it, then
+shows products without it, and later searches don't wait until it arrives. A download that takes over a minute, or
+fails, is tried again by a later search.
 
 ### 13.5 Which database is used most
 

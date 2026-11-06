@@ -10,7 +10,7 @@ import { genericToFoodItem, type GenericRow } from "./generics-format";
 
 /** Australian sources come first; these show only when the Australian ones have too little. */
 const FALLBACK_SOURCES: ReadonlySet<string> = new Set(["fndds", "usda"]);
-/** Below this many Australian foods for a query, foods from the fallback sources are shown too. */
+/** Below this many Australian foods where a query word is the food, foods from the fallback sources are shown too. */
 export const MIN_PRIMARY_FOODS = 3;
 
 /** Words that describe the plain form of a food, so they don't count against a match, and a name with one wins a tie. */
@@ -42,7 +42,8 @@ const SYNONYMS: readonly (readonly string[])[] = [
 /** A simple singular, enough to make "bananas" find "Banana" and "tomatoes" find "Tomato". */
 export function singular(word: string): string {
   if (word.length <= 3 || word.endsWith("ss")) return word;
-  if (word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  // "berries" is "berry", but "pies" is "pie".
+  if (word.endsWith("ies")) return word.length > 4 ? `${word.slice(0, -3)}y` : word.slice(0, -1);
   if (word.endsWith("oes")) return word.slice(0, -2);
   return word.endsWith("s") ? word.slice(0, -1) : word;
 }
@@ -123,7 +124,7 @@ export class GenericIndex {
     for (const r of rows) this.byId.set(`${r[0]}:${r[1].toLowerCase()}`, r);
   }
 
-  /** The best foods for a query. Australian foods first; fallback ones only when those are few. */
+  /** The best foods for a query. Australian foods first; fallback ones only when few Australian foods are what was asked for. */
   search(query: string | ParsedQuery): GenericRow[] {
     const q = typeof query === "string" ? parseQuery(query) : query;
     const variants = queryVariants(q);

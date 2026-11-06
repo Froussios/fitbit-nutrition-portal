@@ -131,7 +131,8 @@ without fetching their text. Index format 3. "No brand" is the only available si
 310 KB gzipped that the browser downloads once and searches locally, and they are shown first. Open Food Facts holds
 products: those with no brand are labelled "No brand listed", rank below branded ones, and no longer count as
 generic. Every row shows a tag naming its source. Sources are never joined on names and their values are never
-combined. Only authoritative sources are added, and each diary entry's ID records its source
+combined. USDA foods appear only when AFCD has fewer than 3 foods where a query word is the food. Only authoritative
+sources are added, and each diary entry's ID records its source
 ([FOOD_SEARCH.md](FOOD_SEARCH.md#13-generic-foods)).
 **Why.** Owner decisions (5 November 2026). Open Food Facts' crowdsourced entries disagree and many are wrong:
 unbranded `Vegemite` says 9 kcal, `Dark chocolate` 1 kcal. The tag lets the owner tell which database causes a

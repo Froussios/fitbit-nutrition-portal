@@ -160,6 +160,14 @@ describe("food index", () => {
     expect(rows.map((r) => [r[1], r[2]])).toEqual([["Vegemite", "Mondelez"], ["Vegemite", null], ["Vegemite pressed pretzels", null]]);
   });
 
+  it("starts a new word-count range where products with no brand start", async () => {
+    // The last branded product and the first with no brand have the same word counts.
+    const { files } = build([product("8401", "Vegemite", { brands: "Vegemite" }), product("8402", "Vegemite", { nutriments: { "energy-kcal_100g": 9 } })]);
+    const meta = JSON.parse(files.get("meta.json") as string) as { unbrandedFrom: number; bands: [number, number, number][] };
+    expect(meta.unbrandedFrom).toBe(1);
+    expect(meta.bands.map((b) => b[0])).toEqual([0, 1]);
+  });
+
   it("puts a branded product the query uses up first, and not one with no brand", async () => {
     const generics = Array.from({ length: 30 }, (_, i) => product(`4${String(i).padStart(4, "0")}`, `Vegemite thing${i}`));
     const index = await FoodIndex.open(

@@ -193,7 +193,7 @@ export class IndexBuilder {
     const bands: [number, number, number][] = [];
     searchable.forEach((d, id) => {
       const last = bands[bands.length - 1];
-      if (!last || last[1] !== d.nameWordCount || last[2] !== d.productWordCount) bands.push([id, d.nameWordCount, d.productWordCount]);
+      if (!last || id === unbrandedFrom || last[1] !== d.nameWordCount || last[2] !== d.productWordCount) bands.push([id, d.nameWordCount, d.productWordCount]);
     });
 
     // Product lists: built in ID order, so each list is already sorted by rank.

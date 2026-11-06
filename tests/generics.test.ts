@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fromAfcd, fromFndds, type TableRow } from "../pipeline/generics-builder";
-import { CombinedCatalog, MAX_GENERIC_ROWS } from "../src/food/combined-catalog";
+import { CombinedCatalog, GENERICS_WAIT_MS, MAX_GENERIC_ROWS } from "../src/food/combined-catalog";
 import { LocalFoodCatalog, type FoodCatalog } from "../src/food/catalog";
 import { genericToFoodItem, GENERICS_FORMAT, type GenericRow, type GenericsFile } from "../src/food/generics-format";
 import { GenericIndex, MIN_PRIMARY_FOODS, queryVariants, singular } from "../src/food/generic-search";
@@ -108,6 +108,8 @@ describe("generic search", () => {
     expect(singular("tomatoes")).toBe("tomato");
     expect(singular("berries")).toBe("berry");
     expect(singular("swiss")).toBe("swiss");
+    expect(singular("pies")).toBe(singular("pie"));
+    expect(singular("ties")).toBe(singular("tie"));
     expect(names(rows, "bananas")).toEqual(["Banana, raw"]);
     expect(names(rows, "tomatoes")).toEqual(["Tomato, raw"]);
     expect(names(rows, "bana")).toEqual(["Banana, raw"]);
@@ -201,6 +203,63 @@ describe("CombinedCatalog", () => {
     expect((await combined([row("afcd", "1", "Milk, cow")], failing).search("milk")).map((h) => h.summary.name)).toEqual(["Milk, cow"]);
     const noFile = new CombinedCatalog("generics", products([product("x", "Milk", "Pura")]), "licence", (async () => new Response("no", { status: 500 })) as unknown as typeof fetch);
     expect((await noFile.search("milk")).map((h) => h.summary.brand)).toEqual(["Pura"]);
+  });
+
+  describe("when the generic file is slow", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    const stalled = () => {
+      let deliver = (_: Response) => {};
+      const fetchImpl = (() => new Promise<Response>((resolve) => (deliver = resolve))) as unknown as typeof fetch;
+      return { fetchImpl, deliver: (f: GenericsFile) => deliver(new Response(JSON.stringify(f))) };
+    };
+    const inner = () => products([product("x", "Milk", "Pura")]);
+    const brands = (hits: readonly { summary: { brand?: string; name: string } }[]) => hits.map((h) => h.summary.brand ?? h.summary.name);
+
+    it("shows products without it after a short wait, then doesn't wait again", async () => {
+      vi.useFakeTimers();
+      const { fetchImpl } = stalled();
+      const catalog = new CombinedCatalog("generics", inner(), "licence", fetchImpl);
+      const first = catalog.search("milk");
+      await vi.advanceTimersByTimeAsync(GENERICS_WAIT_MS);
+      expect(brands(await first)).toEqual(["Pura"]);
+      // No timers advance here: a later search answers straight away.
+      expect(brands(await catalog.search("milk"))).toEqual(["Pura"]);
+    });
+
+    it("uses the generic file as soon as it arrives", async () => {
+      vi.useFakeTimers();
+      const { fetchImpl, deliver } = stalled();
+      const catalog = new CombinedCatalog("generics", inner(), "licence", fetchImpl);
+      const first = catalog.search("milk");
+      await vi.advanceTimersByTimeAsync(GENERICS_WAIT_MS);
+      await first;
+      deliver(file([row("afcd", "1", "Milk, cow")]));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(brands(await catalog.search("milk"))).toEqual(["Milk, cow", "Pura"]);
+    });
+
+    it("doesn't hold up a cancelled search", async () => {
+      const { fetchImpl } = stalled();
+      const catalog = new CombinedCatalog("generics", inner(), "licence", fetchImpl);
+      const abort = new AbortController();
+      const search = catalog.search("milk", { signal: abort.signal });
+      abort.abort();
+      await expect(search).rejects.toThrow();
+    });
+
+    it("tries again after a failed download, and waits for that attempt too", async () => {
+      let calls = 0;
+      const fetchImpl = (async () => {
+        calls++;
+        if (calls === 1) throw new Error("network down");
+        return new Response(JSON.stringify(file([row("afcd", "1", "Milk, cow")])));
+      }) as unknown as typeof fetch;
+      const catalog = new CombinedCatalog("generics", inner(), "licence", fetchImpl);
+      expect(brands(await catalog.search("milk"))).toEqual(["Pura"]);
+      expect(brands(await catalog.search("milk"))).toEqual(["Milk, cow", "Pura"]);
+    });
   });
 
   it("reports a failure when nothing can answer, and doesn't swallow a cancelled search", async () => {
