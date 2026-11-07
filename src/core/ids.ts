@@ -42,6 +42,15 @@ export function newEntryId(ref: FoodRef, now: number = Date.now(), rand: string 
   return /^[a-z0-9-]+$/.test(foodId) && withFood.length <= MAX_LEN ? withFood : head;
 }
 
+/**
+ * A new ID for a copy of an entry, recording the same source and food. An ID the
+ * API chose has neither, so its copy reads like an entry with no food reference.
+ */
+export function copiedEntryId(id: string, now: number = Date.now(), rand: string = randomSuffix(4)): string {
+  const tail = /^e-[0-9a-z]+-[0-9a-z]+-([a-z]+(?:-.+)?)$/.exec(id)?.[1] ?? SOURCE_CODES.manual;
+  return `e-${now.toString(36)}-${rand}-${tail}`;
+}
+
 export interface ParsedEntryId {
   readonly kind: "entry";
   readonly loggedAt: Date;

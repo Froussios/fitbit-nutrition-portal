@@ -2,7 +2,7 @@ import "./styles.css";
 import { GoogleAuth, SignInRequiredError } from "./auth/google-auth";
 import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE, SCOPES, setClientId } from "./config";
 import { foodLabel } from "./core/food";
-import { idFromName, newEntryId } from "./core/ids";
+import { copiedEntryId, idFromName, newEntryId } from "./core/ids";
 import { civilDate } from "./core/time";
 import type { BaseUnit } from "./core/units";
 import { LocalFoodCatalog, type FoodCatalog } from "./food/catalog";
@@ -11,9 +11,9 @@ import { CombinedCatalog } from "./food/combined-catalog";
 import genericsUrl from "./food/data/generics.json?url";
 import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
-import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, connectionBanner, deleteFailed, type ConnectionState } from "./health/connection";
+import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, connectionBanner, deleteFailed, undoNotConfirmed, type ConnectionState } from "./health/connection";
 import { LoggedFoodsCatalog } from "./food/logged-catalog";
-import { buildNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toLoggedFoods, type DiaryEntry, type LogDraft } from "./health/mapping";
+import { buildNutritionLogPoint, byTime, copyNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
@@ -57,6 +57,12 @@ class App {
   /** When each pending point was written; ones the API never lists are dropped after PENDING_TTL_MS. */
   private readonly pendingSince = new Map<string, number>();
   private entries: DiaryEntry[] = [];
+  /** Today's entries deleted in this session, by ID: shown crossed out so the delete can be undone. Not stored (DR-20). */
+  private readonly deleted = new Map<string, DiaryEntry>();
+  /** Every ID deleted in this session. Undoing does not take one out: the API may still list the original, and the copy must not match it. */
+  private readonly deletedIds = new Set<string>();
+  /** IDs of the entries with a delete or undo under way, so that a second tap sends nothing. */
+  private readonly busy = new Set<string>();
   private notice = "";
   private signInError = "";
   private loading = false;
@@ -65,8 +71,8 @@ class App {
   /** The connection came back during a load that may have failed: load again when it ends. */
   private reloadAfterLoad = false;
   private listError = "";
-  /** A delete lost to the connection; shown until the next refresh, as the banner may clear at once. */
-  private deleteError = "";
+  /** A delete or undo lost to the connection; shown until the next refresh, as the banner may clear at once. */
+  private rowError = "";
   private ready = false;
   /** Why connecting to Google Health failed; shown with a Retry button instead of "Connecting…". */
   private connectError = "";
@@ -244,11 +250,12 @@ class App {
     if (this.loading) return;
     this.loading = true;
     this.listError = "";
-    this.deleteError = "";
+    this.rowError = "";
     this.renderDiary();
     try {
       const today = civilDate(new Date());
-      const points = await this.api.listNutritionLogs(today);
+      // Read after the wait: an entry deleted meanwhile may be in this listing, and must not come back.
+      const points = withoutEntries(await this.api.listNutritionLogs(today), this.deletedIds);
       const matched = reconcilePending(this.pending, points, this.clientId);
       for (const key of [...matched.listedById, ...matched.listedByContent]) this.dropPending(key);
       const stale = matched.stillPending.filter((key) => Date.now() - (this.pendingSince.get(key) ?? 0) > PENDING_TTL_MS);
@@ -262,7 +269,10 @@ class App {
       const waiting = matched.stillPending.filter((key) => this.pending.has(key));
       if (waiting.length) appLog.info("Entries written but not listed by the API yet", waiting);
       const pending = [...this.pending.values()].filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === today);
-      this.entries = toDiaryEntries([...points, ...pending], { ownClientId: this.clientId, unitNames: this.unitNames });
+      this.entries = toDiaryEntries([...points, ...pending], this.diaryContext());
+      for (const [id, entry] of this.deleted) {
+        if (civilDate(entry.start) !== today) this.deleted.delete(id);
+      }
       const unparsed = points.length - this.entries.length + pending.length;
       appLog.info(`Diary for ${today}: ${points.length} from the API, ${pending.length} pending`, {
         own: this.entries.filter((e) => e.own).length,
@@ -294,20 +304,7 @@ class App {
     }
     appLog.info(`Logging ${draft.food.name}`, { id, quantity: draft.quantity, unit: draft.unit, mealType: draft.mealType });
     try {
-      const op = await this.api.createNutritionLog(point);
-      if (op.error) {
-        appLog.error("Create returned an operation error", op.error);
-        throw new Error(op.error.message ?? "Google Health rejected the entry.");
-      }
-      if (!op.done) appLog.warn("Create returned an operation that is not done yet", { name: op.name });
-      const created: DataPoint = op.response?.nutritionLog ? { ...point, ...op.response } : point;
-      if (created.name && idFromName(created.name) !== id) {
-        appLog.warn("The API stored the entry under its own ID, not the one this app sent", { sent: point.name, stored: created.name });
-      }
-      // Key by the stored ID so the next listing replaces the pending row.
-      const key = idFromName(created.name ?? point.name!);
-      this.pending.set(key, created);
-      this.pendingSince.set(key, Date.now());
+      const { key } = await this.write(point);
       if (draft.food.ref.source !== "manual") {
         this.catalog.add({ id: key, ref: draft.food.ref, label: foodLabel(draft.food), at: draft.time.getTime() }, draft.food);
       }
@@ -319,24 +316,87 @@ class App {
     await this.loadToday();
   }
 
+  /** Sends a new entry and shows it as pending until a listing returns it. */
+  private async write(point: DataPoint): Promise<{ key: string; created: DataPoint }> {
+    const op = await this.api.createNutritionLog(point);
+    if (op.error) {
+      appLog.error("Create returned an operation error", op.error);
+      throw new Error(op.error.message ?? "Google Health rejected the entry.");
+    }
+    if (!op.done) appLog.warn("Create returned an operation that is not done yet", { name: op.name });
+    const created: DataPoint = op.response?.nutritionLog ? { ...point, ...op.response } : point;
+    if (created.name && idFromName(created.name) !== idFromName(point.name!)) {
+      appLog.warn("The API stored the entry under its own ID, not the one this app sent", { sent: point.name, stored: created.name });
+    }
+    // Key by the stored ID so the next listing replaces the pending row.
+    const key = idFromName(created.name ?? point.name!);
+    this.pending.set(key, created);
+    this.pendingSince.set(key, Date.now());
+    return { key, created };
+  }
+
   private async remove(entry: DiaryEntry) {
-    if (!confirm(`Delete "${entry.displayName}" from Google Health?`)) return;
+    if (this.busy.has(entry.id)) return;
+    this.busy.add(entry.id);
+    this.renderDiary();
     appLog.info(`Deleting ${entry.name}`);
     let failure = "";
     try {
-      await this.api.deleteNutritionLogs([entry.name]);
+      const op = await this.api.deleteNutritionLogs([entry.name]);
+      if (op.error) {
+        appLog.error("Delete returned an operation error", op.error);
+        throw new Error(op.error.message ?? "Google Health could not delete the entry.");
+      }
       this.dropPending(entry.id);
       this.catalog.remove(entry.id);
       this.entries = this.entries.filter((e) => e.id !== entry.id);
-      this.renderDiary();
+      this.deleted.set(entry.id, entry);
+      this.deletedIds.add(entry.id);
     } catch (e) {
       appLog.error("Deleting the entry failed", describeError(e));
       if (isConnectionFailure(e)) failure = deleteFailed(entry.displayName);
       else this.handleError(e);
     }
-    await this.loadToday();
-    this.deleteError = failure;
+    this.busy.delete(entry.id);
     this.renderDiary();
+    await this.loadToday();
+    this.rowError = failure;
+    this.renderDiary();
+  }
+
+  /** Undoes a delete by logging an equivalent entry. The original is gone, so the copy has its own ID. */
+  private async undoDelete(entry: DiaryEntry) {
+    const log = entry.point.nutritionLog;
+    if (this.busy.has(entry.id) || !log) return;
+    this.busy.add(entry.id);
+    this.renderDiary();
+    const point = copyNutritionLogPoint(log, copiedEntryId(entry.id));
+    appLog.info(`Undoing the delete of ${entry.name}`, { copy: point.name });
+    // The copy has no name for its unit until the API lists it, but the original did.
+    if (log.serving?.foodMeasurementUnitDisplayName) this.unitNames.set(log.serving.foodMeasurementUnit, log.serving.foodMeasurementUnitDisplayName);
+    let failure = "";
+    let focusId: string | undefined;
+    try {
+      const { key, created } = await this.write(point);
+      this.deleted.delete(entry.id);
+      this.catalog.merge(toLoggedFoods([created], this.clientId));
+      const restored = toDiaryEntry(created, this.diaryContext());
+      if (restored) this.entries = [...this.entries, restored].sort(byTime);
+      if (focusedEntryId() === entry.id) focusId = key;
+    } catch (e) {
+      appLog.error("Undoing the delete failed", describeError(e));
+      if (isConnectionFailure(e)) failure = undoNotConfirmed(entry.displayName);
+      else this.handleError(e);
+    }
+    this.busy.delete(entry.id);
+    this.renderDiary(focusId);
+    await this.loadToday();
+    this.rowError = failure;
+    this.renderDiary();
+  }
+
+  private diaryContext(): DiaryContext {
+    return { ownClientId: this.clientId, unitNames: this.unitNames };
   }
 
   private dropPending(key: string) {
@@ -348,6 +408,9 @@ class App {
   private signOut() {
     this.pending.clear();
     this.pendingSince.clear();
+    this.deleted.clear();
+    this.deletedIds.clear();
+    this.busy.clear();
     this.catalog.clear();
     this.loggedFoodsRead = undefined;
     this.entries = [];
@@ -432,7 +495,7 @@ class App {
             "p",
             { class: "hint" },
             "Everything in your Google Health nutrition diary for today, whichever app logged it. " +
-              "Only entries made by this app can be deleted here.",
+              "Only entries made by this app can be deleted here. A deleted entry stays crossed out, with an Undo, until you reload the page.",
           ),
         ),
       debugPanel,
@@ -456,23 +519,38 @@ class App {
     );
   }
 
-  private renderDiary() {
-    const problem = [this.deleteError, this.listError].filter(Boolean).join(" ");
+  /**
+   * Redrawing replaces the table. On a narrow screen it keeps its sideways scroll, so that Undo stays where Delete was,
+   * and the button with keyboard focus (or `focusId`'s, when the row changed ID) takes it back.
+   */
+  private renderDiary(focusId = focusedEntryId()) {
+    const scrollLeft = this.diary.querySelector(".table-wrap")?.scrollLeft ?? 0;
+    const problem = [this.rowError, this.listError].filter(Boolean).join(" ");
     this.diaryStatus.textContent = this.loading ? "Loading…" : problem;
     this.diaryStatus.classList.toggle("error", !this.loading && Boolean(problem));
     // With nothing loaded, an error must not read as "Nothing logged today yet".
-    const unknown = this.entries.length === 0 && Boolean(this.listError);
+    const unknown = this.entries.length === 0 && this.deleted.size === 0 && Boolean(this.listError);
     replaceChildren(
       this.diary,
       !unknown &&
         renderDiaryTable({
           entries: this.entries,
           pendingIds: new Set(this.pending.keys()),
+          deleted: [...this.deleted.values()],
+          busyIds: this.busy,
           offline: this.connection.state === "offline",
           onDelete: (e) => void this.remove(e),
+          onUndo: (e) => void this.undoDelete(e),
         }),
     );
+    this.diary.querySelector(".table-wrap")?.scrollTo({ left: scrollLeft });
+    if (focusId) this.diary.querySelector<HTMLElement>(`[data-entry="${CSS.escape(focusId)}"]`)?.focus();
   }
+}
+
+/** The entry whose Delete or Undo button has keyboard focus. */
+function focusedEntryId(): string | undefined {
+  return document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entry"] : undefined;
 }
 
 function isConnectionFailure(e: unknown): boolean {

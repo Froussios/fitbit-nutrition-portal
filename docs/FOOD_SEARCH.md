@@ -833,4 +833,4 @@ summary file for each boosted row (section 9.1).
 A food logged in this session counts straight away, as soon as Google Health accepts the entry and before a listing
 confirms it, so an entry the API never lists stays boosted until the next page load. So does a food whose ID didn't
 fit in the data point ID, which can't be boosted after a reload. Deleting an entry stops it counting, unless the food
-has another entry. Signing out forgets all of it.
+has another entry, and undoing the delete counts it again. Signing out forgets all of it.

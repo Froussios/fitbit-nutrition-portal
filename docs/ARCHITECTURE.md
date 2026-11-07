@@ -107,7 +107,8 @@ fit in 63 characters or is not ID-safe.
 The "Today" list reads **all sources** (with `nutrition.readonly`), so its totals match the Google Health
 app. Each row shows its amount (from `serving`) and who logged it: this app, the Google Health app, or
 another app's package name. A delete button appears only on this app's entries, because the write scope
-covers only data the app added. If the user unticks the read permission on Google's consent screen, the
+covers only data the app added. Deleting asks nothing: the row stays crossed out and out of the totals, with an
+Undo that logs an equivalent entry under a new ID (DR-20). If the user unticks the read permission on Google's consent screen, the
 app falls back to its own entries and says so.
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
