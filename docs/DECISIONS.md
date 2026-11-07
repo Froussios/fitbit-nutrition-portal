@@ -62,8 +62,8 @@ interactive search.
 (V10). Polling costs one list call per poll, far below the 300 requests/min/user limit.
 **Reopen if.** Multi-device use makes polling feel stale ([#10](https://github.com/Froussios/fitbit-nutrition-portal/issues/10)).
 
-### DR-09 Authentication: Google Identity Services token model for now
-Revised by DR-24 once meal prep is built: one sign-in will also return an ID token, outside Google's token client.
+### DR-09 Authentication: short-lived tokens from a Google popup for now
+Revised by DR-24: the popup also returns an ID token, and the app asks Google directly because Google's token client cannot.
 **Decision.** Short-lived access tokens from a Google popup, kept in `sessionStorage`; the user clicks
 Continue about hourly. Long-lived sessions are deferred to M3, after the MVP (D1).
 **Why.** Refresh tokens need the client secret for web clients, even with PKCE (V8), so they need a server
@@ -244,7 +244,7 @@ Reusing the project and domain avoids new hosting, and the domain avoids the fir
 The API identifies users by a Google ID token, because a token that can use the diary must not reach it. One sign-in
 returns both tokens (V11), so a second sign-in is not needed.
 **Consequence.** This is the first server and the first user data at rest, an exception to DR-01. The app's sign-in
-moves off Google's token client, which never returns an ID token, to its own popup and callback page (revises DR-09 when
-built), although Google recommends its library for this flow. Both tokens last 60 minutes, so **Continue** renews both. A Pages deploy replaces the whole site, so an API change ships only with the Food index workflow, and a rollback there
+moves off Google's token client, which never returns an ID token, to its own popup and callback page (revising DR-09),
+although Google recommends its library for this flow. Both tokens last 60 minutes, so **Continue** renews both. A Pages deploy replaces the whole site, so an API change ships only with the Food index workflow, and a rollback there
 covers both. Recipes can be lost with the database; D1's Time Travel covers the last 7 days, and the diary is unaffected.
 **Reopen if.** Shipping the API with the index becomes a real obstacle, or the free limits are reached.

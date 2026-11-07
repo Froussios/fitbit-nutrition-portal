@@ -36,7 +36,9 @@ use a separate project for development.
      and `https://www.googleapis.com/auth/googlehealth.nutrition.writeonly`.
    * **Clients → Create client → Web application.** Under **Authorized JavaScript origins** add every
      origin the app runs on, for example `http://localhost:5173` (dev), `http://localhost:4173` (preview)
-     and `https://<github-user>.github.io` (Pages). No redirect URI is needed.
+     and `https://<github-user>.github.io` (Pages). Under **Authorized redirect URIs** add `auth-callback.html`
+     on each of them, for example `http://localhost:5173/auth-callback.html` and
+     `https://<github-user>.github.io/<repository>/auth-callback.html`.
 3. Copy the client ID. It is public (it identifies the app; it is not a secret). Put it in `.env.local`
    as `VITE_GOOGLE_CLIENT_ID=...` (see `.env.example`), or in the `GOOGLE_CLIENT_ID` repository variable
    for deployments.
@@ -116,7 +118,7 @@ One-time setup:
 src/
   core/      domain logic, no I/O: units, nutrients, food model, Open Food Facts normaliser, ids, time
   health/    Google Health API types (from the discovery document), client and mapping
-  auth/      Google Identity Services token flow
+  auth/      Google sign-in: popup, checks on Google's answer
   food/      FoodCatalog interface, the static index engine and catalogue, sample foods
   ui/        DOM helpers, log form, food search combobox, diary table
 pipeline/    food index builder (Open Food Facts export → public/food-index/), generic foods builder

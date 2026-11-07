@@ -1,5 +1,5 @@
 import "./styles.css";
-import { GoogleAuth, SignInRequiredError } from "./auth/google-auth";
+import { GoogleAuth, SignInRequiredError, SignInSupersededError } from "./auth/google-auth";
 import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE, SCOPES, setClientId } from "./config";
 import { foodLabel } from "./core/food";
 import { copiedEntryId, idFromName, newEntryId } from "./core/ids";
@@ -161,6 +161,7 @@ class App {
       await this.auth.signIn(prompt);
       await this.afterSignIn();
     } catch (e) {
+      if (e instanceof SignInSupersededError) return;
       appLog.error("Sign-in failed", describeError(e));
       this.signInError = errorMessage(e);
       this.render();
@@ -766,7 +767,7 @@ function renderSetup(canCancel = false) {
       "This build has no OAuth client ID. Set VITE_GOOGLE_CLIENT_ID at build time, or paste the app's Web client ID here for local testing. " +
         "This page's origin (",
       el("code", {}, location.origin),
-      ") must be one of the client's Authorized JavaScript origins. See the README.",
+      ") must be one of the client's Authorized JavaScript origins, and its auth-callback.html one of the Authorized redirect URIs. See the README.",
     ),
     el("label", { class: "field", for: "client-id" }, el("span", {}, "OAuth client ID"), clientId),
     el(
