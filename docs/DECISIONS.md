@@ -13,6 +13,7 @@ labelled `decision`; when one closes, its outcome is added here. Supporting fact
 ## Decided
 
 ### DR-01 No custom backend
+Revised by DR-21, which adds a database for meal prep.
 **Decision.** The app is a static site. Everything runs in the browser. A server-side component is allowed
 only as a recorded exception here, and must be stateless (no user data at rest).
 **Why.** Owner requirement: keep all data in existing services, with no database of our own.
@@ -192,3 +193,20 @@ the user to check the diary first. A reload ends the chance to undo.
 A row is disabled while its delete or undo is under way, and enabled again if it fails, with an alert in the diary that
 stays until it is dismissed or the action is tried again, so that a refresh cannot hide it.
 **Reopen if.** Deleted entries need to survive a reload, or [#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18) shows that the original ID can be reused.
+
+### DR-21 Meal prep keeps its recipes in a database, in the food index's Cloudflare project
+**Decision.** One-off meal prep ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55)) stores recipes and what is left of them in a Cloudflare D1 database, behind Pages Functions
+in the existing `food-diary-index` project and `food-index.froussios.com` domain. Every row belongs to one user: there are
+no shared recipes. The database adds to the Google Health API and does not mirror it: the diary stays in Google Health,
+and a logged portion is one ordinary entry there. The database keeps only the portion's fraction, entry ID, state and
+time, never its nutrients ([design](ARCHITECTURE.md#45-meal-prep-planned)).
+**Why.** Owner decisions (7 November 2026). Recipes must sync across devices, and Google Health has nowhere to hold them
+(V7). Browser storage stays on one device and can be cleared. Google Drive's app-data folder was considered and rejected.
+Reusing the project and domain avoids new hosting, and the domain avoids the firewall that intercepts `*.pages.dev`
+(DR-14).
+**Consequence.** This is the first server and the first user data at rest, an exception to DR-01. The Functions receive
+the user's Google access token, which can read and write the diary until it expires, so they must never store or log it.
+A Pages deploy replaces the whole site, so an API change ships only with the Food index workflow, and a rollback there
+covers both. Recipes can be lost with the database; D1's Time Travel covers the last 7 days, and the diary is unaffected.
+**Reopen if.** Shipping the API with the index becomes a real obstacle, the free limits are reached, or the app needs
+users beyond the owner: sending this token to a server would likely matter to the security assessment ([#28](https://github.com/Froussios/fitbit-nutrition-portal/issues/28)).

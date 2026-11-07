@@ -5,14 +5,16 @@ Input: the research brief *Food Diary App — Research Brief* (claude.ai artifac
 
 ## 1. Goal and ground rules
 
-The app is a food diary with a better logging UI than the Google Health app. It keeps **no database of
-its own**: the diary lives in the user's Google Health account (the successor of the Fitbit Web API), and
-food definitions come from existing food databases.
+The app is a food diary with a better logging UI than the Google Health app. **The diary is not stored
+here**: it lives in the user's Google Health account (the successor of the Fitbit Web API), and
+food definitions come from existing food databases. Meal prep adds one small database for what Google
+Health cannot hold, and never copies the diary into it (section 4.5).
 
 * **The Google Health API is the only integration.** The app reads and writes the user's nutrition log
   there and nowhere else. Syncing that log with other platforms is Google Health's job, not the app's.
-* **No custom backend.** Everything runs in the browser as a static site. Where that is not possible, the
-  trade-off is written down in [DECISIONS.md](DECISIONS.md) instead of quietly adding a server.
+* **No custom backend, apart from recorded exceptions.** Everything runs in the browser as a static site.
+  Where that is not possible, the trade-off is written down in [DECISIONS.md](DECISIONS.md) instead of
+  quietly adding a server. The one exception so far is the meal prep API (DR-21).
 * **MVP = proof of concept:** sign in, write minimal entries, show the day. Food search,
   long-lived sessions and meals are post-MVP milestones (see [ROADMAP.md](ROADMAP.md)).
 
@@ -48,6 +50,7 @@ flowchart LR
   HC -- "Bearer token, CORS" --> GHAPI["Google Health API v4<br/>nutrition-log = the diary"]
   FC --> Fake["M0: local fake data"]
   FC -. "M1" .-> Index["Static food index<br/>(slimmed OFF export, Cloudflare Pages)"]
+  UI -. "M4, planned" .-> Prep["Meal prep API<br/>(Functions and D1, same Cloudflare project)"]
 ```
 
 | Layer | Folder | Notes |
@@ -115,6 +118,38 @@ app falls back to its own entries and says so.
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
 background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-foods-logged-before)).
+
+### 4.5 Meal prep (planned)
+
+Not built yet ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55), DR-21). The user records a recipe when cooking, then logs fractions of it (`1/6`, `25%`) until it is finished or
+discarded. Fractions are of the whole batch. Weights are not offered, because the ingredients do not add up to the cooked weight.
+
+**The database adds to the diary and does not mirror it.** A portion is one ordinary diary entry with summed nutrients,
+named `Chili (1/6)`, with the ID `e-<time>-<rand>-prep-<prepId>`. Google Health stays the only record of what was eaten.
+
+```sql
+preps(user_id, id, name, ingredients_json, created_at, updated_at, discarded_at)  -- PRIMARY KEY (user_id, id)
+portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)               -- PRIMARY KEY (user_id, id)
+```
+
+* **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
+  index can change. Editing them affects later portions only: diary entries cannot be edited.
+* **Identity.** The browser sends its Google access token. The API checks with `tokeninfo` that it was issued to this
+  app, and takes `healthUserId` from `users/me/identity`. No new scopes are needed. It caches the result under a hash of the
+  token until the token expires, and never stores or logs the token. The user ID never comes from the request.
+* **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
+  so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
+  rejects the entry, the portion is removed. If the answer is lost, the portion counts as eaten and stays unconfirmed until
+  a listing finds the entry; the user can also give it back.
+* **Removing a portion.** Deleting one in the diary gives it back, and Undo is refused if it would pass 100%. The diary shows
+  only today, so the prep also lists its portions, each with a remove button. Deletes made in the Google Health app
+  are not detected; removing the portion from the prep corrects the amount left.
+* **Finished and discarded preps** are hidden and kept for 30 days, so that an undo can bring them back, then deleted the
+  next time that user's list loads. An unfinished recipe draft stays on the device until it is saved.
+* **Failures.** If the API is down, eating is blocked and normal logging still works, as with other failures (DR-18).
+* **Deployment.** The Functions live at `/api/*` in the `food-diary-index` Pages project, and `_routes.json` keeps every other
+  request static, so food search does not use the Functions allowance. A Pages deploy replaces the whole site, so API changes
+  ship only through the Food index workflow, which applies D1 migrations first. Its Cloudflare token needs D1 access as well.
 
 ## 5. Authentication
 
