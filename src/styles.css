@@ -184,8 +184,7 @@ tr.pending { opacity: 0.7; }
 tr.editing td { padding-block: 0; }
 tr.editing input, tr.editing select { padding: 4px 6px; }
 tr.editing select { width: auto; }
-tr.editing input { width: 4rem; appearance: textfield; text-align: right; }
-tr.editing input::-webkit-inner-spin-button, tr.editing input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+tr.editing input { width: 4rem; text-align: right; }
 tr.editing td:last-child { position: sticky; right: 0; background: var(--surface); }
 .amount-edit { display: flex; justify-content: flex-end; gap: 4px; }
 tr.editing .amount-edit select { max-width: 5.5rem; }
