@@ -30,7 +30,7 @@ index builder; publishing the index; a `FoodCatalog` that queries it.
 
 **Not in this design:**
 
-* Barcode scanning ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)). It uses `FoodCatalog.get()`, which this design provides (a barcode map in the index).
+* Barcode lookup by manual entry ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)). It uses `FoodCatalog.get()`, which this design provides (a barcode map in the index).
 * Recent foods in the empty dropdown, and "log again" ([#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14)). Not built here. Foods logged before already rank higher once something is typed (section 14).
 * AUSNUT 2023 and more USDA data: [#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38), and section 13.
 * Typo tolerance. Dropped from R3; section 4.4 lists cheap additions if misses show it is needed.
