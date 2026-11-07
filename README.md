@@ -2,6 +2,7 @@
 
 A food diary that runs entirely in the browser and stores every entry in the user's own
 **Google Health** account (the successor of the Fitbit Web API). There is no backend and no database.
+Planned meal prep will add a small database for recipes, and will not copy the diary into it (DR-24).
 
 This is the MVP, a proof of concept (milestone M0):
 

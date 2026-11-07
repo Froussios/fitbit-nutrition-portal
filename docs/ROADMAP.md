@@ -10,8 +10,8 @@ Decisions live in [DECISIONS.md](DECISIONS.md); the design in [ARCHITECTURE.md](
 ## Product in one line
 
 A food diary with a better logging UI than the Google Health app. Every entry is stored in the user's
-Google Health nutrition log, with no backend and no database of our own. Google Health takes care of
-syncing that log with other platforms.
+Google Health nutrition log, and we keep no copy of it. Google Health takes care of syncing that log with
+other platforms. The only data of our own is what Google Health cannot hold, such as meal prep recipes (DR-24).
 
 ## MVP = the proof of concept (M0)
 
@@ -41,7 +41,7 @@ own entries); those are kept but are not MVP criteria.
 | [M1: food search](https://github.com/Froussios/fitbit-nutrition-portal/issues/3) | Search-as-you-type over Open Food Facts (static index, no server) behind `FoodCatalog`, barcode, recent foods ([design](FOOD_SEARCH.md)) | At least 45 of a 50-item Australian test list found with usable nutrients; a recent food logs in 3 clicks or fewer; results within 250 ms of the last keystroke | Done: [#9](https://github.com/Froussios/fitbit-nutrition-portal/issues/9) decision D3 (DR-14) · [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) index builder · [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) publish the index · [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) search UI · [#51](https://github.com/Froussios/fitbit-nutrition-portal/issues/51) boost foods logged before. Open: [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) verify on the real index · [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) barcode · [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) recent foods |
 | [M2: daily driver](https://github.com/Froussios/fitbit-nutrition-portal/issues/4) | Usable every day on desktop | Entries can be edited; any day can be viewed; without a connection the app says logging will not work | [#17](https://github.com/Froussios/fitbit-nutrition-portal/issues/17) edit · [#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18) spike: reuse deleted ID · [#19](https://github.com/Froussios/fitbit-nutrition-portal/issues/19) day navigation · [#20](https://github.com/Froussios/fitbit-nutrition-portal/issues/20) fail cleanly when offline · [#21](https://github.com/Froussios/fitbit-nutrition-portal/issues/21) kJ/kcal |
 | [M3: long-lived sessions](https://github.com/Froussios/fitbit-nutrition-portal/issues/5) | No hourly re-sign-in | A user signs in at most about once a month | [#22](https://github.com/Froussios/fitbit-nutrition-portal/issues/22) decision D1 · [#23](https://github.com/Froussios/fitbit-nutrition-portal/issues/23) spike: unverified production tokens · [#24](https://github.com/Froussios/fitbit-nutrition-portal/issues/24) implement |
-| [M4: custom meals](https://github.com/Froussios/fitbit-nutrition-portal/issues/6) | Meals from known ingredients | A meal can be built, logged and logged again | [#25](https://github.com/Froussios/fitbit-nutrition-portal/issues/25) builder and grouped logging · [#26](https://github.com/Froussios/fitbit-nutrition-portal/issues/26) library from history |
+| [M4: custom meals](https://github.com/Froussios/fitbit-nutrition-portal/issues/6) | Meals from known ingredients | A meal can be built, logged and logged again; a one-off batch can be eaten in fractions until it is finished | [#25](https://github.com/Froussios/fitbit-nutrition-portal/issues/25) builder and grouped logging · [#26](https://github.com/Froussios/fitbit-nutrition-portal/issues/26) library from history · [#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55) one-off meal prep |
 
 Order matters mainly for M1 before M4: meals need real ingredients. M2 and M3 can swap if hourly sign-in
 becomes the bigger pain.

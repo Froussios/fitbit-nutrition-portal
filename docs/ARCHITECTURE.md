@@ -5,14 +5,16 @@ Input: the research brief *Food Diary App — Research Brief* (claude.ai artifac
 
 ## 1. Goal and ground rules
 
-The app is a food diary with a better logging UI than the Google Health app. It keeps **no database of
-its own**: the diary lives in the user's Google Health account (the successor of the Fitbit Web API), and
-food definitions come from existing food databases.
+The app is a food diary with a better logging UI than the Google Health app. **The diary is not stored
+here**: it lives in the user's Google Health account (the successor of the Fitbit Web API), and
+food definitions come from existing food databases. Meal prep adds one small database for what Google
+Health cannot hold, and never copies the diary into it (section 4.5).
 
 * **The Google Health API is the only integration.** The app reads and writes the user's nutrition log
   there and nowhere else. Syncing that log with other platforms is Google Health's job, not the app's.
-* **No custom backend.** Everything runs in the browser as a static site. Where that is not possible, the
-  trade-off is written down in [DECISIONS.md](DECISIONS.md) instead of quietly adding a server.
+* **No custom backend, apart from recorded exceptions.** Everything runs in the browser as a static site.
+  Where that is not possible, the trade-off is written down in [DECISIONS.md](DECISIONS.md) instead of
+  quietly adding a server. The one exception so far is the meal prep API (DR-24).
 * **MVP = proof of concept:** sign in, write minimal entries, show the day. Food search,
   long-lived sessions and meals are post-MVP milestones (see [ROADMAP.md](ROADMAP.md)).
 
@@ -34,6 +36,7 @@ revision `20261030`), Google's documentation as indexed by search, and live HTTP
 | V8 | Google's token endpoint (`oauth2.googleapis.com/token`) allows CORS, but **refuses to exchange an authorisation code without `client_secret`, even with PKCE** (`invalid_request: client_secret is missing`). | Live POST from a foreign origin |
 | V9 | In OAuth *Testing* status, refresh tokens expire after 7 days. In *Production* they last until revoked or unused for about six months. All Google Health scopes are *restricted*: an unverified app is capped at 100 users and needs a security assessment to go beyond that. | Google Health setup docs (via search); one unconfirmed report says unverified production apps also get 7-day tokens (spike B) |
 | V10 | Webhooks: a *subscriber* (one HTTPS URL per Cloud project) is registered with the `cloud-platform` scope. Google checks it by POSTing twice: it must answer `201` with the shared secret and `401`/`403` without. The `AUTOMATIC` policy then notifies for every user who consented, so there is no per-user setup. The `Subscription` docs list only altitude, distance, floors, sleep, steps and weight; nutrition-log support is unconfirmed. | Discovery document |
+| V11 | **One sign-in can return an access token and an ID token together.** `response_type=token id_token` with `openid` and both nutrition scopes returned both, each lasting 60 minutes, with a valid signature, audience and nonce. Google's token client never returns an ID token. `sub` and `healthUserId` are different values, so they cannot be compared. In desktop Chrome the popup kept its `window.opener` link and closed itself. | Real account in desktop Chrome, twice, 7 November 2026 |
 
 ## 3. Components
 
@@ -48,6 +51,7 @@ flowchart LR
   HC -- "Bearer token, CORS" --> GHAPI["Google Health API v4<br/>nutrition-log = the diary"]
   FC --> Fake["M0: local fake data"]
   FC -. "M1" .-> Index["Static food index<br/>(slimmed OFF export, Cloudflare Pages)"]
+  UI -. "M4, planned" .-> Prep["Meal prep API<br/>(Functions and D1, same Cloudflare project)"]
 ```
 
 | Layer | Folder | Notes |
@@ -116,6 +120,48 @@ app falls back to its own entries and says so.
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
 background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-foods-logged-before)).
+
+### 4.5 Meal prep (planned)
+
+Not built yet ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55), DR-24). The user records a recipe when cooking, then logs fractions of it (`1/6`, `25%`) until it is finished or
+discarded. Fractions are of the whole batch. Weights are not offered, because the ingredients do not add up to the cooked weight.
+
+**The database adds to the diary and does not mirror it.** A portion is one ordinary diary entry with summed nutrients,
+named `Chili (1/6)`, with the ID `e-<time>-<rand>-prep-<prepId>`. Google Health stays the only record of what was eaten.
+
+```sql
+preps(user_id, id, name, ingredients_json, created_at, updated_at, discarded_at)  -- PRIMARY KEY (user_id, id)
+portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)               -- PRIMARY KEY (user_id, id)
+```
+
+* **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
+  index can change. Editing them affects later portions only: diary entries cannot be edited.
+* **Identity.** The Google access token never goes to our API, because it can read and write the diary. It receives a Google
+  **ID token** instead, which proves who the user is and grants no API access. The API checks its signature against Google's
+  public keys, and its `aud` (this app's client ID), `iss` and `exp`. `user_id` is its `sub`, which is stable and never reused.
+  The `sub` alone would not do: anyone who knew it could use it. The user ID never comes from the request, and the API ignores
+  the token's email and name and does not store the token. No `nonce` reaches the API, so a stolen ID token can be replayed
+  until it expires. That reaches meal prep data only, not the diary.
+* **One sign-in.** One request to Google returns both tokens (V11), so they are always for the same account, and **Continue**
+  renews both. The app opens its own popup, and a callback page with no other scripts passes the answer back through
+  `window.opener`. It never uses a `BroadcastChannel`, because `froussios.github.io` is shared with other Pages sites. The
+  browser checks `state` and `nonce`. Passing `sub` as `login_hint` on renewal should skip the account chooser; to be tested. If a renewal
+  returns a different `sub`, the user switched account, so the app drops the meal prep state it holds for the previous one.
+* **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
+  so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
+  rejects the entry, the portion is removed. If the answer is lost or the browser closes first, the portion counts as eaten
+  and stays unconfirmed. Each diary refresh looks for unconfirmed portions in the listing for the day they were eaten, and
+  confirms any it finds. An unconfirmed portion is never released automatically, because its entry may exist; the prep shows
+  it, and the user can give it back.
+* **Removing a portion.** Deleting one in the diary gives it back, and Undo is refused if it would pass 100%. The diary shows
+  only today, so the prep also lists its portions, each with a remove button. Deletes made in the Google Health app
+  are not detected; removing the portion from the prep corrects the amount left.
+* **Finished and discarded preps** are hidden and kept for 30 days, so that an undo can bring them back, then deleted the
+  next time that user's list loads. An unfinished recipe draft stays on the device until it is saved.
+* **Failures.** If the API is down, eating is blocked and normal logging still works, as with other failures (DR-18).
+* **Deployment.** The Functions live at `/api/*` in the `food-diary-index` Pages project, and `_routes.json` keeps every other
+  request static, so food search does not use the Functions allowance. A Pages deploy replaces the whole site, so API changes
+  ship only through the Food index workflow, which applies D1 migrations first. Its Cloudflare token needs D1 access as well.
 
 ## 5. Authentication
 

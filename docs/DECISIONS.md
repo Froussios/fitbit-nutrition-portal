@@ -13,6 +13,7 @@ labelled `decision`; when one closes, its outcome is added here. Supporting fact
 ## Decided
 
 ### DR-01 No custom backend
+Revised by DR-24: meal prep may keep user data in a database, so its API is not stateless. Everything else stays as below.
 **Decision.** The app is a static site. Everything runs in the browser. A server-side component is allowed
 only as a recorded exception here, and must be stateless (no user data at rest).
 **Why.** Owner requirement: keep all data in existing services, with no database of our own.
@@ -62,6 +63,7 @@ interactive search.
 **Reopen if.** Multi-device use makes polling feel stale ([#10](https://github.com/Froussios/fitbit-nutrition-portal/issues/10)).
 
 ### DR-09 Authentication: Google Identity Services token model for now
+Revised by DR-24 once meal prep is built: one sign-in will also return an ID token, outside Google's token client.
 **Decision.** Short-lived access tokens from a Google popup, kept in `sessionStorage`; the user clicks
 Continue about hourly. Long-lived sessions are deferred to M3, after the MVP (D1).
 **Why.** Refresh tokens need the client secret for web clients, even with PKCE (V8), so they need a server
@@ -226,3 +228,21 @@ that happens to suit phones stays until there is a reason to change it.
 **Consequence.** Barcode lookup ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)) is manual entry only. Users still need the Google Health phone app once, to link their account:
 that is Google's requirement, not ours.
 **Reopen if.** The owner wants to log from a phone in this app.
+
+### DR-24 Meal prep keeps its recipes in a database, in the food index's Cloudflare project
+**Decision.** One-off meal prep ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55)) stores recipes and what is left of them in a Cloudflare D1 database, behind Pages Functions
+in the existing `food-diary-index` project and `food-index.froussios.com` domain. Every row belongs to one user: there are
+no shared recipes. The database adds to the Google Health API and does not mirror it: the diary stays in Google Health,
+and a logged portion is one ordinary entry there. The database keeps only the portion's fraction, entry ID, state and
+time, never its nutrients ([design](ARCHITECTURE.md#45-meal-prep-planned)).
+**Why.** Owner decisions (7 November 2026). Recipes must sync across devices, and Google Health has nowhere to hold them
+(V7). Browser storage stays on one device and can be cleared. Google Drive's app-data folder was considered and rejected.
+Reusing the project and domain avoids new hosting, and the domain avoids the firewall that intercepts `*.pages.dev`
+(DR-14).
+The API identifies users by a Google ID token, because a token that can use the diary must not reach it. One sign-in
+returns both tokens (V11), so a second sign-in is not needed.
+**Consequence.** This is the first server and the first user data at rest, an exception to DR-01. The app's sign-in
+moves off Google's token client, which never returns an ID token, to its own popup and callback page (revises DR-09 when
+built), although Google recommends its library for this flow. Both tokens last 60 minutes, so **Continue** renews both. A Pages deploy replaces the whole site, so an API change ships only with the Food index workflow, and a rollback there
+covers both. Recipes can be lost with the database; D1's Time Travel covers the last 7 days, and the diary is unaffected.
+**Reopen if.** Shipping the API with the index becomes a real obstacle, or the free limits are reached.
