@@ -72,7 +72,7 @@ class App {
   private reloadAfterLoad = false;
   private listError = "";
   /** Why a delete or undo failed, by entry ID. Kept until dismissed or tried again, so that a refresh does not hide it. */
-  private readonly rowFailures = new Map<string, string>();
+  private readonly rowFailures = new Map<string, HTMLElement>();
   private ready = false;
   /** Why connecting to Google Health failed; shown with a Retry button instead of "Connecting…". */
   private connectError = "";
@@ -83,8 +83,14 @@ class App {
   private readonly form: LogForm;
   private readonly diary = el("div", { class: "diary" });
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
-  /** Kept across renders, so that redrawing the diary does not announce it again. */
-  private readonly rowAlert = el("div", { class: "notice row-alert", role: "alert", hidden: true });
+  private readonly rowFailureList = el("div");
+  /** Kept across renders, and messages come and go one at a time, so that screen readers announce only what is new. */
+  private readonly rowAlert = el(
+    "div",
+    { class: "notice row-alert", role: "alert", hidden: true },
+    this.rowFailureList,
+    el("button", { type: "button", onclick: () => this.clearRowFailures() }, "Dismiss"),
+  );
 
   constructor(
     private readonly clientId: string,
@@ -394,34 +400,25 @@ class App {
   /** Disables the row, and forgets why this row failed last time. */
   private startRowAction(entry: DiaryEntry) {
     this.busy.add(entry.id);
-    if (this.rowFailures.delete(entry.id)) this.renderRowAlert();
+    this.rowFailures.get(entry.id)?.remove();
+    this.rowFailures.delete(entry.id);
+    this.rowAlert.hidden = this.rowFailures.size === 0;
     this.renderDiary();
   }
 
   private showRowFailure(entry: DiaryEntry, message: string) {
-    this.rowFailures.set(entry.id, message);
-    this.renderRowAlert();
+    this.rowAlert.hidden = false;
+    const failure = el("p", {}, message);
+    this.rowFailures.set(entry.id, failure);
+    this.rowFailureList.append(failure);
     // On a phone the row can be a long way below the top of the card.
     this.rowAlert.scrollIntoView({ block: "nearest" });
   }
 
-  private renderRowAlert() {
-    this.rowAlert.hidden = this.rowFailures.size === 0;
-    replaceChildren(
-      this.rowAlert,
-      el("div", {}, ...[...this.rowFailures.values()].map((message) => el("p", {}, message))),
-      el(
-        "button",
-        {
-          type: "button",
-          onclick: () => {
-            this.rowFailures.clear();
-            this.renderRowAlert();
-          },
-        },
-        "Dismiss",
-      ),
-    );
+  private clearRowFailures() {
+    this.rowFailures.clear();
+    this.rowFailureList.replaceChildren();
+    this.rowAlert.hidden = true;
   }
 
   private diaryContext(): DiaryContext {
@@ -440,8 +437,7 @@ class App {
     this.deleted.clear();
     this.deletedIds.clear();
     this.busy.clear();
-    this.rowFailures.clear();
-    this.renderRowAlert();
+    this.clearRowFailures();
     this.catalog.clear();
     this.loggedFoodsRead = undefined;
     this.entries = [];
