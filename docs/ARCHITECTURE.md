@@ -161,8 +161,9 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
 * **Removing a portion.** Deleting one in the diary gives it back, and Undo is refused if it would pass 100%. The diary shows
   only today, so the prep also lists its portions, each with a remove button. Deletes made in the Google Health app
   are not detected; removing the portion from the prep corrects the amount left.
-* **Editing a portion in the diary.** Only its meal can change, because a new fraction would have to go through the
-  reservation above (DR-22). An edit gives the entry a new ID, so `portions.entry_id` must move to it, or the portion loses
+* **Editing a portion in the diary.** Only its meal may change, because a new fraction would have to go through the
+  reservation above. Today the editor offers any entry's amount, as "× this entry" when it has no g or ml (DR-22), so
+  meal prep must turn the amount off for `prep` entries. An edit gives the entry a new ID, so `portions.entry_id` must move to it, or the portion loses
   track of its entry. The delete inside an edit must not give the portion back: only a delete by the user does.
 * **Finished and discarded preps** are hidden and kept for 30 days, so that an undo can bring them back, then deleted the
   next time that user's list loads. An unfinished recipe draft stays on the device until it is saved.

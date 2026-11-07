@@ -335,3 +335,17 @@ describe("the real generic foods", () => {
     }
   });
 });
+
+describe("an entry measured only as a multiple of itself", () => {
+  const entry = { basis: "g" as const, portions: [{ name: "this entry", amount: 1, unit: "g" as const }], portionsOnly: true };
+
+  it("reads a number in that portion", () => {
+    expect(readAmount("2", "portion:this entry", entry, { settled: true })).toEqual({ state: "ok", quantity: 2, unit: "portion:this entry" });
+    expect(readAmount("0.5", "portion:this entry", entry, { settled: true })).toEqual({ state: "ok", quantity: 0.5, unit: "portion:this entry" });
+  });
+
+  it("does not accept a weight or volume, which it has no way to convert", () => {
+    expect(readAmount("80 g", "portion:this entry", entry, { settled: true }).state).toBe("problem");
+    expect(readAmount("1 cup", "portion:this entry", entry, { settled: true }).state).toBe("problem");
+  });
+});

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { FoodItem } from "../src/core/food";
-import { PORTION_PREFIX } from "../src/core/units";
+import { PORTION_PREFIX, selectableUnits } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { basicMeasure, buildNutritionLogPoint, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
+import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
 import type { DataPoint, MealType, NutritionLog } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
@@ -296,6 +296,8 @@ describe("toLoggedFoods", () => {
   });
 });
 
+const round1 = (v: number) => Math.round(v * 10) / 10;
+
 describe("editing an entry", () => {
   const units = { g: "users/me/dataTypes/food-measurement-unit/dataPoints/g", ml: "users/me/dataTypes/food-measurement-unit/dataPoints/ml" };
   const unitNames = new Map([[units.g, "gram"], [units.ml, "milliliter"]]);
@@ -442,6 +444,31 @@ describe("editing an entry", () => {
     it("refuses an amount edit on an entry with no amount", () => {
       const log = { ...logFood(oats, 40, "g", {}), foodDisplayName: "Chili (1/6)" };
       expect(() => editedNutritionLogPoint(log, { amount: { quantity: 2, unit: "g" } }, opts)).toThrow("no amount");
+    });
+  });
+
+  describe("as a multiple of the entry", () => {
+    it("scales every value, and the serving whatever its unit", () => {
+      const log = { ...logFood(oats, 40, "g"), serving: { foodMeasurementUnit: "u/odd", foodMeasurementUnitDisplayName: "Gramm", amount: 40 } };
+      expect(loggedAmount(log, unitNames)).toBeUndefined();
+      const edited = editedNutritionLogPoint(log, { amount: { quantity: 2, unit: AS_LOGGED_UNIT } }, opts).nutritionLog!;
+      expect(edited.energy?.kcal).toBe(round1(log.energy!.kcal * 2));
+      expect(edited.nutrients?.find((n) => n.nutrient === "PROTEIN")?.quantity.grams).toBe(9.6);
+      expect(edited.serving).toEqual({ foodMeasurementUnit: "u/odd", amount: 80 });
+      expect(edited.foodDisplayName).toBe(log.foodDisplayName);
+    });
+
+    it("works with no serving at all", () => {
+      const log = { ...logFood(oats, 40, "g", {}), foodDisplayName: "Chili (1/6)" };
+      const edited = editedNutritionLogPoint(log, { amount: { quantity: 0.5, unit: AS_LOGGED_UNIT } }, opts).nutritionLog!;
+      expect(edited.energy?.kcal).toBe(round1(log.energy!.kcal / 2));
+      expect(edited).not.toHaveProperty("serving");
+      expect(edited.foodDisplayName).toBe("Chili (1/6)");
+    });
+
+    it("offers only that portion", () => {
+      expect(selectableUnits(asLoggedMeasure())).toEqual([]);
+      expect(asLoggedMeasure().portions.map((p) => PORTION_PREFIX + p.name)).toEqual([AS_LOGGED_UNIT]);
     });
   });
 

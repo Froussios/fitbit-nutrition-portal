@@ -132,8 +132,7 @@ button.link { border: none; background: none; color: var(--accent); text-decorat
 button.icon { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; padding: 0; border: none; background: none; color: var(--muted); line-height: 1; }
 button.icon:focus-visible { outline-offset: -2px; }
 button.icon:not(:disabled):hover { color: var(--danger); }
-button.icon.undo:not(:disabled):hover, button.icon.edit:not(:disabled):hover, button.icon.save:not(:disabled):hover { color: var(--accent); }
-button.icon.save:not(:disabled) { color: var(--accent); }
+button.icon.undo:not(:disabled):hover, button.icon.edit:not(:disabled):hover { color: var(--accent); }
 button.not-owned:not(:disabled):hover { color: var(--text); }
 .not-owned svg, button.edit svg { display: block; width: 1em; height: 1em; }
 /* Room for two icons on every row, with Delete on the right: Undo and the lock take its place, and nothing moves. */
@@ -188,12 +187,18 @@ tbody td:last-child { padding: 0; }
 tr.pending { opacity: 0.7; }
 /* A row being edited keeps its height and the table's width. If the window is too narrow for that, Save and Cancel stay in view. */
 tr.editing td { padding-block: 0; }
+/* Their controls make these the widest cells in their columns, so a little less padding keeps the table its width. */
+tr.editing td:nth-child(2), tr.editing td:nth-child(4) { padding-inline: 4px; }
 tr.editing input, tr.editing select { padding: 4px 6px; }
 tr.editing select { width: auto; }
 tr.editing input { width: 4rem; text-align: right; }
 tr.editing td:last-child { position: sticky; right: 0; background: var(--surface); }
+/* Save is a button and Cancel a link, in words, so that Cancel never looks like the delete button it replaces. */
+tr.editing .row-actions { gap: 4px; align-items: center; min-height: 2.75rem; }
+tr.editing .row-actions button { padding: 3px 8px; font-size: 0.85rem; }
+tr.editing .row-actions button.link { padding-inline: 4px; }
 .amount-edit { display: flex; justify-content: flex-end; gap: 4px; }
-tr.editing .amount-edit select { max-width: 5.5rem; }
+tr.editing .amount-edit select { max-width: 4.5rem; }
 .amount-edit[hidden] { display: none; }
 .amount-edit input[aria-invalid="true"] { border-color: var(--danger); }
 .edit-error { margin-top: 4px; min-width: 11em; color: var(--danger); font-size: 0.8rem; white-space: normal; }

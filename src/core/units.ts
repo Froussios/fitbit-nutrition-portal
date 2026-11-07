@@ -55,6 +55,8 @@ export interface Measurable {
   readonly portions: readonly Portion[];
   /** Grams per millilitre, only when the source (or the user) supplies it. */
   readonly densityGPerMl?: number;
+  /** Only the named portions measure it: no weights, volumes or household measures. */
+  readonly portionsOnly?: boolean;
 }
 
 export class UnitConversionError extends Error {
@@ -128,6 +130,7 @@ export function convertQuantity(food: Measurable, quantity: number, from: string
 
 /** Units the user may pick for a food: same dimension always, the other one only with a density. */
 export function selectableUnits(food: Measurable): UnitDef[] {
+  if (food.portionsOnly) return [];
   const dim = dimensionOf(food.basis);
   const bridged = food.densityGPerMl !== undefined && food.densityGPerMl > 0;
   return UNITS.filter((u) => u.dimension === dim || bridged);
