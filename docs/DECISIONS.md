@@ -192,3 +192,12 @@ the user to check the diary first. A reload ends the chance to undo.
 A row is disabled while its delete or undo is under way, and enabled again if it fails, with an alert in the diary that
 stays until it is dismissed or the action is tried again, so that a refresh cannot hide it.
 **Reopen if.** Deleted entries need to survive a reload, or [#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18) shows that the original ID can be reused.
+
+### DR-21 Energy is shown in one unit, chosen in the page header
+**Decision.** The diary, the log form's preview and the food search show energy in either kcal or kJ, not both. A control
+in the page header chooses which, kcal by default, and the choice is kept in `localStorage` on each device. Google Health
+still stores kcal. A custom food's energy can still be typed in either unit, whatever the setting.
+**Why.** Owner decision (7 November 2026): the two are the same information, so showing both wastes a column. kcal is the
+default because it is what Google Health stores and what the food search already showed.
+**Consequence.** The setting does not follow the user to another device or browser.
+**Reopen if.** The app gets more settings than the header can hold, or the choice needs to follow the user across devices.

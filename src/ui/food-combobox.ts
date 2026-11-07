@@ -5,7 +5,7 @@ import type { FoodCatalog, FoodSearchHit } from "../food/catalog";
 import { describeError, logger } from "../debug/log";
 import { INITIAL, fieldText, reduce, type ComboEvent, type ComboState } from "./combobox-state";
 import { el, replaceChildren } from "./dom";
-import { fmtKcal } from "./format";
+import { energyLabel, fmtEnergy } from "./format";
 import { SearchController, type SearchUpdate } from "./search-controller";
 
 const log = logger("search");
@@ -98,9 +98,9 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
         "li",
         { id: optionId(i), role: "option", class: "opt", "aria-selected": String(i === state.active) },
         el("span", { class: "opt-name" }, ...runs(hit.name)),
-        el("span", { class: "opt-kcal" }, el("strong", {}, fmtKcal(s.kcalPer100)), ` kcal / ${unitLabel(s)}`),
+        el("span", { class: "opt-energy" }, el("strong", {}, fmtEnergy(s.kcalPer100)), ` ${energyLabel()} / ${unitLabel(s)}`),
         el("span", { class: "opt-sub" }, ...sub),
-        s.serving ? el("span", { class: "opt-serving" }, `${fmtKcal(s.serving.kcal)} kcal / ${s.serving.label}`) : null,
+        s.serving ? el("span", { class: "opt-serving" }, `${fmtEnergy(s.serving.kcal)} ${energyLabel()} / ${s.serving.label}`) : null,
       );
     });
     const custom = hits.length;

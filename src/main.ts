@@ -17,6 +17,7 @@ import { buildNutritionLogPoint, byTime, copyNutritionLogPoint, findServingUnits
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
+import { getEnergyUnit, setEnergyUnit, type EnergyUnit } from "./ui/energy-unit";
 import { createLogForm, type LogForm } from "./ui/log-form";
 import { createDebugPanel } from "./ui/debug-panel";
 import { describeError, installGlobalErrorHandlers, logger } from "./debug/log";
@@ -470,6 +471,7 @@ class App {
       el(
         "div",
         { class: "account" },
+        signedIn && this.energySetting(),
         signedIn && el("button", { type: "button", onclick: () => this.signOut() }, "Sign out"),
         !isClientIdBuiltIn() && el("button", { type: "button", class: "link", onclick: () => renderSetup(true) }, "Settings"),
       ),
@@ -529,6 +531,24 @@ class App {
       debugPanel,
     );
     this.renderDiary();
+  }
+
+  /** Which unit energy is shown in, everywhere in the app. */
+  private energySetting(): HTMLElement {
+    const unit = getEnergyUnit();
+    const select = el(
+      "select",
+      {
+        onchange: () => {
+          setEnergyUnit(select.value as EnergyUnit);
+          this.form.refreshPreview();
+          this.renderDiary();
+        },
+      },
+      el("option", { value: "kcal", selected: unit === "kcal" }, "kcal"),
+      el("option", { value: "kj", selected: unit === "kj" }, "kJ"),
+    );
+    return el("label", { class: "energy-setting" }, "Energy", select);
   }
 
   private renderConnectError(): HTMLElement {

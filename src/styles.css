@@ -51,12 +51,15 @@ h2 { font-size: 1.15rem; margin-bottom: 12px; }
 
 .top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
 }
-.account { display: flex; gap: 8px; }
+.account { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; white-space: nowrap; }
+.energy-setting { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+.energy-setting select { width: auto; }
 
 .card {
   background: var(--surface);
@@ -239,7 +242,7 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .opt[aria-selected="true"], .opt:hover { background: var(--row-alt); }
 .opt[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--accent); }
 .opt-name { overflow-wrap: anywhere; }
-.opt-kcal { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.opt-energy { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .opt-sub, .opt-serving { font-size: 0.85rem; color: var(--muted); }
 .opt-sub { overflow-wrap: anywhere; }
 .opt-nobrand { font-style: italic; }
