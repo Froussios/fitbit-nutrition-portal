@@ -523,7 +523,7 @@ class App {
             "p",
             { class: "hint" },
             "Everything in your Google Health nutrition diary for today, whichever app logged it. " +
-              "Only entries made by this app can be deleted here. A deleted entry stays crossed out, with an Undo, until you reload the page.",
+              "Only entries made by this app can be deleted here. A deleted entry stays crossed out, with an undo button, until you reload the page.",
           ),
         ),
       debugPanel,
