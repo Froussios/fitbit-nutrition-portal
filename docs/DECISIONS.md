@@ -62,7 +62,7 @@ interactive search.
 (V10). Polling costs one list call per poll, far below the 300 requests/min/user limit.
 **Reopen if.** Multi-device use makes polling feel stale ([#10](https://github.com/Froussios/fitbit-nutrition-portal/issues/10)).
 
-### DR-09 Authentication: Google Identity Services token model for now
+### DR-09 Authentication: short-lived tokens from a Google popup for now
 Revised by DR-24: the popup also returns an ID token, and the app asks Google directly because Google's token client cannot.
 **Decision.** Short-lived access tokens from a Google popup, kept in `sessionStorage`; the user clicks
 Continue about hourly. Long-lived sessions are deferred to M3, after the MVP (D1).

@@ -1,5 +1,5 @@
 import "./styles.css";
-import { GoogleAuth, SignInRequiredError } from "./auth/google-auth";
+import { GoogleAuth, SignInRequiredError, SignInSupersededError } from "./auth/google-auth";
 import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE, SCOPES, setClientId } from "./config";
 import { foodLabel } from "./core/food";
 import { copiedEntryId, idFromName, newEntryId } from "./core/ids";
@@ -161,6 +161,7 @@ class App {
       await this.auth.signIn(prompt);
       await this.afterSignIn();
     } catch (e) {
+      if (e instanceof SignInSupersededError) return;
       appLog.error("Sign-in failed", describeError(e));
       this.signInError = errorMessage(e);
       this.render();

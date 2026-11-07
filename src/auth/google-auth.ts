@@ -29,6 +29,14 @@ export class SignInRequiredError extends Error {
   }
 }
 
+/** A newer attempt took over this one's popup, so there is nothing to tell the user. */
+export class SignInSupersededError extends Error {
+  override name = "SignInSupersededError";
+  constructor() {
+    super("Sign-in superseded by a new attempt.");
+  }
+}
+
 interface StoredToken {
   accessToken: string;
   idToken: string;
@@ -107,7 +115,7 @@ export class GoogleAuth {
       return Promise.reject(new Error("The Google sign-in popup was blocked. Allow popups for this site and try again."));
     }
 
-    this.cancelPending?.(new Error("Sign-in superseded by a new attempt."));
+    this.cancelPending?.(new SignInSupersededError());
     return new Promise<void>((resolve, reject) => {
       let closedTimer: ReturnType<typeof setTimeout> | undefined;
       const finish = () => {

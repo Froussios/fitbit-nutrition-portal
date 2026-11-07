@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GoogleAuth, SignInRequiredError } from "../src/auth/google-auth";
+import { GoogleAuth, SignInRequiredError, SignInSupersededError } from "../src/auth/google-auth";
 import { readSignInAnswer, signInUrl } from "../src/auth/sign-in-answer";
 
 const CLIENT = "client.apps.googleusercontent.com";
@@ -249,7 +249,7 @@ describe("GoogleAuth", () => {
     const b = setUp();
     const auth = make();
     const first = auth.signIn();
-    const check = expect(first).rejects.toThrow("superseded");
+    const check = expect(first).rejects.toBeInstanceOf(SignInSupersededError);
     const second = auth.signIn();
     await check;
     b.send(b.good());
