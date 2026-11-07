@@ -132,6 +132,12 @@ describe("checkAnswer refuses a guess", () => {
     expect(checkAnswer("1 cpu", answer(1, "1", "1 cup, diced", "cpu"), carrot)).toMatchObject({ ok: false });
   });
 
+  it("refuses a mistyped cup when the food has both a metric cup and a cup of its own", () => {
+    const milk: Measurable = { basis: "ml", portions: [{ name: "1 cup", amount: 240, unit: "ml" }], densityGPerMl: 1.03 };
+    expect(checkAnswer("2 cpus", answer(2, "2", "cup", "cpus"), milk)).toMatchObject({ ok: false });
+    expect(checkAnswer("2 cpus", answer(2, "2", "1 cup", "cpus"), milk)).toMatchObject({ ok: false });
+  });
+
   it("still accepts a mistake that points at one unit", () => {
     expect(checkAnswer("10 millilters", answer(10, "10", "ml", "millilters"), liquid)).toEqual({ ok: true, quantity: 10, unit: "ml" });
     expect(checkAnswer("1 tablspoon", answer(1, "1", "tbsp", "tablspoon"), liquid)).toEqual({ ok: true, quantity: 1, unit: "tbsp" });
