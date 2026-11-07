@@ -108,7 +108,7 @@ exact-word matching (DR-13) a pre-sorted static index needs no server, so DR-01 
 Free database tiers could not hold or rebuild the dataset; paid search hosting was ruled out on cost. The
 custom domain replaced `*.pages.dev` after the University of Sydney's firewall was found intercepting it.
 **Reopen if.** Typo tolerance becomes a requirement (Meilisearch on a home server is the documented path),
-the index outgrows Cloudflare Pages' 20,000 files, or mobile latency needs the engine in a Worker.
+the index outgrows Cloudflare Pages' 20,000 files, or latency needs the engine in a Worker.
 
 ### DR-15 Food search assumes the generic product
 Where generic foods come from, and the order of products with no brand, revised by DR-16.
@@ -165,7 +165,7 @@ is none, fail cleanly and show it.
 **Consequence.** A write whose answer is lost may still have been saved, and logging again sends a new ID, so it would
 create a second entry. The error therefore asks the user to check the diary first. Client-supplied IDs still carry the
 food reference, but nothing relies on them for idempotency.
-**Reopen if.** Logging without a connection becomes a real need, for example once the app is an installed PWA ([#16](https://github.com/Froussios/fitbit-nutrition-portal/issues/16)).
+**Reopen if.** Logging without a connection becomes a real need.
 
 ### DR-19 Food search favours foods the user logged before, from a short look at the history
 **Decision.** The last 20 distinct foods logged, and anything logged in the last 2 weeks, go first in the suggestions
@@ -217,3 +217,12 @@ chosen is not stored, so "1 × can" reopens as 375 ml. There is no Undo for an e
 Google Health app sees a delete and a new entry. An amount with no g or ml to read, such as a meal prep portion, cannot be
 changed here.
 **Reopen if.** Identified logs become practical ([#29](https://github.com/Froussios/fitbit-nutrition-portal/issues/29)), or scaling turns out to be common because lookups fail or Google does not keep our IDs.
+
+### DR-23 The app is for desktop browsers; phones are not a requirement
+**Decision.** The app targets current desktop browsers. Working on a phone, installing as an app and scanning barcodes with
+a camera are not requirements, and changes need no phone testing. The installable app ([#16](https://github.com/Froussios/fitbit-nutrition-portal/issues/16)) is not planned. Existing layout
+that happens to suit phones stays until there is a reason to change it.
+**Why.** Owner decision (7 November 2026): Google Health already has a phone app.
+**Consequence.** Barcode lookup ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)) is manual entry only. Users still need the Google Health phone app once, to link their account:
+that is Google's requirement, not ours.
+**Reopen if.** The owner wants to log from a phone in this app.

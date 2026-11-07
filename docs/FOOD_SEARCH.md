@@ -113,13 +113,12 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 * Open Food Facts text is user-contributed. It is always rendered with `textContent`, never as HTML
   (section 6.6).
 
-### 3.4 Accessibility and mobile
+### 3.4 Accessibility
 
 * Input: `role="combobox"`, `aria-autocomplete="list"`, `aria-expanded`, `aria-controls` pointing at the
   list, `aria-activedescendant` pointing at the active row. List: `role="listbox"`; rows: `role="option"`
   with `aria-selected` on the active one. A polite live region announces "10 results" / "No results".
-* Touch targets at least 44 px high; the list is the field's width and scrolls inside the viewport above
-  the on-screen keyboard.
+* The list is the field's width and scrolls inside the viewport.
 * `autocomplete="off"`, `autocapitalize="none"`, `spellcheck="false"` so the browser's own suggestions do not
   cover the list.
 * No search while an IME composition is in progress (`compositionstart` / `compositionend`).
@@ -266,8 +265,8 @@ browser, in Node (builder and tests) or in a Cloudflare Worker.
 | **The browser** (start here) | 0–40 KB, 1–3 round trips | Static files only | No quota; Cloudflare Pages serves static files without request or bandwidth limits |
 | A Cloudflare Worker beside the files | One request, ~3 KB response, 1 round trip | A stateless Worker reading the index from R2 (a DR-01 exception) | 100 k requests/day and 10 ms CPU per request; R2 10 GB storage and 10 M reads/month. Abuse could use up the daily request quota. |
 
-**Start in the browser**: no server, no quota, no exception to DR-01. Measure on a phone on Australian
-mobile data. If latency misses the budget (section 9) or the data use matters, move the same module into a
+**Start in the browser**: no server, no quota, no exception to DR-01. Measure on desktop from
+Australia. If latency misses the budget (section 9) or the data use matters, move the same module into a
 Worker; the index does not change.
 
 ### 5.3 Slimming the dataset
@@ -360,7 +359,7 @@ queried by an engine in the browser that fetches only what each search needs.** 
   offline use. They are plain cacheable files, should that ever change.
 * **Privacy.** No query text leaves the browser. The host sees which index files are fetched, which hints at
   words searched, but nothing ties them to a person beyond the IP address.
-* **A way out.** If mobile latency disappoints, the Worker option (section 5.2) uses the same index and
+* **A way out.** If latency disappoints, the Worker option (section 5.2) uses the same index and
   engine. If typo tolerance becomes a requirement again, Meilisearch on a home server is the path; the
   `FoodCatalog` interface hides the difference.
 
@@ -587,7 +586,7 @@ A small class between the combobox and `FoodCatalog`, unit-tested with fake time
 | Data read from product lists by any one search | About 256 KB (hard cap in the engine: 200,000 product IDs) |
 | Added JavaScript for the combobox and query engine | ≤ 15 KB gzipped |
 
-Cloudflare serves Pages from Australian edge locations; measure early from a phone on mobile data. If browser execution misses the latency budget, move the engine into a Worker (section 5.2).
+Cloudflare serves Pages from Australian edge locations; measure early from a desktop browser. If browser execution misses the latency budget, move the engine into a Worker (section 5.2).
 
 ### 9.1 Over budget, accepted for now
 
@@ -626,7 +625,7 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
 * Cancel index fetches for a keystroke the user has already moved past. Today a stale search still fetches its files.
 * Debounce for longer than 100 ms.
 * Split out smaller summary files holding only what most rows need, or cluster products that are often shown together.
-* Check real use first: #15 measures bytes and latency on a phone.
+* Check real use first: #15 measures bytes and latency on desktop.
 
 ## 10. Testing
 
@@ -639,8 +638,7 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
   `chocolate` (a generic "Chocolate" product first). Runs against every build before deploy.
   The coverage test list ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) is folded into it. Each test also records the bytes and files it
   fetched, and the build fails if a query exceeds the section 9 data budgets.
-* **Manual:** keyboard-only and screen-reader pass (VoiceOver on iOS, TalkBack on Android), phone and
-  desktop.
+* **Manual:** keyboard-only and screen-reader pass on desktop.
 
 ## 11. Work items
 
@@ -650,8 +648,8 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
 | [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) Index builder and `StaticFoodCatalog` | Sections 4, 5, 6, 7 | Done |
 | [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Publish the food index | `food-index.yml` deploys to Cloudflare Pages weekly; CI points the app at it | Done |
 | [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) Search-as-you-type UI | Sections 3, 8 | Done |
-| [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Verify M1 on the real index | Coverage list, relevance suite, bytes and latency on mobile, screen-reader pass, first scheduled refresh | Open |
-| [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Camera and manual entry, via `get()` | Open |
+| [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Verify M1 on the real index | Coverage list, relevance suite, bytes and latency on desktop, screen-reader pass, first scheduled refresh | Open |
+| [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Manual entry, via `get()` | Open |
 | [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) Recent foods | Shows in the empty dropdown | Open |
 | [#51](https://github.com/Froussios/fitbit-nutrition-portal/issues/51) Boost foods logged before | Section 14 | Done |
 
@@ -662,7 +660,7 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
   groups would restore headroom.
 * **Real bytes per search.** The relevance suite measures them; the estimates in section 5.1 are from
   back-of-envelope sizing.
-* **Browser or Worker.** Whether browser execution meets the latency budget on Australian mobile data.
+* **Browser or Worker.** Whether browser execution meets the latency budget.
 * **Whole words while typing.** A partial word that is also a word fills results with exact matches first: `choc` or
   `vege` show products with that word before `chocolate` or `vegemite`. This is by design, but watch it in
   [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15).
