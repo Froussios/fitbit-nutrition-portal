@@ -145,7 +145,8 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
 * **One sign-in.** One request to Google returns both tokens (V11), so they are always for the same account, and **Continue**
   renews both. The app opens its own popup, and a callback page with no other scripts passes the answer back through
   `window.opener`. It never uses a `BroadcastChannel`, because `froussios.github.io` is shared with other Pages sites. The
-  browser checks `state` and `nonce`. Passing `sub` as `login_hint` on renewal should skip the account chooser; to be tested.
+  browser checks `state` and `nonce`. Passing `sub` as `login_hint` on renewal should skip the account chooser; to be tested. If a renewal
+  returns a different `sub`, the user switched account, so the app drops the meal prep state it holds for the previous one.
 * **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
   so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
   rejects the entry, the portion is removed. If the answer is lost or the browser closes first, the portion counts as eaten
