@@ -166,6 +166,13 @@ describe("the food's portions", () => {
     expect(readAmountText("1/2 cup", oats)).toEqual(amount(1, value("1/2 cup (40 g)")));
     expect(readAmountText("2 slices", oats)).toEqual(amount(1, value("2 slices (50 g)")));
   });
+
+  it("prefers a whole portion name to the metric cup, when a density makes both possible", () => {
+    const oats: Measurable = { basis: "g", portions: [portion("1/2 cup (40 g)", 40)], densityGPerMl: 0.4 };
+    expect(readAmountText("1/2 cup", oats)).toEqual(amount(1, value("1/2 cup (40 g)")));
+    expect(readAmountText("1 cup", oats)).toEqual(amount(1, "cup"));
+    expect(readAmountText("2 × 1/2 cup", oats)).toEqual(amount(2, value("1/2 cup (40 g)")));
+  });
 });
 
 describe("units this food cannot use", () => {

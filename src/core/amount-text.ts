@@ -129,7 +129,7 @@ function isTyping(word: string, food: Measurable): boolean {
   return Object.keys(UNIT_ALIASES).some(startsLonger) || food.portions.some((p) => startsLonger(literal(p.name)) || startsLonger(comparable(p.name)));
 }
 
-function readUnit(quantity: number, word: string, food: Measurable, afterTimes: boolean): AmountReading {
+function readUnit(wholeText: string, quantity: number, word: string, food: Measurable, afterTimes: boolean): AmountReading {
   const key = comparable(word);
   const unit = UNIT_ALIASES[key];
   const usable = unit !== undefined && selectableUnits(food).some((u) => u.key === unit);
@@ -147,6 +147,11 @@ function readUnit(quantity: number, word: string, food: Measurable, afterTimes: 
 
   if (found && "value" in found) return { kind: "amount", quantity, unit: found.value };
   if (found) return { kind: "ambiguous", quantity, word, choices: found.choices, typing: isTyping(word, food) };
+
+  // "1/2 cup" or "2 slices" can be the whole name of a portion, as Open Food Facts serving sizes often are.
+  const whole = pickPortion(portions.filter((c) => c.key === comparable(wholeText) || literal(c.portion.name) === literal(wholeText)));
+  if (whole && "value" in whole) return { kind: "amount", quantity: 1, unit: whole.value };
+
   if (usable) return { kind: "amount", quantity, unit };
   return { kind: unit === undefined ? "unknown-unit" : "not-for-this-food", quantity, word, typing: isTyping(word, food) };
 }
@@ -170,12 +175,7 @@ export function readAmountText(text: string, food: Measurable): AmountReading {
   if (!/^[\p{L}\d]/u.test(word)) return { kind: "unreadable", typing: isPartialNumber(clean) };
   if (!(lead.quantity > 0)) return { kind: "zero", typing: false };
 
-  const reading = readUnit(lead.quantity, word, food, Boolean(times));
-  if (reading.kind === "amount") return reading;
-
-  // "1/2 cup" or "2 slices" can be the whole name of a portion, as Open Food Facts serving sizes often are.
-  const whole = pickPortion(portionsOf(food).filter((c) => c.key === comparable(clean) || literal(c.portion.name) === literal(clean)));
-  return whole && "value" in whole ? { kind: "amount", quantity: 1, unit: whole.value } : reading;
+  return readUnit(clean, lead.quantity, word, food, Boolean(times));
 }
 
 /** The number in a text that also names a unit, so that picking a unit by hand can replace the typed one. */
