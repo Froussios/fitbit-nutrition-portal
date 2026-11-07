@@ -84,7 +84,7 @@ A `FoodItem` stores nutrients **per 100 g or per 100 ml** (its `basis`), plus na
 | meal | `mealType` (`BREAKFAST`, `LUNCH`, `DINNER`, `SNACK`), left out when the user picks no meal, which is the default. The legacy `ANYTIME` is never written. |
 | food name | `foodDisplayName`, e.g. `Rolled oats` or `Cola soft drink (Sample Drinks Co)` |
 | amount | `serving` = the API's *gram* or *millilitre* `food-measurement-unit` plus an amount, keeping the kind of unit the user chose (250 g of milk stays 250 g). If the API's units cannot be resolved, the amount goes into the name instead (`Rolled oats (40 g)`). |
-| energy | `energy.kcal` (`userProvidedUnit: KILOCALORIE`). The UI shows both kcal and kJ. |
+| energy | `energy.kcal` (`userProvidedUnit: KILOCALORIE`). The UI shows either kcal or kJ, as chosen in the page header (DR-21). |
 | fat, carbohydrate | `totalFat`, `totalCarbohydrate` (top-level fields) |
 | other nutrients | `nutrients[]`: protein, sugars, fibre, saturated, trans, mono- and poly-unsaturated fat, cholesterol, sodium, potassium, calcium, iron, caffeine, vitamin C |
 

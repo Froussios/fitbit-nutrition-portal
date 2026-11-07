@@ -16,6 +16,8 @@ export interface LogForm {
   readonly element: HTMLElement;
   /** Blocks submitting while the browser is offline; what the user entered stays in the form. */
   setOffline(offline: boolean): void;
+  /** Shows the preview again, after the energy unit changes. */
+  refreshPreview(): void;
 }
 
 /**
@@ -264,6 +266,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       offline = value;
       syncSubmit();
     },
+    refreshPreview,
   };
 }
 

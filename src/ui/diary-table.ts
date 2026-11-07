@@ -1,7 +1,7 @@
 import { sumProfiles } from "../core/nutrients";
 import { byTime, mealLabel, type DiaryEntry } from "../health/mapping";
 import { el } from "./dom";
-import { fmtGrams, fmtKcal, fmtKj, fmtTime } from "./format";
+import { energyLabel, fmtEnergy, fmtGrams, fmtTime } from "./format";
 
 export interface DiaryTableOptions {
   readonly entries: readonly DiaryEntry[];
@@ -59,7 +59,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offlin
 
   const total = sumProfiles(entries.map((e) => e.profile));
   const deletedIds = new Set(deleted.map((e) => e.id));
-  const head = ["Time", "Meal", "Food", "Amount", "kcal", "kJ", "Protein", "Carbs", "Fat", ""];
+  const head = ["Time", "Meal", "Food", "Amount", energyLabel(), "Protein", "Carbs", "Fat", ""];
 
   return el(
     "div",
@@ -67,7 +67,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offlin
     el(
       "table",
       {},
-      el("thead", {}, el("tr", {}, ...head.map((h, i) => el("th", { scope: "col", class: i >= 3 && i <= 8 ? "num" : undefined }, h)))),
+      el("thead", {}, el("tr", {}, ...head.map((h, i) => el("th", { scope: "col", class: i >= 3 && i <= 7 ? "num" : undefined }, h)))),
       el(
         "tbody",
         {},
@@ -79,8 +79,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offlin
             el("td", {}, mealLabel(e.mealType)),
             el("td", {}, e.displayName, rowTag(e.id, deletedIds, busyIds, pendingIds)),
             el("td", { class: "num" }, e.amount ?? "–"),
-            el("td", { class: "num" }, fmtKcal(e.profile.energyKcal)),
-            el("td", { class: "num" }, fmtKj(e.profile.energyKcal)),
+            el("td", { class: "num" }, fmtEnergy(e.profile.energyKcal)),
             el("td", { class: "num" }, fmtGrams(e.profile.nutrients.protein)),
             el("td", { class: "num" }, fmtGrams(e.profile.nutrients.carbohydrates)),
             el("td", { class: "num" }, fmtGrams(e.profile.nutrients.fat)),
@@ -113,8 +112,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offlin
           "tr",
           {},
           el("th", { scope: "row", colspan: 4 }, `Total (${entries.length} ${entries.length === 1 ? "entry" : "entries"})`),
-          el("td", { class: "num" }, fmtKcal(total.energyKcal)),
-          el("td", { class: "num" }, fmtKj(total.energyKcal)),
+          el("td", { class: "num" }, fmtEnergy(total.energyKcal)),
           el("td", { class: "num" }, fmtGrams(total.nutrients.protein)),
           el("td", { class: "num" }, fmtGrams(total.nutrients.carbohydrates)),
           el("td", { class: "num" }, fmtGrams(total.nutrients.fat)),

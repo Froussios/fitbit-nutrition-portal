@@ -51,12 +51,15 @@ h2 { font-size: 1.15rem; margin-bottom: 12px; }
 
 .top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
 }
-.account { display: flex; gap: 8px; }
+.account { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; white-space: nowrap; }
+.energy-setting { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+.energy-setting select { width: auto; }
 
 .card {
   background: var(--surface);
@@ -162,7 +165,7 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 4px; }
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 th, td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
-tbody td:nth-child(3) { white-space: normal; min-width: 12em; }
+tbody tbody td:nth-child(3) { white-space: normal; min-width: 12em; }
 thead th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
 tbody tr:nth-child(even) { background: var(--row-alt); }
 tfoot th, tfoot td { font-weight: 600; border-bottom: none; }
@@ -239,7 +242,7 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .opt[aria-selected="true"], .opt:hover { background: var(--row-alt); }
 .opt[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--accent); }
 .opt-name { overflow-wrap: anywhere; }
-.opt-kcal { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.opt-energy { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .opt-sub, .opt-serving { font-size: 0.85rem; color: var(--muted); }
 .opt-sub { overflow-wrap: anywhere; }
 .opt-nobrand { font-style: italic; }
