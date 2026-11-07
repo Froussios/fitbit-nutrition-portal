@@ -11,7 +11,7 @@ import { CombinedCatalog } from "./food/combined-catalog";
 import genericsUrl from "./food/data/generics.json?url";
 import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
-import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, connectionBanner, deleteFailed, undoNotConfirmed, type ConnectionState } from "./health/connection";
+import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, actionRefused, connectionBanner, deleteFailed, undoNotConfirmed, type ConnectionState } from "./health/connection";
 import { LoggedFoodsCatalog } from "./food/logged-catalog";
 import { buildNutritionLogPoint, byTime, copyNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
@@ -71,8 +71,8 @@ class App {
   /** The connection came back during a load that may have failed: load again when it ends. */
   private reloadAfterLoad = false;
   private listError = "";
-  /** A delete or undo lost to the connection; shown until the next refresh, as the banner may clear at once. */
-  private rowError = "";
+  /** Why a delete or undo failed, by entry ID. Kept until dismissed or tried again, so that a refresh does not hide it. */
+  private readonly rowFailures = new Map<string, string>();
   private ready = false;
   /** Why connecting to Google Health failed; shown with a Retry button instead of "Connecting…". */
   private connectError = "";
@@ -83,6 +83,8 @@ class App {
   private readonly form: LogForm;
   private readonly diary = el("div", { class: "diary" });
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
+  /** Kept across renders, so that redrawing the diary does not announce it again. */
+  private readonly rowAlert = el("div", { class: "notice row-alert", role: "alert", hidden: true });
 
   constructor(
     private readonly clientId: string,
@@ -250,7 +252,6 @@ class App {
     if (this.loading) return;
     this.loading = true;
     this.listError = "";
-    this.rowError = "";
     this.renderDiary();
     try {
       const today = civilDate(new Date());
@@ -337,10 +338,10 @@ class App {
 
   private async remove(entry: DiaryEntry) {
     if (this.busy.has(entry.id)) return;
-    this.busy.add(entry.id);
-    this.renderDiary();
+    // Disabling the button takes keyboard focus from it, so it is given back at the end.
+    const hadFocus = focusedEntryId() === entry.id;
+    this.startRowAction(entry);
     appLog.info(`Deleting ${entry.name}`);
-    let failure = "";
     try {
       const op = await this.api.deleteNutritionLogs([entry.name]);
       if (op.error) {
@@ -354,45 +355,73 @@ class App {
       this.deletedIds.add(entry.id);
     } catch (e) {
       appLog.error("Deleting the entry failed", describeError(e));
-      if (isConnectionFailure(e)) failure = deleteFailed(entry.displayName);
-      else this.handleError(e);
+      this.handleError(e, false);
+      this.showRowFailure(entry, isConnectionFailure(e) ? deleteFailed(entry.displayName) : actionRefused("delete", entry.displayName, refusalReason(e)));
     }
     this.busy.delete(entry.id);
-    this.renderDiary();
+    this.renderDiary(hadFocus ? entry.id : undefined);
     await this.loadToday();
-    this.rowError = failure;
-    this.renderDiary();
   }
 
   /** Undoes a delete by logging an equivalent entry. The original is gone, so the copy has its own ID. */
   private async undoDelete(entry: DiaryEntry) {
     const log = entry.point.nutritionLog;
     if (this.busy.has(entry.id) || !log) return;
-    this.busy.add(entry.id);
-    this.renderDiary();
+    const hadFocus = focusedEntryId() === entry.id;
+    this.startRowAction(entry);
     const point = copyNutritionLogPoint(log, copiedEntryId(entry.id));
     appLog.info(`Undoing the delete of ${entry.name}`, { copy: point.name });
     // The copy has no name for its unit until the API lists it, but the original did.
     if (log.serving?.foodMeasurementUnitDisplayName) this.unitNames.set(log.serving.foodMeasurementUnit, log.serving.foodMeasurementUnitDisplayName);
-    let failure = "";
-    let focusId: string | undefined;
+    let focusId = hadFocus ? entry.id : undefined;
     try {
       const { key, created } = await this.write(point);
       this.deleted.delete(entry.id);
       this.catalog.merge(toLoggedFoods([created], this.clientId));
       const restored = toDiaryEntry(created, this.diaryContext());
       if (restored) this.entries = [...this.entries, restored].sort(byTime);
-      if (focusedEntryId() === entry.id) focusId = key;
+      if (hadFocus) focusId = key;
     } catch (e) {
       appLog.error("Undoing the delete failed", describeError(e));
-      if (isConnectionFailure(e)) failure = undoNotConfirmed(entry.displayName);
-      else this.handleError(e);
+      this.handleError(e, false);
+      this.showRowFailure(entry, isConnectionFailure(e) ? undoNotConfirmed(entry.displayName) : actionRefused("undo deleting", entry.displayName, refusalReason(e)));
     }
     this.busy.delete(entry.id);
     this.renderDiary(focusId);
     await this.loadToday();
-    this.rowError = failure;
+  }
+
+  /** Disables the row, and forgets why this row failed last time. */
+  private startRowAction(entry: DiaryEntry) {
+    this.busy.add(entry.id);
+    if (this.rowFailures.delete(entry.id)) this.renderRowAlert();
     this.renderDiary();
+  }
+
+  private showRowFailure(entry: DiaryEntry, message: string) {
+    this.rowFailures.set(entry.id, message);
+    this.renderRowAlert();
+    // On a phone the row can be a long way below the top of the card.
+    this.rowAlert.scrollIntoView({ block: "nearest" });
+  }
+
+  private renderRowAlert() {
+    this.rowAlert.hidden = this.rowFailures.size === 0;
+    replaceChildren(
+      this.rowAlert,
+      el("div", {}, ...[...this.rowFailures.values()].map((message) => el("p", {}, message))),
+      el(
+        "button",
+        {
+          type: "button",
+          onclick: () => {
+            this.rowFailures.clear();
+            this.renderRowAlert();
+          },
+        },
+        "Dismiss",
+      ),
+    );
   }
 
   private diaryContext(): DiaryContext {
@@ -411,6 +440,8 @@ class App {
     this.deleted.clear();
     this.deletedIds.clear();
     this.busy.clear();
+    this.rowFailures.clear();
+    this.renderRowAlert();
     this.catalog.clear();
     this.loggedFoodsRead = undefined;
     this.entries = [];
@@ -490,6 +521,7 @@ class App {
             el("button", { type: "button", onclick: () => void this.loadToday() }, "Refresh"),
           ),
           this.diaryStatus,
+          this.rowAlert,
           this.diary,
           el(
             "p",
@@ -525,9 +557,8 @@ class App {
    */
   private renderDiary(focusId = focusedEntryId()) {
     const scrollLeft = this.diary.querySelector(".table-wrap")?.scrollLeft ?? 0;
-    const problem = [this.rowError, this.listError].filter(Boolean).join(" ");
-    this.diaryStatus.textContent = this.loading ? "Loading…" : problem;
-    this.diaryStatus.classList.toggle("error", !this.loading && Boolean(problem));
+    this.diaryStatus.textContent = this.loading ? "Loading…" : this.listError;
+    this.diaryStatus.classList.toggle("error", !this.loading && Boolean(this.listError));
     // With nothing loaded, an error must not read as "Nothing logged today yet".
     const unknown = this.entries.length === 0 && this.deleted.size === 0 && Boolean(this.listError);
     replaceChildren(
@@ -551,6 +582,11 @@ class App {
 /** The entry whose Delete or Undo button has keyboard focus. */
 function focusedEntryId(): string | undefined {
   return document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entry"] : undefined;
+}
+
+/** Why a delete or undo failed. It may be read after signing in again, so an expired session says so in the past tense. */
+function refusalReason(e: unknown): string {
+  return e instanceof SignInRequiredError ? "your session had expired. Try again." : errorMessage(e);
 }
 
 function isConnectionFailure(e: unknown): boolean {

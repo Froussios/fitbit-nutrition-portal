@@ -189,4 +189,6 @@ A new ID because whether a deleted ID can be reused is still open ([#18](https:/
 **Consequence.** Undo cannot restore the original data point: the copy has a new ID, and the Google Health app sees a
 delete and a new entry. As with logging (DR-18), an undo whose answer is lost may still have been saved, so the error asks
 the user to check the diary first. A reload ends the chance to undo.
+A row is disabled while its delete or undo is under way, and enabled again if it fails, with an alert in the diary that
+stays until it is dismissed or the action is tried again, so that a refresh cannot hide it.
 **Reopen if.** Deleted entries need to survive a reload, or [#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18) shows that the original ID can be reused.

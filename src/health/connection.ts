@@ -72,8 +72,14 @@ export const DIARY_NOT_LOADED = "Could not load today's diary because Google Hea
 
 export const CONNECT_FAILED = "Google Health did not answer. Check your connection, then press Retry.";
 
+/** The answer may be what was lost, so only the diary can say whether the delete arrived. */
 export function deleteFailed(name: string): string {
-  return `Could not delete "${name}" because Google Health did not answer.`;
+  return `Could not delete "${name}" because Google Health did not answer. If it is still listed, it was not deleted.`;
+}
+
+/** A delete or undo that got an answer, and the answer was no. */
+export function actionRefused(action: "delete" | "undo deleting", name: string, reason: string): string {
+  return `Could not ${action} "${name}": ${reason}`;
 }
 
 /** Like LOG_NOT_CONFIRMED: undoing again sends a new ID, so it could create a second entry. */

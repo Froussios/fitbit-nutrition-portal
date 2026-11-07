@@ -10,7 +10,7 @@ export interface DiaryTableOptions {
   readonly pendingIds: ReadonlySet<string>;
   /** Entries deleted in this session: still shown, crossed out, with an Undo. They do not count towards the totals. */
   readonly deleted: readonly DiaryEntry[];
-  /** IDs of the entries with a delete or undo under way. */
+  /** IDs of the entries with a delete or undo under way: disabled until it succeeds or fails. */
   readonly busyIds: ReadonlySet<string>;
   /** Deleting and undoing need a connection, so the buttons are disabled while the browser is offline. */
   readonly offline: boolean;
@@ -23,6 +23,12 @@ const SOURCE_LABELS: Record<string, string> = {
   sample: "sample food",
   manual: "custom food",
 };
+
+/** What a row is going through, if anything. */
+function rowTag(id: string, deleted: ReadonlySet<string>, busy: ReadonlySet<string>, pending: ReadonlySet<string>): HTMLElement | undefined {
+  const text = deleted.has(id) ? "deleted" : busy.has(id) ? "deleting…" : pending.has(id) ? "syncing" : undefined;
+  return text ? el("span", { class: "tag" }, text) : undefined;
+}
 
 export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offline, onDelete, onUndo }: DiaryTableOptions): HTMLElement {
   if (entries.length === 0 && deleted.length === 0) {
@@ -49,7 +55,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offlin
             { class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busyIds.has(e.id)) && "pending"].filter(Boolean).join(" ") || undefined },
             el("td", {}, fmtTime(e.start)),
             el("td", {}, mealLabel(e.mealType)),
-            el("td", {}, e.displayName, deletedIds.has(e.id) ? el("span", { class: "tag" }, "deleted") : pendingIds.has(e.id) && el("span", { class: "tag" }, "syncing")),
+            el("td", {}, e.displayName, rowTag(e.id, deletedIds, busyIds, pendingIds)),
             el("td", { class: "num" }, e.amount ?? "–"),
             el("td", { class: "num" }, fmtKcal(e.profile.energyKcal)),
             el("td", { class: "num" }, fmtKj(e.profile.energyKcal)),
@@ -65,12 +71,12 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offlin
                 (deletedIds.has(e.id)
                   ? el(
                       "button",
-                      { type: "button", class: "link", "data-entry": e.id, title: offline ? "Undoing needs a connection" : "Log this entry again", "aria-label": `Undo deleting ${e.displayName}`, "aria-busy": String(busyIds.has(e.id)), disabled: offline, onclick: () => onUndo(e) },
+                      { type: "button", class: "link", "data-entry": e.id, title: offline ? "Undoing needs a connection" : "Log this entry again", "aria-label": `Undo deleting ${e.displayName}`, "aria-busy": String(busyIds.has(e.id)), disabled: offline || busyIds.has(e.id), onclick: () => onUndo(e) },
                       "Undo",
                     )
                   : el(
                       "button",
-                      { type: "button", class: "icon", "data-entry": e.id, title: offline ? "Deleting needs a connection" : "Delete entry", "aria-label": `Delete ${e.displayName}`, "aria-busy": String(busyIds.has(e.id)), disabled: offline, onclick: () => onDelete(e) },
+                      { type: "button", class: "icon", "data-entry": e.id, title: offline ? "Deleting needs a connection" : "Delete entry", "aria-label": `Delete ${e.displayName}`, "aria-busy": String(busyIds.has(e.id)), disabled: offline || busyIds.has(e.id), onclick: () => onDelete(e) },
                       "✕",
                     )),
             ),
