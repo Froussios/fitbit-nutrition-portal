@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { metricAmount, PORTION_PREFIX, selectableUnits, toBaseAmount, UnitConversionError, type Measurable } from "../src/core/units";
+import { convertQuantity, metricAmount, PORTION_PREFIX, selectableUnits, toBaseAmount, UnitConversionError, type Measurable } from "../src/core/units";
 
 const oats: Measurable = { basis: "g", portions: [{ name: "1/2 cup (40 g)", amount: 40, unit: "g" }] };
 const milk: Measurable = { basis: "ml", portions: [], densityGPerMl: 1.03 };
@@ -46,5 +46,25 @@ describe("metricAmount", () => {
     expect(metricAmount(milk, 2, "cup")).toEqual({ amount: 500, unit: "ml" });
     expect(metricAmount(cola, 1, `${PORTION_PREFIX}can`)).toEqual({ amount: 375, unit: "ml" });
     expect(() => metricAmount(cola, 1, "furlong")).toThrow(UnitConversionError);
+  });
+});
+
+describe("convertQuantity", () => {
+  const can = { basis: "ml" as const, portions: [{ name: "can", amount: 375, unit: "ml" as const }] };
+
+  it("gives the same amount in the new unit", () => {
+    expect(convertQuantity(can, 375, "ml", "portion:can")).toBe(1);
+    expect(convertQuantity(can, 1, "portion:can", "ml")).toBe(375);
+    expect(convertQuantity(can, 250, "ml", "cup")).toBe(1);
+  });
+
+  it("rounds for a form field, keeping small amounts", () => {
+    expect(convertQuantity({ basis: "g", portions: [] }, 40, "g", "oz")).toBe(1.41);
+    expect(convertQuantity({ basis: "g", portions: [] }, 5, "g", "kg")).toBe(0.005);
+  });
+
+  it("crosses between mass and volume only with a density", () => {
+    expect(convertQuantity({ basis: "ml", portions: [], densityGPerMl: 2 }, 100, "ml", "g")).toBe(200);
+    expect(() => convertQuantity({ basis: "ml", portions: [] }, 100, "ml", "g")).toThrow("density");
   });
 });

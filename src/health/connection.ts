@@ -55,9 +55,9 @@ export function connectionBanner(state: ConnectionState): string | undefined {
     case "online":
       return undefined;
     case "offline":
-      return "You are offline. Logging and deleting will not work until your connection is back. Nothing is saved on this device.";
+      return "You are offline. Logging, editing and deleting will not work until your connection is back. Nothing is saved on this device.";
     case "unreachable":
-      return "Google Health is not answering, so logging and deleting may not work right now. Nothing is saved on this device.";
+      return "Google Health is not answering, so logging, editing and deleting may not work right now. Nothing is saved on this device.";
   }
 }
 
@@ -77,12 +77,22 @@ export function deleteFailed(name: string): string {
   return `Could not delete "${name}" because Google Health did not answer. If it is still listed, it was not deleted.`;
 }
 
-/** A delete or undo that got an answer, and the answer was no. */
-export function actionRefused(action: "delete" | "undo deleting", name: string, reason: string): string {
+/** A delete, undo or edit that got an answer, and the answer was no. */
+export function actionRefused(action: "delete" | "undo deleting" | "edit", name: string, reason: string): string {
   return `Could not ${action} "${name}": ${reason}`;
 }
 
 /** Like LOG_NOT_CONFIRMED: undoing again sends a new ID, so it could create a second entry. */
 export function undoNotConfirmed(name: string): string {
   return `Google Health did not answer, so "${name}" may not be back in the diary. When the connection is back, check today's diary before undoing again.`;
+}
+
+/** Like LOG_NOT_CONFIRMED: saving again sends a new ID, so it could create a second entry. */
+export function editNotConfirmed(name: string): string {
+  return `Google Health did not answer, so your change to "${name}" may not have been saved. When the connection is back, check today's diary before saving again.`;
+}
+
+/** An edit writes the new entry first, so this leaves two entries where the user expects one. */
+export function oldEntryNotRemoved(name: string): string {
+  return `Your change to "${name}" was saved, but the old entry could not be removed. If both are still listed, delete the old one: until then, both count in the totals.`;
 }

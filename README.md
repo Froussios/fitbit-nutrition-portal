@@ -2,7 +2,7 @@
 
 A food diary that runs entirely in the browser and stores every entry in the user's own
 **Google Health** account (the successor of the Fitbit Web API). There is no backend and no database.
-Planned meal prep will add a small database for recipes, and will not copy the diary into it (DR-21).
+Planned meal prep will add a small database for recipes, and will not copy the diary into it (DR-24).
 
 This is the MVP, a proof of concept (milestone M0):
 
@@ -10,8 +10,8 @@ This is the MVP, a proof of concept (milestone M0):
 2. Log an entry from a small catalogue of local fake foods (written as Open Food Facts records) or from a
    custom food, in g, ml, household measures or portions.
 3. See today's whole Google Health nutrition diary, whichever app logged each entry, with amounts and
-   totals. Entries made by this app can be deleted, with no confirmation: a deleted entry stays crossed out with
-   an Undo until the page is reloaded.
+   totals. Entries made by this app can be edited (amount and meal) and deleted. Deleting asks for no confirmation: a
+   deleted entry stays crossed out with an undo button until the page is reloaded.
 
 * Design and verified API facts: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 * MVP targets, post-MVP milestones and work saved for later: [docs/ROADMAP.md](docs/ROADMAP.md)
@@ -131,5 +131,5 @@ docs/        architecture and decisions
   later milestone (they need refresh tokens, which Google only issues through the client secret).
 * The app never queries the public Open Food Facts API (its rate limits are too low). Food search uses our
   own static index of the Open Food Facts export, matching exact words (no typo tolerance).
-* Only entries made by this app can be deleted (the write scope covers only the app's own data).
+* Only entries made by this app can be edited or deleted (the write scope covers only the app's own data).
 * While the OAuth app is in *Testing*, only listed test users (up to 100) can sign in.

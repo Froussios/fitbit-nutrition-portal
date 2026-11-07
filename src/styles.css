@@ -51,12 +51,15 @@ h2 { font-size: 1.15rem; margin-bottom: 12px; }
 
 .top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
 }
-.account { display: flex; gap: 8px; }
+.account { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; white-space: nowrap; }
+.energy-setting { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+.energy-setting select { width: auto; }
 
 .card {
   background: var(--surface);
@@ -81,6 +84,7 @@ h2 { font-size: 1.15rem; margin-bottom: 12px; }
 }
 .field > span { font-size: 0.85rem; color: var(--muted); }
 .row { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.row[hidden] { display: none; }
 
 input, select, button {
   font: inherit;
@@ -114,10 +118,19 @@ button.primary {
   font-weight: 600;
 }
 button.link { border: none; background: none; color: var(--accent); text-decoration: underline; }
-button.icon { padding: 2px 8px; border: none; background: none; color: var(--muted); }
+/*
+ * One size for every icon, so that swapping Delete and Undo moves nothing in the table. A full 44 px tap area
+ * (their cell has no padding), and a real one: a hit area larger than the row would overlap the next row's button.
+ * Gray at rest; on hover, the colour of what the button does.
+ */
+button.icon { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; padding: 0; border: none; background: none; color: var(--muted); line-height: 1; }
+button.icon:focus-visible { outline-offset: -2px; }
 button.icon:not(:disabled):hover { color: var(--danger); }
+button.icon.undo:not(:disabled):hover, button.icon.edit:not(:disabled):hover { color: var(--accent); }
 button.not-owned:not(:disabled):hover { color: var(--text); }
-.not-owned svg { display: block; width: 1em; height: 1em; }
+.not-owned svg, button.edit svg { display: block; width: 1em; height: 1em; }
+/* Room for two icons on every row, with Delete on the right: Undo and the lock take its place, and nothing moves. */
+.row-actions { display: flex; justify-content: flex-end; min-width: 5.5rem; }
 .not-owned-note {
   max-width: min(22em, calc(100vw - 32px));
   padding: 10px 14px;
@@ -156,13 +169,27 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 4px; }
 .row-alert p { margin: 0; }
 .row-alert p + p { margin-top: 6px; }
 
+.edit-dialog {
+  width: min(28rem, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+.edit-dialog::backdrop { background: rgb(0 0 0 / 0.5); }
+.edit-dialog h2 { margin-top: 0; }
+.edit-food { margin: 0 0 12px; overflow-wrap: anywhere; }
+.edit-food span { color: var(--muted); }
+
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 th, td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
-td:nth-child(3) { white-space: normal; min-width: 12em; }
+tbody td:nth-child(3) { white-space: normal; min-width: 12em; }
 thead th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
 tbody tr:nth-child(even) { background: var(--row-alt); }
 tfoot th, tfoot td { font-weight: 600; border-bottom: none; }
+tbody td:last-child { padding: 0; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.pending { opacity: 0.7; }
 tr.deleted td:not(:last-child) { color: var(--muted); text-decoration: line-through; }
@@ -236,7 +263,7 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .opt[aria-selected="true"], .opt:hover { background: var(--row-alt); }
 .opt[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--accent); }
 .opt-name { overflow-wrap: anywhere; }
-.opt-kcal { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.opt-energy { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .opt-sub, .opt-serving { font-size: 0.85rem; color: var(--muted); }
 .opt-sub { overflow-wrap: anywhere; }
 .opt-nobrand { font-style: italic; }

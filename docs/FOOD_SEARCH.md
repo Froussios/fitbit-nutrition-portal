@@ -18,7 +18,7 @@ Set by the owner on 2 November 2026.
 | R2 | Options appear below the field, like a dropdown. | An editable combobox with a listbox popup (section 3). |
 | R3 | Matching and ordering; show the top 10 best matches. Revised: no typo tolerance; every query word must be in the result, in any order; a result ranks higher the more of it the query covers ("chocolate" beats "dark chocolate"). Revised 5 November 2026 (DR-15): unless given evidence otherwise, assume the generic product. | Exact words, last word as a prefix while typing; ranked by where the words matched, generic before branded, then coverage, then popularity (section 4). |
 | R4 | One food source for now: Open Food Facts. Revised 5 November 2026 (DR-16): generic foods come from authoritative sources, and every row shows its source. | Open Food Facts holds products only. A small file of AFCD and USDA FNDDS foods is searched in the browser and shown first (section 13). |
-| R5 | Rich visuals in the dropdown: a summary per food, starting with calories per unit. | Two-line rows with kcal per 100 g / 100 ml and per serving, built from a summary view model that can grow (section 3.3). |
+| R5 | Rich visuals in the dropdown: a summary per food, starting with calories per unit. | Two-line rows with energy (kcal or kJ, per DR-21) per 100 g / 100 ml and per serving, built from a summary view model that can grow (section 3.3). |
 | R6 | Arrow keys move through the options; the selected row is filled into the input. | Keyboard model in section 3.2; the typed query is kept so Escape and ArrowUp can restore it. |
 | R7 | Open Food Facts is large and its APIs throttle; host our own copy of the **whole world** dataset (Australian tagging is incomplete), at no monthly cost, without the browser downloading it. The dataset may be slimmed (drop fields and dead rows). | A slimmed, pre-sorted word index built weekly by a GitHub Action and stored as static files on Cloudflare Pages. The browser fetches only the files each search needs, often hundreds of KB while typing (sections 5 and 9.1). |
 | R8 | Set 6 November 2026: products logged recently are likely to be logged again. A major boost for the last 20 products and for the last 2 weeks: they appear in the suggestions. A minor boost for a food logged at any time: favoured only if a good match. The history must not be searched exhaustively. | One request for the newest entries, in the background; matching foods go first (section 14). |
@@ -30,12 +30,11 @@ index builder; publishing the index; a `FoodCatalog` that queries it.
 
 **Not in this design:**
 
-* Barcode scanning ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)). It uses `FoodCatalog.get()`, which this design provides (a barcode map in the index).
+* Barcode lookup by manual entry ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)). It uses `FoodCatalog.get()`, which this design provides (a barcode map in the index).
 * Recent foods in the empty dropdown, and "log again" ([#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14)). Not built here. Foods logged before already rank higher once something is typed (section 14).
 * AUSNUT 2023 and more USDA data: [#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38), and section 13.
 * Typo tolerance. Dropped from R3; section 4.4 lists cheap additions if misses show it is needed.
 * Product images, Nutri-Score, macro bars. The row layout leaves room for them (section 3.3).
-* kJ display preference ([#21](https://github.com/Froussios/fitbit-nutrition-portal/issues/21)). Rows show kcal for now.
 
 ## 3. User experience
 
@@ -101,11 +100,11 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 (values illustrative)
 ```
 
-* **Line 1:** product name, with the matched parts in bold. Right: kcal per 100 g or per 100 ml (the
+* **Line 1:** product name, with the matched parts in bold. Right: energy in the chosen unit (DR-21) per 100 g or per 100 ml (the
   food's `basis`), always shown, so rows compare like for like.
 * **Line 2:** brand · pack size (Open Food Facts `quantity`), or **Generic** for a food from an authoritative
   source, or **No brand listed** for an Open Food Facts product with no brand. Then a tag naming the row's source,
-  so a bad value can be traced to its database: `Open Food Facts`, `AFCD` or `FNDDS`. Right: kcal per serving when the
+  so a bad value can be traced to its database: `Open Food Facts`, `AFCD` or `FNDDS`. Right: energy per serving when the
   product has a serving size, e.g. `107 kcal / 30 g serving`.
 * A row is built from a `FoodSummary` view model computed from the `FoodItem` by a pure function in
   `src/core/`. The index builder runs the same function, so search results arrive as summaries and the full
@@ -114,13 +113,12 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 * Open Food Facts text is user-contributed. It is always rendered with `textContent`, never as HTML
   (section 6.6).
 
-### 3.4 Accessibility and mobile
+### 3.4 Accessibility
 
 * Input: `role="combobox"`, `aria-autocomplete="list"`, `aria-expanded`, `aria-controls` pointing at the
   list, `aria-activedescendant` pointing at the active row. List: `role="listbox"`; rows: `role="option"`
   with `aria-selected` on the active one. A polite live region announces "10 results" / "No results".
-* Touch targets at least 44 px high; the list is the field's width and scrolls inside the viewport above
-  the on-screen keyboard.
+* The list is the field's width and scrolls inside the viewport.
 * `autocomplete="off"`, `autocapitalize="none"`, `spellcheck="false"` so the browser's own suggestions do not
   cover the list.
 * No search while an IME composition is in progress (`compositionstart` / `compositionend`).
@@ -267,8 +265,8 @@ browser, in Node (builder and tests) or in a Cloudflare Worker.
 | **The browser** (start here) | 0–40 KB, 1–3 round trips | Static files only | No quota; Cloudflare Pages serves static files without request or bandwidth limits |
 | A Cloudflare Worker beside the files | One request, ~3 KB response, 1 round trip | A stateless Worker reading the index from R2 (a DR-01 exception) | 100 k requests/day and 10 ms CPU per request; R2 10 GB storage and 10 M reads/month. Abuse could use up the daily request quota. |
 
-**Start in the browser**: no server, no quota, no exception to DR-01. Measure on a phone on Australian
-mobile data. If latency misses the budget (section 9) or the data use matters, move the same module into a
+**Start in the browser**: no server, no quota, no exception to DR-01. Measure on desktop from
+Australia. If latency misses the budget (section 9) or the data use matters, move the same module into a
 Worker; the index does not change.
 
 ### 5.3 Slimming the dataset
@@ -361,7 +359,7 @@ queried by an engine in the browser that fetches only what each search needs.** 
   offline use. They are plain cacheable files, should that ever change.
 * **Privacy.** No query text leaves the browser. The host sees which index files are fetched, which hints at
   words searched, but nothing ties them to a person beyond the IP address.
-* **A way out.** If mobile latency disappoints, the Worker option (section 5.2) uses the same index and
+* **A way out.** If latency disappoints, the Worker option (section 5.2) uses the same index and
   engine. If typo tolerance becomes a requirement again, Meilisearch on a home server is the path; the
   `FoodCatalog` interface hides the difference.
 
@@ -588,7 +586,7 @@ A small class between the combobox and `FoodCatalog`, unit-tested with fake time
 | Data read from product lists by any one search | About 256 KB (hard cap in the engine: 200,000 product IDs) |
 | Added JavaScript for the combobox and query engine | ≤ 15 KB gzipped |
 
-Cloudflare serves Pages from Australian edge locations; measure early from a phone on mobile data. If browser execution misses the latency budget, move the engine into a Worker (section 5.2).
+Cloudflare serves Pages from Australian edge locations; measure early from a desktop browser. If browser execution misses the latency budget, move the engine into a Worker (section 5.2).
 
 ### 9.1 Over budget, accepted for now
 
@@ -627,7 +625,7 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
 * Cancel index fetches for a keystroke the user has already moved past. Today a stale search still fetches its files.
 * Debounce for longer than 100 ms.
 * Split out smaller summary files holding only what most rows need, or cluster products that are often shown together.
-* Check real use first: #15 measures bytes and latency on a phone.
+* Check real use first: #15 measures bytes and latency on desktop.
 
 ## 10. Testing
 
@@ -640,8 +638,7 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
   `chocolate` (a generic "Chocolate" product first). Runs against every build before deploy.
   The coverage test list ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) is folded into it. Each test also records the bytes and files it
   fetched, and the build fails if a query exceeds the section 9 data budgets.
-* **Manual:** keyboard-only and screen-reader pass (VoiceOver on iOS, TalkBack on Android), phone and
-  desktop.
+* **Manual:** keyboard-only and screen-reader pass on desktop.
 
 ## 11. Work items
 
@@ -651,8 +648,8 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
 | [#12](https://github.com/Froussios/fitbit-nutrition-portal/issues/12) Index builder and `StaticFoodCatalog` | Sections 4, 5, 6, 7 | Done |
 | [#37](https://github.com/Froussios/fitbit-nutrition-portal/issues/37) Publish the food index | `food-index.yml` deploys to Cloudflare Pages weekly; CI points the app at it | Done |
 | [#13](https://github.com/Froussios/fitbit-nutrition-portal/issues/13) Search-as-you-type UI | Sections 3, 8 | Done |
-| [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Verify M1 on the real index | Coverage list, relevance suite, bytes and latency on mobile, screen-reader pass, first scheduled refresh | Open |
-| [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Camera and manual entry, via `get()` | Open |
+| [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15) Verify M1 on the real index | Coverage list, relevance suite, bytes and latency on desktop, screen-reader pass, first scheduled refresh | Open |
+| [#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36) Barcode lookup | Manual entry, via `get()` | Open |
 | [#14](https://github.com/Froussios/fitbit-nutrition-portal/issues/14) Recent foods | Shows in the empty dropdown | Open |
 | [#51](https://github.com/Froussios/fitbit-nutrition-portal/issues/51) Boost foods logged before | Section 14 | Done |
 
@@ -663,7 +660,7 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
   groups would restore headroom.
 * **Real bytes per search.** The relevance suite measures them; the estimates in section 5.1 are from
   back-of-envelope sizing.
-* **Browser or Worker.** Whether browser execution meets the latency budget on Australian mobile data.
+* **Browser or Worker.** Whether browser execution meets the latency budget.
 * **Whole words while typing.** A partial word that is also a word fills results with exact matches first: `choc` or
   `vege` show products with that word before `chocolate` or `vegemite`. This is by design, but watch it in
   [#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15).

@@ -13,7 +13,7 @@ labelled `decision`; when one closes, its outcome is added here. Supporting fact
 ## Decided
 
 ### DR-01 No custom backend
-Revised by DR-21: meal prep may keep user data in a database, so its API is not stateless. Everything else stays as below.
+Revised by DR-24: meal prep may keep user data in a database, so its API is not stateless. Everything else stays as below.
 **Decision.** The app is a static site. Everything runs in the browser. A server-side component is allowed
 only as a recorded exception here, and must be stateless (no user data at rest).
 **Why.** Owner requirement: keep all data in existing services, with no database of our own.
@@ -63,6 +63,7 @@ interactive search.
 **Reopen if.** Multi-device use makes polling feel stale ([#10](https://github.com/Froussios/fitbit-nutrition-portal/issues/10)).
 
 ### DR-09 Authentication: Google Identity Services token model for now
+Revised by DR-24 once meal prep is built: one sign-in will also return an ID token, outside Google's token client.
 **Decision.** Short-lived access tokens from a Google popup, kept in `sessionStorage`; the user clicks
 Continue about hourly. Long-lived sessions are deferred to M3, after the MVP (D1).
 **Why.** Refresh tokens need the client secret for web clients, even with PKCE (V8), so they need a server
@@ -109,7 +110,7 @@ exact-word matching (DR-13) a pre-sorted static index needs no server, so DR-01 
 Free database tiers could not hold or rebuild the dataset; paid search hosting was ruled out on cost. The
 custom domain replaced `*.pages.dev` after the University of Sydney's firewall was found intercepting it.
 **Reopen if.** Typo tolerance becomes a requirement (Meilisearch on a home server is the documented path),
-the index outgrows Cloudflare Pages' 20,000 files, or mobile latency needs the engine in a Worker.
+the index outgrows Cloudflare Pages' 20,000 files, or latency needs the engine in a Worker.
 
 ### DR-15 Food search assumes the generic product
 Where generic foods come from, and the order of products with no brand, revised by DR-16.
@@ -151,8 +152,8 @@ dinner and snack stay available, and the form returns to "No meal" after each en
 unnoticed. The app no longer guesses the meal from the time of day, and no longer offers or writes `ANYTIME`.
 **Why.** Owner decision (6 November 2026). The API marks `mealType` as optional, and describes `ANYTIME` as legacy
 while listing only the other four values for this field.
-**Consequence.** Entries logged without a meal cannot gain one later except by deleting and logging them again:
-Google does not allow editing logs created from a typed-in food. The diary shows them with a dash.
+**Consequence.** Google does not allow editing logs created from a typed-in food, so giving an entry a meal later
+replaces it with a copy (DR-22). The diary shows entries with no meal with a dash.
 **Reopen if.** Google Health rejects or misplaces entries with no meal.
 
 ### DR-18 No offline queue: the app assumes a connection and says when it has none
@@ -166,7 +167,7 @@ is none, fail cleanly and show it.
 **Consequence.** A write whose answer is lost may still have been saved, and logging again sends a new ID, so it would
 create a second entry. The error therefore asks the user to check the diary first. Client-supplied IDs still carry the
 food reference, but nothing relies on them for idempotency.
-**Reopen if.** Logging without a connection becomes a real need, for example once the app is an installed PWA ([#16](https://github.com/Froussios/fitbit-nutrition-portal/issues/16)).
+**Reopen if.** Logging without a connection becomes a real need.
 
 ### DR-19 Food search favours foods the user logged before, from a short look at the history
 **Decision.** The last 20 distinct foods logged, and anything logged in the last 2 weeks, go first in the suggestions
@@ -194,7 +195,41 @@ A row is disabled while its delete or undo is under way, and enabled again if it
 stays until it is dismissed or the action is tried again, so that a refresh cannot hide it.
 **Reopen if.** Deleted entries need to survive a reload, or [#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18) shows that the original ID can be reused.
 
-### DR-21 Meal prep keeps its recipes in a database, in the food index's Cloudflare project
+### DR-21 Energy is shown in one unit, chosen in the page header
+**Decision.** The diary, the log form's preview and the food search show energy in either kcal or kJ, not both. A control
+in the page header chooses which, kcal by default, and the choice is kept in `localStorage` on each device. Google Health
+still stores kcal. A custom food's energy can still be typed in either unit, whatever the setting.
+**Why.** Owner decision (7 November 2026): the two are the same information, so showing both wastes a column. kcal is the
+default because it is what Google Health stores and what the food search already showed.
+**Consequence.** The setting does not follow the user to another device or browser.
+**Reopen if.** The app gets more settings than the header can hold, or the choice needs to follow the user across devices.
+
+### DR-22 Editing replaces the entry, and recalculates from the food's record when it can
+**Decision.** An entry's amount and meal can be edited, on this app's own entries. Time and food cannot. Saving writes a
+corrected copy under a new ID, then deletes the original. For a new amount, nutrients are calculated again from the food's
+record, found through the reference in the entry's ID. With no record (a custom food, or a failed lookup), the logged values
+are scaled. A meal-only edit copies the logged values. Any entry offers the units of the kind it was logged in; a food found
+in the catalogue adds its named portions, and the other kind of unit if it has a density.
+**Why.** Owner decisions ([#17](https://github.com/Froussios/fitbit-nutrition-portal/issues/17), 7 November 2026). Logs cannot be updated (DR-05). Writing first means a failure cannot
+lose the entry. The record gives exact values, while the logged ones are rounded to 0.1 mg: scaling 40 g to 400 g leaves iron
+typically 5% out, and a value rounded to 0 stays 0. A new ID because whether a deleted ID can be reused is still open ([#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18)).
+**Consequence.** If the delete fails, both entries stay in the diary and both count in the totals, with an alert saying to
+delete the old one. If a food's record has changed since logging, an amount edit takes the new values. The unit originally
+chosen is not stored, so "1 × can" reopens as 375 ml. There is no Undo for an edit: the user edits the entry back. The
+Google Health app sees a delete and a new entry. An amount with no g or ml to read, such as a meal prep portion, cannot be
+changed here.
+**Reopen if.** Identified logs become practical ([#29](https://github.com/Froussios/fitbit-nutrition-portal/issues/29)), or scaling turns out to be common because lookups fail or Google does not keep our IDs.
+
+### DR-23 The app is for desktop browsers; phones are not a requirement
+**Decision.** The app targets current desktop browsers. Working on a phone, installing as an app and scanning barcodes with
+a camera are not requirements, and changes need no phone testing. The installable app ([#16](https://github.com/Froussios/fitbit-nutrition-portal/issues/16)) is not planned. Existing layout
+that happens to suit phones stays until there is a reason to change it.
+**Why.** Owner decision (7 November 2026): Google Health already has a phone app.
+**Consequence.** Barcode lookup ([#36](https://github.com/Froussios/fitbit-nutrition-portal/issues/36)) is manual entry only. Users still need the Google Health phone app once, to link their account:
+that is Google's requirement, not ours.
+**Reopen if.** The owner wants to log from a phone in this app.
+
+### DR-24 Meal prep keeps its recipes in a database, in the food index's Cloudflare project
 **Decision.** One-off meal prep ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55)) stores recipes and what is left of them in a Cloudflare D1 database, behind Pages Functions
 in the existing `food-diary-index` project and `food-index.froussios.com` domain. Every row belongs to one user: there are
 no shared recipes. The database adds to the Google Health API and does not mirror it: the diary stays in Google Health,
@@ -204,9 +239,10 @@ time, never its nutrients ([design](ARCHITECTURE.md#45-meal-prep-planned)).
 (V7). Browser storage stays on one device and can be cleared. Google Drive's app-data folder was considered and rejected.
 Reusing the project and domain avoids new hosting, and the domain avoids the firewall that intercepts `*.pages.dev`
 (DR-14).
-The API identifies users by a Google ID token, because a token that can use the diary must not reach it.
-**Consequence.** This is the first server and the first user data at rest, an exception to DR-01. Users sign in to
-Sign In With Google as well as granting Google Health access, and its token needs renewing about hourly. A Pages deploy replaces the whole site, so an API change ships only with the Food index workflow, and a rollback there
+The API identifies users by a Google ID token, because a token that can use the diary must not reach it. One sign-in
+returns both tokens (V11), so a second sign-in is not needed.
+**Consequence.** This is the first server and the first user data at rest, an exception to DR-01. The app's sign-in
+moves off Google's token client, which never returns an ID token, to its own popup and callback page (revises DR-09 when
+built), although Google recommends its library for this flow. Both tokens last 60 minutes, so **Continue** renews both. A Pages deploy replaces the whole site, so an API change ships only with the Food index workflow, and a rollback there
 covers both. Recipes can be lost with the database; D1's Time Travel covers the last 7 days, and the diary is unaffected.
-**Reopen if.** Shipping the API with the index becomes a real obstacle, the free limits are reached, or renewing the ID
-token proves too disruptive in daily use.
+**Reopen if.** Shipping the API with the index becomes a real obstacle, or the free limits are reached.

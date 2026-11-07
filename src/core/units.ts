@@ -120,6 +120,12 @@ export function metricAmount(food: Measurable, quantity: number, unit: string): 
   return { amount: quantity * def.toBase, unit: def.dimension === "mass" ? "g" : "ml" };
 }
 
+/** The same amount in another unit, rounded for showing in a form field. */
+export function convertQuantity(food: Measurable, quantity: number, from: string, to: string): number {
+  const converted = toBaseAmount(food, quantity, from) / toBaseAmount(food, 1, to);
+  return converted >= 1 ? Math.round(converted * 100) / 100 : Number(converted.toPrecision(3));
+}
+
 /** Units the user may pick for a food: same dimension always, the other one only with a density. */
 export function selectableUnits(food: Measurable): UnitDef[] {
   const dim = dimensionOf(food.basis);

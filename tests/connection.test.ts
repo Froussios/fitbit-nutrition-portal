@@ -74,8 +74,8 @@ describe("ConnectionMonitor", () => {
 describe("connectionBanner", () => {
   it("says logging will not work when offline, and may not work when requests go unanswered", () => {
     expect(connectionBanner("online")).toBeUndefined();
-    expect(connectionBanner("offline")).toMatch(/offline.*Logging .*will not work/);
-    expect(connectionBanner("unreachable")).toMatch(/not answering.*logging .*may not work/);
+    expect(connectionBanner("offline")).toMatch(/offline.*Logging.*will not work/);
+    expect(connectionBanner("unreachable")).toMatch(/not answering.*logging.*may not work/);
   });
 });
 

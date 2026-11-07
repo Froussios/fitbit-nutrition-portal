@@ -14,7 +14,7 @@ Health cannot hold, and never copies the diary into it (section 4.5).
   there and nowhere else. Syncing that log with other platforms is Google Health's job, not the app's.
 * **No custom backend, apart from recorded exceptions.** Everything runs in the browser as a static site.
   Where that is not possible, the trade-off is written down in [DECISIONS.md](DECISIONS.md) instead of
-  quietly adding a server. The one exception so far is the meal prep API (DR-21).
+  quietly adding a server. The one exception so far is the meal prep API (DR-24).
 * **MVP = proof of concept:** sign in, write minimal entries, show the day. Food search,
   long-lived sessions and meals are post-MVP milestones (see [ROADMAP.md](ROADMAP.md)).
 
@@ -36,6 +36,7 @@ revision `20261030`), Google's documentation as indexed by search, and live HTTP
 | V8 | Google's token endpoint (`oauth2.googleapis.com/token`) allows CORS, but **refuses to exchange an authorisation code without `client_secret`, even with PKCE** (`invalid_request: client_secret is missing`). | Live POST from a foreign origin |
 | V9 | In OAuth *Testing* status, refresh tokens expire after 7 days. In *Production* they last until revoked or unused for about six months. All Google Health scopes are *restricted*: an unverified app is capped at 100 users and needs a security assessment to go beyond that. | Google Health setup docs (via search); one unconfirmed report says unverified production apps also get 7-day tokens (spike B) |
 | V10 | Webhooks: a *subscriber* (one HTTPS URL per Cloud project) is registered with the `cloud-platform` scope. Google checks it by POSTing twice: it must answer `201` with the shared secret and `401`/`403` without. The `AUTOMATIC` policy then notifies for every user who consented, so there is no per-user setup. The `Subscription` docs list only altitude, distance, floors, sleep, steps and weight; nutrition-log support is unconfirmed. | Discovery document |
+| V11 | **One sign-in can return an access token and an ID token together.** `response_type=token id_token` with `openid` and both nutrition scopes returned both, each lasting 60 minutes, with a valid signature, audience and nonce. Google's token client never returns an ID token. `sub` and `healthUserId` are different values, so they cannot be compared. In desktop Chrome the popup kept its `window.opener` link and closed itself. | Real account in desktop Chrome, twice, 7 November 2026 |
 
 ## 3. Components
 
@@ -87,12 +88,12 @@ A `FoodItem` stores nutrients **per 100 g or per 100 ml** (its `basis`), plus na
 | meal | `mealType` (`BREAKFAST`, `LUNCH`, `DINNER`, `SNACK`), left out when the user picks no meal, which is the default. The legacy `ANYTIME` is never written. |
 | food name | `foodDisplayName`, e.g. `Rolled oats` or `Cola soft drink (Sample Drinks Co)` |
 | amount | `serving` = the API's *gram* or *millilitre* `food-measurement-unit` plus an amount, keeping the kind of unit the user chose (250 g of milk stays 250 g). If the API's units cannot be resolved, the amount goes into the name instead (`Rolled oats (40 g)`). |
-| energy | `energy.kcal` (`userProvidedUnit: KILOCALORIE`). The UI shows both kcal and kJ. |
+| energy | `energy.kcal` (`userProvidedUnit: KILOCALORIE`). The UI shows either kcal or kJ, as chosen in the page header (DR-21). |
 | fat, carbohydrate | `totalFat`, `totalCarbohydrate` (top-level fields) |
 | other nutrients | `nutrients[]`: protein, sugars, fibre, saturated, trans, mono- and poly-unsaturated fat, cholesterol, sodium, potassium, calcium, iron, caffeine, vitamin C |
 
 Entries are **anonymous** logs: they supply their own name and nutrients, because our foods are not
-Google `food` resources. Anonymous logs cannot be updated, so a future edit is delete and recreate.
+Google `food` resources. Anonymous logs cannot be updated, so an edit writes a corrected copy and deletes the original (DR-22).
 
 ### 4.3 Client-supplied IDs carry the food reference
 
@@ -108,12 +109,13 @@ fit in 63 characters or is not ID-safe.
 ### 4.4 Reading the diary
 
 The "Today" list reads **all sources** (with `nutrition.readonly`), so its totals match the Google Health
-app. Each row shows its amount (from `serving`). A delete button appears only on this app's entries, because
-the write scope covers only data the app added. Other apps' entries show a lock in its place, with a note naming
+app. Each row shows its amount (from `serving`). Edit and delete buttons appear only on this app's entries, because
+the write scope covers only data the app added. Other apps' entries show a lock instead, with a note naming
 the app that logged them (the Google Health app or another app's package name), or saying another app did if the
 writer is unknown. Deleting asks nothing: the row stays crossed out and out of the totals, with an
 Undo that logs an equivalent entry under a new ID (DR-20). If a delete or undo fails, the row is enabled again and
-an alert says so until it is dismissed or the action is tried again. If the user unticks the read permission on Google's consent screen, the
+an alert says so until it is dismissed or the action is tried again. Editing changes an entry's amount and meal
+(DR-22). If the user unticks the read permission on Google's consent screen, the
 app falls back to its own entries and says so.
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
@@ -121,7 +123,7 @@ background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-fo
 
 ### 4.5 Meal prep (planned)
 
-Not built yet ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55), DR-21). The user records a recipe when cooking, then logs fractions of it (`1/6`, `25%`) until it is finished or
+Not built yet ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55), DR-24). The user records a recipe when cooking, then logs fractions of it (`1/6`, `25%`) until it is finished or
 discarded. Fractions are of the whole batch. Weights are not offered, because the ingredients do not add up to the cooked weight.
 
 **The database adds to the diary and does not mirror it.** A portion is one ordinary diary entry with summed nutrients,
@@ -134,15 +136,16 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
 
 * **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
   index can change. Editing them affects later portions only: diary entries cannot be edited.
-* **Identity.** The Google access token never leaves the browser for our API, because it can read and write the diary. The
-  browser instead gets a Google **ID token** from Sign In With Google, which proves who the user is and grants no API
-  access. The API checks its signature against Google's public keys, and its `aud` (this app's client ID), `iss` and `exp`.
-  `user_id` is its `sub`, which is stable and never reused. The `sub` alone would not do: anyone who knew it could use it. The
-  user ID never comes from the request, and the API ignores the token's email and name and does not store the token. No
-  `nonce` is used, so a stolen ID token can be replayed until it expires. That reaches meal prep data only, not the diary.
-* **Two sign-ins, one account.** A browser with several Google accounts could use one for each sign-in, so that recipes sit
-  under one account and portions are logged to the other's diary. The app passes the ID token's `sub` as the account hint
-  for the Google Health sign-in. Whether that sign-in honours the hint is still to be tested.
+* **Identity.** The Google access token never goes to our API, because it can read and write the diary. It receives a Google
+  **ID token** instead, which proves who the user is and grants no API access. The API checks its signature against Google's
+  public keys, and its `aud` (this app's client ID), `iss` and `exp`. `user_id` is its `sub`, which is stable and never reused.
+  The `sub` alone would not do: anyone who knew it could use it. The user ID never comes from the request, and the API ignores
+  the token's email and name and does not store the token. No `nonce` reaches the API, so a stolen ID token can be replayed
+  until it expires. That reaches meal prep data only, not the diary.
+* **One sign-in.** One request to Google returns both tokens (V11), so they are always for the same account, and **Continue**
+  renews both. The app opens its own popup, and a callback page with no other scripts passes the answer back through
+  `window.opener`. It never uses a `BroadcastChannel`, because `froussios.github.io` is shared with other Pages sites. The
+  browser checks `state` and `nonce`. Passing `sub` as `login_hint` on renewal should skip the account chooser; to be tested.
 * **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
   so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
   rejects the entry, the portion is removed. If the answer is lost or the browser closes first, the portion counts as eaten

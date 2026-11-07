@@ -1,6 +1,6 @@
 /** Tiny DOM helpers. Text always goes through textContent, so user and API data cannot inject HTML. */
 
-type Child = Node | string | number | null | undefined | false;
+type Child = Node | string | number | null | undefined | false | readonly Child[];
 type Attrs = Record<string, string | number | boolean | undefined | EventListener>;
 
 export function el<K extends keyof HTMLElementTagNameMap>(
@@ -23,7 +23,8 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 export function append(parent: ParentNode, ...children: Child[]): void {
   for (const c of children) {
     if (c === null || c === undefined || c === false) continue;
-    parent.append(typeof c === "number" ? String(c) : c);
+    if (Array.isArray(c)) append(parent, ...(c as readonly Child[]));
+    else parent.append(typeof c === "number" ? String(c) : (c as Node | string));
   }
 }
 
