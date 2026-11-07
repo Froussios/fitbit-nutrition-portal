@@ -104,7 +104,8 @@ e-<logged-at base36>-<random4>-<source>[-<food id>]     e.g. e-mvxb00vd-9gcl-smp
 ```
 
 `source` is `off`, `afcd`, `aus` (AUSNUT), `fnds` (USDA FNDDS), `usda`, `smp` (sample) or `man` (manual), so usage per database can be counted from the diary. The food ID is dropped when it does not
-fit in 63 characters or is not ID-safe.
+fit in 63 characters or is not ID-safe. Editing an entry uses this reference to load the food again, for its exact values
+and its portions, and the copy that replaces the entry keeps the same source and food (DR-22).
 
 ### 4.4 Reading the diary
 
@@ -114,8 +115,8 @@ the write scope covers only data the app added. Other apps' entries show a lock 
 the app that logged them (the Google Health app or another app's package name), or saying another app did if the
 writer is unknown. Deleting asks nothing: the row stays crossed out and out of the totals, with an
 Undo that logs an equivalent entry under a new ID (DR-20). If a delete or undo fails, the row is enabled again and
-an alert says so until it is dismissed or the action is tried again. Editing changes an entry's amount and meal
-(DR-22). If the user unticks the read permission on Google's consent screen, the
+an alert says so until it is dismissed or the action is tried again. Editing changes an entry's amount and meal in its
+own row, which replaces the entry with a corrected copy under a new ID (DR-22). If the user unticks the read permission on Google's consent screen, the
 app falls back to its own entries and says so.
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
@@ -135,7 +136,7 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
 ```
 
 * **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
-  index can change. Editing them affects later portions only: diary entries cannot be edited.
+  index can change. Editing them affects later portions only: a portion already in the diary keeps its nutrients.
 * **Identity.** The Google access token never goes to our API, because it can read and write the diary. It receives a Google
   **ID token** instead, which proves who the user is and grants no API access. The API checks its signature against Google's
   public keys, and its `aud` (this app's client ID), `iss` and `exp`. `user_id` is its `sub`, which is stable and never reused.
@@ -156,6 +157,9 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
 * **Removing a portion.** Deleting one in the diary gives it back, and Undo is refused if it would pass 100%. The diary shows
   only today, so the prep also lists its portions, each with a remove button. Deletes made in the Google Health app
   are not detected; removing the portion from the prep corrects the amount left.
+* **Editing a portion in the diary.** Only its meal can change, because a new fraction would have to go through the
+  reservation above (DR-22). An edit gives the entry a new ID, so `portions.entry_id` must move to it, or the portion loses
+  track of its entry. The delete inside an edit must not give the portion back: only a delete by the user does.
 * **Finished and discarded preps** are hidden and kept for 30 days, so that an undo can bring them back, then deleted the
   next time that user's list loads. An unfinished recipe draft stays on the device until it is saved.
 * **Failures.** If the API is down, eating is blocked and normal logging still works, as with other failures (DR-18).
