@@ -1,9 +1,8 @@
 import { amountAi } from "../ai/amount-ai";
 import type { FoodItem } from "../core/food";
-import { convertQuantity } from "../core/units";
+import { convertQuantity, type Measurable } from "../core/units";
 import { describeError, logger } from "../debug/log";
 import type { FoodCatalog } from "../food/catalog";
-import type { Measurable } from "../core/units";
 import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, canConvertLogged, editedNutritionLogPoint, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, toDiaryEntry, type AmountEdit, type DiaryEntry, type EntryEdit } from "../health/mapping";
 import type { MealType } from "../health/types";
 import { createAmountField } from "./amount-field";
@@ -53,6 +52,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   let food: FoodItem | undefined;
   /** With no amount to read and no food, the amount is a multiple of the entry as logged, so it can always change. */
   const asLogged = asLoggedMeasure();
+  /** The user has typed in the amount or picked a unit, so a food that arrives later must not replace what they chose. */
+  let touched = false;
   let lookingUp = false;
   const lookup = new AbortController();
   let saving = false;
@@ -107,8 +108,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
 
   /** Throws with the reason the amount can't be used. Undefined when the amount stays as logged. */
   const amountEdit = (): AmountEdit | undefined => {
-    // A food found for an entry that stated no amount: an empty field means the user is only changing the meal.
-    if (food && !logged && !quantity.value.trim()) return undefined;
+    // No amount was stated, so an empty field means the user is only changing the meal.
+    if (!logged && !quantity.value.trim()) return undefined;
     const read = amountField.read();
     if (read.state === "typing") throw new StillTyping();
     if (read.state === "problem") throw new Error(read.message);
@@ -170,6 +171,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   }
 
   mealSelect.addEventListener("input", refresh);
+  quantity.addEventListener("input", () => (touched = true));
+  unitSelect.addEventListener("input", () => (touched = true));
 
   for (const control of [mealSelect, amountCell, actions]) {
     control.addEventListener("keydown", (ev) => {
@@ -196,8 +199,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
       .then(
         (found) => {
           if (!found || (logged && !canConvertLogged(found, logged))) return;
-          // "× this entry" that the user has already changed stays: switching would throw away what they typed.
-          if (!logged && !(amountField.read().state === "ok" && quantity.value.trim() === "1" && unitSelect.value === AS_LOGGED_UNIT)) return;
+          // Once the user has typed a multiple of the entry, it stays: switching units would throw away what they typed.
+          if (!logged && touched) return;
           food = found;
         },
         (error: unknown) => {
