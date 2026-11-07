@@ -126,7 +126,8 @@ button.link { border: none; background: none; color: var(--accent); text-decorat
 button.icon { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; padding: 0; border: none; background: none; color: var(--muted); line-height: 1; }
 button.icon:focus-visible { outline-offset: -2px; }
 button.icon:not(:disabled):hover { color: var(--danger); }
-button.icon.undo:not(:disabled):hover, button.icon.edit:not(:disabled):hover { color: var(--accent); }
+button.icon.undo:not(:disabled):hover, button.icon.edit:not(:disabled):hover, button.icon.save:not(:disabled):hover { color: var(--accent); }
+button.icon.save:not(:disabled) { color: var(--accent); }
 button.not-owned:not(:disabled):hover { color: var(--text); }
 .not-owned svg, button.edit svg { display: block; width: 1em; height: 1em; }
 /* Room for two icons on every row, with Delete on the right: Undo and the lock take its place, and nothing moves. */
@@ -169,19 +170,6 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 4px; }
 .row-alert p { margin: 0; }
 .row-alert p + p { margin-top: 6px; }
 
-.edit-dialog {
-  width: min(28rem, calc(100vw - 32px));
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-}
-.edit-dialog::backdrop { background: rgb(0 0 0 / 0.5); }
-.edit-dialog h2 { margin-top: 0; }
-.edit-food { margin: 0 0 12px; overflow-wrap: anywhere; }
-.edit-food span { color: var(--muted); }
-
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 th, td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
@@ -192,6 +180,18 @@ tfoot th, tfoot td { font-weight: 600; border-bottom: none; }
 tbody td:last-child { padding: 0; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.pending { opacity: 0.7; }
+/* A row being edited keeps its height and the table's width. If the window is too narrow for that, Save and Cancel stay in view. */
+tr.editing td { padding-block: 0; }
+tr.editing input, tr.editing select { padding: 4px 6px; }
+tr.editing select { width: auto; }
+tr.editing input { width: 4rem; appearance: textfield; text-align: right; }
+tr.editing input::-webkit-inner-spin-button, tr.editing input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+tr.editing td:last-child { position: sticky; right: 0; background: var(--surface); }
+.amount-edit { display: flex; justify-content: flex-end; gap: 4px; }
+tr.editing .amount-edit select { max-width: 5.5rem; }
+.amount-edit[hidden] { display: none; }
+.amount-edit input[aria-invalid="true"] { border-color: var(--danger); }
+.edit-error { margin-top: 4px; min-width: 11em; color: var(--danger); font-size: 0.8rem; white-space: normal; }
 tr.deleted td:not(:last-child) { color: var(--muted); text-decoration: line-through; }
 .tag {
   display: inline-block;

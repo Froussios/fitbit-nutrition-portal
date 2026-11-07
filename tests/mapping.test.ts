@@ -329,6 +329,23 @@ describe("editing an entry", () => {
       expect(loggedAmount({ ...base, serving: { foodMeasurementUnit: "unknown", amount: 2 } }, unitNames)).toBeUndefined();
     });
 
+    it("accepts the ways the API might word a unit", () => {
+      const withName = (foodMeasurementUnitDisplayName: string) => ({ ...logFood(oats, 40, "g"), serving: { foodMeasurementUnit: "u/1", foodMeasurementUnitDisplayName, amount: 40 } });
+      for (const name of ["gram", "Grams", "g", "gram (g)", "gram(s)", " GRAM "]) expect(loggedAmount(withName(name))).toEqual({ amount: 40, unit: "g" });
+      for (const name of ["milliliter", "Millilitres", "mL", "ml (milliliter)"]) expect(loggedAmount(withName(name))).toEqual({ amount: 40, unit: "ml" });
+      for (const name of ["cup", "gallon", "serving", "glass", "mlem"]) expect(loggedAmount(withName(name))).toBeUndefined();
+    });
+
+    it("trusts the unit this app looked up over the API's wording", () => {
+      const log = { ...logFood(oats, 40, "g"), serving: { foodMeasurementUnit: units.g, foodMeasurementUnitDisplayName: "unfamiliar wording", amount: 40 } };
+      expect(loggedAmount(log, unitNames)).toEqual({ amount: 40, unit: "g" });
+    });
+
+    it("reads an amount sent as a string", () => {
+      const log = { ...logFood(oats, 40, "g"), serving: { foodMeasurementUnit: units.g, amount: "40" as unknown as number } };
+      expect(loggedAmount(log, unitNames)).toEqual({ amount: 40, unit: "g" });
+    });
+
     it("does not take a name's brackets for the amount when the entry has a serving", () => {
       const log = { ...logFood(oats, 40, "g"), foodDisplayName: "Yoghurt (500 g)" };
       expect(loggedAmount(log, unitNames)).toEqual({ amount: 40, unit: "g" });
@@ -363,6 +380,14 @@ describe("editing an entry", () => {
       expect(edited.interval.startTime).toBe(log.interval.startTime);
       expect(edited.interval.startUtcOffset).toBe("39600s");
       expect(edited.interval).not.toHaveProperty("civilStartTime");
+    });
+
+    it("does not need the entry to state an amount", () => {
+      const log = { ...logFood(milk, 100, "ml"), serving: { foodMeasurementUnit: "u/odd", foodMeasurementUnitDisplayName: "odd", amount: 1 } };
+      expect(loggedAmount(log, unitNames)).toBeUndefined();
+      const edited = editedNutritionLogPoint(log, { amount: { quantity: 250, unit: "ml", food: milk } }, opts).nutritionLog!;
+      expect(edited.energy?.kcal).toBe(160);
+      expect(edited.serving).toEqual({ foodMeasurementUnit: units.ml, amount: 250 });
     });
 
     it("takes the record's current values if they have changed", () => {

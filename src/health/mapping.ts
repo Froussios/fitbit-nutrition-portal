@@ -101,26 +101,25 @@ export interface LoggedAmount {
   readonly unit: BaseUnit;
 }
 
-const SERVING_UNIT_NAMES: Record<string, BaseUnit> = {
-  g: "g",
-  gram: "g",
-  grams: "g",
-  ml: "ml",
-  milliliter: "ml",
-  milliliters: "ml",
-  millilitre: "ml",
-  millilitres: "ml",
-};
+/** Which base unit a name means. Loose, because the API's wording is not specified: "gram", "Grams", "gram (g)". */
+function baseUnitNamed(name: string | undefined): BaseUnit | undefined {
+  const n = name?.trim().toLowerCase() ?? "";
+  if (/^(?:g|gm|grams?|grammes?)\b/.test(n)) return "g";
+  if (/^(?:ml|millilit(?:er|re)s?)\b/.test(n)) return "ml";
+  return undefined;
+}
 
 /**
  * The amount in an entry: from `serving`, or from its name when the API's units could not be
- * resolved. Undefined when it has none to work from, such as a meal prep portion (`Chili (1/6)`).
+ * resolved. The unit resource this app looked up decides first, since it wrote the entry with it.
+ * Undefined when it has none to work from, such as a meal prep portion (`Chili (1/6)`).
  */
 export function loggedAmount(log: NutritionLog, unitNames?: ReadonlyMap<string, string>): LoggedAmount | undefined {
   if (log.serving) {
     const { amount, foodMeasurementUnit, foodMeasurementUnitDisplayName } = log.serving;
-    const unit = SERVING_UNIT_NAMES[(foodMeasurementUnitDisplayName ?? unitNames?.get(foodMeasurementUnit) ?? "").trim().toLowerCase()];
-    return unit && amount && amount > 0 ? { amount, unit } : undefined;
+    const unit = baseUnitNamed(unitNames?.get(foodMeasurementUnit)) ?? baseUnitNamed(foodMeasurementUnitDisplayName);
+    const value = Number(amount);
+    return unit && value > 0 ? { amount: value, unit } : undefined;
   }
   const inName = AMOUNT_IN_NAME.exec(log.foodDisplayName ?? "");
   const amount = Number(inName?.[1]?.replace(/,/g, ""));
@@ -186,16 +185,18 @@ function scaleLog(log: NutritionLog, factor: number): NutritionLog {
 /** An entry's log at a new amount: calculated again from the food's record if there is one, else scaled from the logged values. */
 function atNewAmount(log: NutritionLog, edit: AmountEdit, opts: EditOptions): NutritionLog {
   const logged = loggedAmount(log, opts.unitNames);
-  if (!logged) throw new Error("This entry has no amount to change.");
-  const copy = copyNutritionLogPoint(log, opts.id).nutritionLog!;
   const { food, quantity, unit } = edit;
+  // The food's record needs nothing from the entry. Scaling needs its amount.
+  const measure = food ?? (logged && basicMeasure(logged.unit));
+  if (!measure) throw new Error("This entry has no amount to change.");
+  const copy = copyNutritionLogPoint(log, opts.id).nutritionLog!;
   // The entry's own unit needs no lookup, and the food stays under the name it was logged with.
-  const servingUnits = { ...opts.servingUnits, ...(log.serving ? { [logged.unit]: log.serving.foodMeasurementUnit } : {}) };
+  const servingUnits = { ...opts.servingUnits, ...(log.serving && logged ? { [logged.unit]: log.serving.foodMeasurementUnit } : {}) };
   const out: NutritionLog = food
     ? { ...buildNutritionLogPoint({ food, quantity, unit, time: new Date(log.interval.startTime) }, { id: opts.id, servingUnits }).nutritionLog!, interval: copy.interval }
-    : scaleLog(copy, toBaseAmount(basicMeasure(logged.unit), quantity, unit) / logged.amount);
+    : scaleLog(copy, toBaseAmount(measure, quantity, unit) / logged!.amount);
 
-  const metric = metricAmount(food ?? basicMeasure(logged.unit), quantity, unit);
+  const metric = metricAmount(measure, quantity, unit);
   const servingUnit = servingUnits[metric.unit];
   const name = log.serving ? (log.foodDisplayName ?? "") : (log.foodDisplayName ?? "").replace(AMOUNT_IN_NAME, "");
   if (servingUnit) {

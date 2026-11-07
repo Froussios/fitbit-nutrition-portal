@@ -17,9 +17,9 @@ import { buildNutritionLogPoint, byTime, copyNutritionLogPoint, editedNutritionL
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
-import { createEditDialog, type EditDialog } from "./ui/edit-dialog";
 import { getEnergyUnit, setEnergyUnit, type EnergyUnit } from "./ui/energy-unit";
 import { createLogForm, type LogForm } from "./ui/log-form";
+import { createRowEditor, type RowEditor } from "./ui/row-editor";
 import { createDebugPanel } from "./ui/debug-panel";
 import { describeError, installGlobalErrorHandlers, logger } from "./debug/log";
 
@@ -83,9 +83,8 @@ class App {
   /** Kept across renders, so a change in connection does not disturb what the user is typing. */
   private readonly connectionNotice = el("p", { class: "notice", role: "alert", hidden: true });
   private readonly form: LogForm;
-  private readonly editor: EditDialog;
-  /** The row whose edit button takes focus when the dialog closes: the new entry, once one is saved. */
-  private editedId?: string;
+  /** The diary row being edited. Its controls outlive redraws of the table, so a refresh keeps what the user typed. */
+  private editor?: RowEditor;
   private readonly diary = el("div", { class: "diary" });
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
   private readonly rowFailureList = el("div");
@@ -102,13 +101,6 @@ class App {
     private readonly catalog: LoggedFoodsCatalog,
   ) {
     this.form = createLogForm(catalog, (d) => this.log(d));
-    // Outside the page's root, so that redrawing the page leaves an open dialog alone.
-    this.editor = createEditDialog(
-      catalog,
-      (entry, edit) => this.saveEdit(entry, edit),
-      () => this.editedId && this.diary.querySelector<HTMLElement>(`[data-entry-edit="${CSS.escape(this.editedId)}"]`)?.focus(),
-    );
-    document.body.append(this.editor.element);
     // Logging needs the write scope; the read scope (whole diary) is asked for but optional.
     this.auth = new GoogleAuth(clientId, SCOPES, [NUTRITION_WRITE_SCOPE]);
     this.api = new HealthClient((o) => this.auth.getAccessToken(o));
@@ -151,7 +143,7 @@ class App {
     this.connectionNotice.textContent = message ?? "";
     this.connectionNotice.hidden = !message;
     this.form.setOffline(this.connection.state === "offline");
-    this.editor.setOffline(this.connection.state === "offline");
+    this.editor?.setOffline(this.connection.state === "offline");
   }
 
   /** The browser is back online: pick up what the outage interrupted. */
@@ -291,6 +283,8 @@ class App {
       // An edit's old entry leaves the diary before its delete is answered, and may be one written this session.
       const pending = withoutEntries([...this.pending.values()], this.deletedIds).filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === today);
       this.entries = toDiaryEntries([...points, ...pending], this.diaryContext());
+      // Deleted in another app, or the day has changed: there is no row left to edit.
+      if (this.editor && !this.entries.some((e) => e.id === this.editor?.id)) this.stopEditing();
       for (const [id, entry] of this.deleted) {
         if (civilDate(entry.start) !== today) this.deleted.delete(id);
       }
@@ -411,15 +405,49 @@ class App {
     await this.loadToday();
   }
 
+  /** Turns a row into its editor. */
+  private startEditing(entry: DiaryEntry) {
+    if (this.editor) return;
+    this.editor = createRowEditor({
+      catalog: this.catalog,
+      entry,
+      unitNames: this.unitNames,
+      offline: this.connection.state === "offline",
+      onSave: (edit) => void this.saveEdit(entry, edit),
+      onCancel: () => {
+        this.stopEditing();
+        this.renderDiary(undefined, entry.id);
+      },
+    });
+    this.renderDiary();
+    this.editor.focus();
+  }
+
+  private stopEditing() {
+    this.editor?.dispose();
+    this.editor = undefined;
+  }
+
   /**
    * Applies an edit: writes the corrected entry, then deletes the original, so that a failure can
-   * never lose the entry (DR-22). Rejects if nothing was saved, and the dialog stays open to say why.
+   * never lose the entry (DR-22). If nothing was saved, the row stays open with what the user typed.
    */
   private async saveEdit(entry: DiaryEntry, edit: EntryEdit): Promise<void> {
     const log = entry.point.nutritionLog;
     if (this.busy.has(entry.id) || !log) return;
+    let point: DataPoint;
+    try {
+      point = editedNutritionLogPoint(log, edit, { id: copiedEntryId(entry.id), servingUnits: this.servingUnits, unitNames: this.unitNames });
+    } catch (e) {
+      appLog.error("Could not build the edited entry", describeError(e));
+      this.showRowFailure(entry, actionRefused("edit", entry.displayName, errorMessage(e)));
+      return;
+    }
     this.startRowAction(entry, "saving…");
-    const point = editedNutritionLogPoint(log, edit, { id: copiedEntryId(entry.id), servingUnits: this.servingUnits, unitNames: this.unitNames });
+    // The row can leave the diary during the write, and another row can be opened: the answer is only for this one's editor.
+    const editor = this.editor;
+    editor?.setSaving(true);
+    const stillEditing = () => editor !== undefined && this.editor === editor;
     appLog.info(`Editing ${entry.name}`, { replacement: point.name, mealType: edit.mealType, quantity: edit.amount?.quantity, unit: edit.amount?.unit, fromFoodRecord: Boolean(edit.amount?.food) });
     // The replacement has no name for its unit until the API lists it, but the original did.
     if (log.serving?.foodMeasurementUnitDisplayName) this.unitNames.set(log.serving.foodMeasurementUnit, log.serving.foodMeasurementUnitDisplayName);
@@ -430,9 +458,11 @@ class App {
       appLog.error("Saving the edit failed", describeError(e));
       this.handleError(e, false);
       this.busy.delete(entry.id);
+      this.showRowFailure(entry, isConnectionFailure(e) ? editNotConfirmed(entry.displayName) : actionRefused("edit", entry.displayName, refusalReason(e)));
+      if (stillEditing()) editor?.setSaving(false);
       this.renderDiary();
-      if (e instanceof SignInRequiredError) this.showRowFailure(entry, actionRefused("edit", entry.displayName, refusalReason(e)));
-      throw isConnectionFailure(e) ? new Error(editNotConfirmed(entry.displayName), { cause: e }) : e;
+      if (stillEditing()) editor?.focusSave();
+      return;
     }
     const { key, created } = written;
     // No wait since the write: a listing that still has the original must not match the replacement to it (a meal-only edit looks the same).
@@ -440,9 +470,12 @@ class App {
     this.catalog.merge(toLoggedFoods([created], this.clientId));
     const replacement = toDiaryEntry(created, this.diaryContext());
     this.entries = [...this.entries.filter((e) => e.id !== entry.id), ...(replacement ? [replacement] : [])].sort(byTime);
-    this.editedId = key;
-    this.renderDiary();
-    this.editor.close();
+    if (stillEditing()) {
+      this.stopEditing();
+      this.renderDiary(undefined, key);
+    } else {
+      this.renderDiary();
+    }
     void this.removeReplaced(entry);
   }
 
@@ -500,7 +533,7 @@ class App {
 
   /** Signs out and forgets this user's diary state (the per-user unit cache stays). */
   private signOut() {
-    this.editor.close();
+    this.stopEditing();
     this.pending.clear();
     this.pendingSince.clear();
     this.deleted.clear();
@@ -546,7 +579,7 @@ class App {
     );
 
     if (!signedIn) {
-      this.editor.close();
+      this.stopEditing();
       const expired = this.auth.hasExpiredSession;
       replaceChildren(
         root,
@@ -611,6 +644,7 @@ class App {
         onchange: () => {
           setEnergyUnit(select.value as EnergyUnit);
           this.form.refreshPreview();
+          this.editor?.refresh();
           this.renderDiary();
         },
       },
@@ -640,10 +674,12 @@ class App {
    * Redrawing replaces the table. On a narrow screen it keeps its sideways scroll, so that Undo stays where Delete was,
    * and the button with keyboard focus (or `focusId`'s, when the row changed ID) takes it back.
    * Edit buttons are found separately, because a row's Delete has the first claim on `focusId`.
+   * The controls of a row being edited are the same elements after the redraw, and get focus back too.
    */
-  private renderDiary(focusId = focusedEntryId()) {
+  private renderDiary(focusId = focusedEntryId(), editFocus = focusedEditId()) {
+    const focused = document.activeElement;
+    const inEditor = focused instanceof HTMLElement && this.diary.contains(focused) && focused.closest("tr.editing") ? focused : undefined;
     const scrollLeft = this.diary.querySelector(".table-wrap")?.scrollLeft ?? 0;
-    const editFocus = document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entryEdit"] : undefined;
     this.diaryStatus.textContent = this.loading ? "Loading…" : this.listError;
     this.diaryStatus.classList.toggle("error", !this.loading && Boolean(this.listError));
     // With nothing loaded, an error must not read as "Nothing logged today yet".
@@ -657,10 +693,8 @@ class App {
           deleted: [...this.deleted.values()],
           busy: this.busy,
           offline: this.connection.state === "offline",
-          onEdit: (e) => {
-            this.editedId = e.id;
-            this.editor.open(e, this.unitNames);
-          },
+          ...(this.editor ? { editing: this.editor } : {}),
+          onEdit: (e) => this.startEditing(e),
           onDelete: (e) => void this.remove(e),
           onUndo: (e) => void this.undoDelete(e),
         }),
@@ -668,12 +702,18 @@ class App {
     this.diary.querySelector(".table-wrap")?.scrollTo({ left: scrollLeft });
     if (focusId) this.diary.querySelector<HTMLElement>(`[data-entry="${CSS.escape(focusId)}"]`)?.focus();
     else if (editFocus) this.diary.querySelector<HTMLElement>(`[data-entry-edit="${CSS.escape(editFocus)}"]`)?.focus();
+    else if (inEditor?.isConnected) inEditor.focus();
   }
 }
 
 /** The entry whose Delete or Undo button has keyboard focus. */
 function focusedEntryId(): string | undefined {
   return document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entry"] : undefined;
+}
+
+/** The entry whose Edit button has keyboard focus. */
+function focusedEditId(): string | undefined {
+  return document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entryEdit"] : undefined;
 }
 
 /** Why a delete, undo or edit failed. It may be read after signing in again, so an expired session says so in the past tense. */

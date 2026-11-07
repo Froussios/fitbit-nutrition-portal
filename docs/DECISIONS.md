@@ -205,8 +205,9 @@ default because it is what Google Health stores and what the food search already
 **Reopen if.** The app gets more settings than the header can hold, or the choice needs to follow the user across devices.
 
 ### DR-22 Editing replaces the entry, and recalculates from the food's record when it can
-**Decision.** An entry's amount and meal can be edited, on this app's own entries. Time and food cannot. Saving writes a
-corrected copy under a new ID, then deletes the original. For a new amount, nutrients are calculated again from the food's
+**Decision.** An entry's amount and meal can be edited, on this app's own entries, in the diary row itself. Its nutrient
+cells follow what is typed, and Save and Cancel take the place of the edit and delete buttons. Time and food cannot be
+edited. Saving writes a corrected copy under a new ID, then deletes the original. For a new amount, nutrients are calculated again from the food's
 record, found through the reference in the entry's ID. With no record (a custom food, or a failed lookup), the logged values
 are scaled. A meal-only edit copies the logged values. Any entry offers the units of the kind it was logged in; a food found
 in the catalogue adds its named portions, and the other kind of unit if it has a density.
@@ -216,8 +217,8 @@ typically 5% out, and a value rounded to 0 stays 0. A new ID because whether a d
 **Consequence.** If the delete fails, both entries stay in the diary and both count in the totals, with an alert saying to
 delete the old one. If a food's record has changed since logging, an amount edit takes the new values. The unit originally
 chosen is not stored, so "1 × can" reopens as 375 ml. There is no Undo for an edit: the user edits the entry back. The
-Google Health app sees a delete and a new entry. An amount with no g or ml to read, such as a meal prep portion, cannot be
-changed here.
+Google Health app sees a delete and a new entry. An amount can be changed if the entry states one in g or ml, or if its food
+is found. Otherwise, as with a meal prep portion, only the meal can be changed, and the debug log says why.
 **Reopen if.** Identified logs become practical ([#29](https://github.com/Froussios/fitbit-nutrition-portal/issues/29)), or scaling turns out to be common because lookups fail or Google does not keep our IDs.
 
 ### DR-23 The app is for desktop browsers; phones are not a requirement
