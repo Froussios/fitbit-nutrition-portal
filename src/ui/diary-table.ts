@@ -1,7 +1,7 @@
 import { sumProfiles } from "../core/nutrients";
-import { byTime, mealLabel, type DiaryEntry } from "../health/mapping";
+import { byMeal, mealLabel, type DiaryEntry } from "../health/mapping";
 import { el } from "./dom";
-import { energyLabel, fmtEnergy, fmtGrams, fmtTime } from "./format";
+import { energyLabel, fmtEnergy, fmtGrams } from "./format";
 import type { RowEditor } from "./row-editor";
 
 export interface DiaryTableOptions {
@@ -74,7 +74,8 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
 
   const total = sumProfiles(entries.map((e) => e.profile));
   const deletedIds = new Set(deleted.map((e) => e.id));
-  const head = ["Time", "Meal", "Food", "Amount", energyLabel(), "Protein", "Carbs", "Fat", ""];
+  // No time column: entries are grouped by meal, and a time that disagrees with its meal only confuses.
+  const head = ["Meal", "Food", "Amount", energyLabel(), "Protein", "Carbs", "Fat", ""];
 
   return el(
     "div",
@@ -82,16 +83,15 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
     el(
       "table",
       {},
-      el("thead", {}, el("tr", {}, ...head.map((h, i) => el("th", { scope: "col", class: i >= 3 && i <= 7 ? "num" : undefined }, h)))),
+      el("thead", {}, el("tr", {}, ...head.map((h, i) => el("th", { scope: "col", class: i >= 2 && i <= 6 ? "num" : undefined }, h)))),
       el(
         "tbody",
         {},
-        ...[...entries, ...deleted].sort(byTime).map((e) => {
+        ...[...entries, ...deleted].sort(byMeal).map((e) => {
           const editor = editing?.id === e.id ? editing : undefined;
           return el(
             "tr",
             { class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busy.has(e.id)) && "pending", editor && "editing"].filter(Boolean).join(" ") || undefined },
-            el("td", {}, fmtTime(e.start)),
             el("td", {}, editor ? editor.meal : mealLabel(e.mealType)),
             el("td", {}, e.displayName, rowTag(e.id, deletedIds, busy, pendingIds)),
             el("td", { class: "num" }, editor ? editor.amount : (e.amount ?? "–")),
@@ -140,7 +140,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
         el(
           "tr",
           {},
-          el("th", { scope: "row", colspan: 4 }, `Total (${entries.length} ${entries.length === 1 ? "entry" : "entries"})`),
+          el("th", { scope: "row", colspan: 3 }, `Total (${entries.length} ${entries.length === 1 ? "entry" : "entries"})`),
           el("td", { class: "num" }, fmtEnergy(total.energyKcal)),
           el("td", { class: "num" }, fmtGrams(total.nutrients.protein)),
           el("td", { class: "num" }, fmtGrams(total.nutrients.carbohydrates)),
