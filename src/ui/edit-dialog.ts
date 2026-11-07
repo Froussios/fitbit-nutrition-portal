@@ -143,7 +143,11 @@ export function createEditDialog(
   unitSelect.addEventListener("input", () => {
     const q = Number(quantity.value);
     try {
-      if (q > 0) quantity.value = String(convertQuantity(measure(), q, shownUnit, unitSelect.value));
+      if (q > 0) {
+        // Back in the logged unit, the logged number, or the rounding on the way would count as an edit: 40 g, 1.41 oz, 39.97 g.
+        const backToLogged = logged && unitSelect.value === logged.unit && isLoggedAmount(logged, measure(), q, shownUnit);
+        quantity.value = String(backToLogged ? logged.amount : convertQuantity(measure(), q, shownUnit, unitSelect.value));
+      }
     } catch {
       // The food cannot convert to this unit: the preview says why.
     }
