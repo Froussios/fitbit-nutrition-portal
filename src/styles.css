@@ -114,11 +114,15 @@ button.primary {
   font-weight: 600;
 }
 button.link { border: none; background: none; color: var(--accent); text-decoration: underline; }
-/* One size for every icon, so that swapping Delete and Undo moves nothing in the table. */
-button.icon { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.5rem; padding: 0; border: none; background: none; color: var(--muted); line-height: 1; }
+/*
+ * One size for every icon, so that swapping Delete and Undo moves nothing in the table. A full 44 px tap area
+ * (their cell has no padding), and a real one: a hit area larger than the row would overlap the next row's button.
+ * Gray at rest; on hover, the colour of what the button does.
+ */
+button.icon { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; padding: 0; border: none; background: none; color: var(--muted); line-height: 1; }
+button.icon:focus-visible { outline-offset: -2px; }
 button.icon:not(:disabled):hover { color: var(--danger); }
-button.icon.undo { color: var(--accent); }
-button.icon.undo:not(:disabled):hover { color: var(--text); }
+button.icon.undo:not(:disabled):hover { color: var(--accent); }
 button.not-owned:not(:disabled):hover { color: var(--text); }
 .not-owned svg { display: block; width: 1em; height: 1em; }
 .not-owned-note {
@@ -166,6 +170,7 @@ tbody td:nth-child(3) { white-space: normal; min-width: 12em; }
 thead th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
 tbody tr:nth-child(even) { background: var(--row-alt); }
 tfoot th, tfoot td { font-weight: 600; border-bottom: none; }
+tbody td:last-child { padding: 0; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.pending { opacity: 0.7; }
 tr.deleted td:not(:last-child) { color: var(--muted); text-decoration: line-through; }
