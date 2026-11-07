@@ -421,9 +421,15 @@ export function byTime(a: DiaryEntry, b: DiaryEntry): number {
 /** The order of the day's meals. Entries with no meal come last. */
 const MEAL_ORDER: readonly MealType[] = ["BEFORE_BREAKFAST", "BREAKFAST", "BEFORE_LUNCH", "LUNCH", "BEFORE_DINNER", "DINNER", "AFTER_DINNER", "SNACK", "ANYTIME", "MEAL_TYPE_UNSPECIFIED"];
 
+/** A meal's place in MEAL_ORDER. A value the API adds later goes last, with no meal. */
+function mealRank(type: MealType): number {
+  const i = MEAL_ORDER.indexOf(type);
+  return i < 0 ? MEAL_ORDER.length : i;
+}
+
 /** The diary's row order: by meal, then chronological within a meal. */
 export function byMeal(a: DiaryEntry, b: DiaryEntry): number {
-  return MEAL_ORDER.indexOf(a.mealType) - MEAL_ORDER.indexOf(b.mealType) || byTime(a, b);
+  return mealRank(a.mealType) - mealRank(b.mealType) || byTime(a, b);
 }
 
 /** Entries in chronological order (the API returns newest first). */

@@ -290,7 +290,7 @@ to judge how well the model does. Not yet tried against the real model.
 
 ### DR-27 The diary is ordered by meal and has no time column
 **Decision.** The diary's rows are grouped by meal, in the order of the day (breakfast, lunch, dinner, then snack), and
-in the order they were logged within a meal. Entries with no meal come last. The diary does not show the time.
+by the time eaten within a meal. Entries with no meal come last. The diary does not show the time.
 **Why.** Owner decision (7 November 2026): the time and the meal say the same thing, and conflict when they disagree,
 such as a breakfast logged at 9 pm.
 **Consequence.** Entries still have a time in Google Health, which the log form sets.
