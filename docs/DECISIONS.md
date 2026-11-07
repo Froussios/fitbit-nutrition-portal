@@ -248,3 +248,19 @@ moves off Google's token client, which never returns an ID token, to its own pop
 although Google recommends its library for this flow. Both tokens last 60 minutes, so **Continue** renews both. A Pages deploy replaces the whole site, so an API change ships only with the Food index workflow, and a rollback there
 covers both. Recipes can be lost with the database; D1's Time Travel covers the last 7 days, and the diary is unaffected.
 **Reopen if.** Shipping the API with the index becomes a real obstacle, or the free limits are reached.
+
+### DR-25 Amounts are typed as free text, read by fixed rules, and a unit is never decided after the number
+**Decision.** Amount is a text field in the log form and the row editor. Fixed rules read numbers, fractions, unit names and
+the food's portions: `90 g`, `1 1/2 cups`, `half a cup`, `2 × can`. On leaving the field or pressing Enter, the number stays
+in Amount and the unit moves to Unit. A bare number uses the unit that was already showing when it was typed. If none was
+showing because the food was still loading, Unit stays blank and asks, and nothing logs until the user chooses. A food's
+own portion beats a metric cup, tablespoon or teaspoon, and exact weights and volumes beat portions. What the rules cannot
+read for certain is refused with a reason: several different cups, `1,5`, `1-2 cups`, `T`.
+**Why.** Owner requirement ([#64](https://github.com/Froussios/fitbit-nutrition-portal/issues/64)): entry should be fluent, and processing deterministic where possible. Owner decision (7 November 2026):
+telling the user the unit after they entered the amount is wrong, so `90` means 90 cups only if cups was already visible.
+**Consequence.** `1 cup` is refused on the 46% of generic foods with no cup portion and no density, because DR-06 forbids
+assuming one. The number spinner and arrow-key stepping are gone. A readable amount logs on the first Enter, so the unit
+showing is what counts.
+**Planned.** An optional on-device LLM for what the rules refuse, behind a "Use AI processing of input" setting that downloads
+the model when ticked ([design](https://github.com/Froussios/fitbit-nutrition-portal/issues/64#issuecomment-6703253049)).
+**Reopen if.** Refused input turns out to be common in real use.

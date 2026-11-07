@@ -4,11 +4,14 @@ import { describeError, logger } from "../debug/log";
 import type { FoodCatalog } from "../food/catalog";
 import { basicMeasure, canConvertLogged, editedNutritionLogPoint, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, toDiaryEntry, type AmountEdit, type DiaryEntry, type EntryEdit } from "../health/mapping";
 import type { MealType } from "../health/types";
-import { el, errorMessage, replaceChildren } from "./dom";
-import { unitOptions } from "./form-fields";
+import { createAmountField } from "./amount-field";
+import { el, errorMessage } from "./dom";
 import { fmtEnergy, fmtGrams, summary } from "./format";
 
 const log = logger("edit");
+
+/** The amount cannot be used yet, and it is too early to call it wrong. */
+class StillTyping extends Error {}
 
 export interface RowEditorOptions {
   readonly catalog: FoodCatalog;
@@ -50,12 +53,24 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   const lookup = new AbortController();
   let saving = false;
   let offline = startOffline;
-  /** The unit the number in the amount field is in. */
-  let shownUnit: string = logged?.unit ?? "";
   const meal0: MealType | undefined = entry.mealType === "MEAL_TYPE_UNSPECIFIED" ? undefined : entry.mealType;
 
-  const quantity = el("input", { id: "edit-qty", type: "number", min: "0.01", step: "any", inputmode: "decimal", placeholder: "Amount", "aria-label": `Amount of ${entry.displayName}` });
-  const unitSelect = el("select", { id: "edit-unit", "aria-label": `Unit for ${entry.displayName}` });
+  const amountField = createAmountField({
+    id: "edit-qty",
+    unitId: "edit-unit",
+    placeholder: "Amount",
+    label: `Amount of ${entry.displayName}`,
+    unitLabel: `Unit for ${entry.displayName}`,
+    onChange: () => refresh(),
+    // The same amount in the new unit, so that the nutrients do not jump: 375 ml becomes 1 × can.
+    convert: (q, from, to) => {
+      // Back in the logged unit, the logged number, or the rounding on the way would count as an edit: 40 g, 1.41 oz, 39.97 g.
+      const backToLogged = logged && to === logged.unit && isLoggedAmount(logged, measure(), q, from);
+      return backToLogged ? logged.amount : convertQuantity(measure(), q, from, to);
+    },
+  });
+  const quantity = amountField.input;
+  const unitSelect = amountField.unitSelect;
   const fields = el("div", { class: "amount-edit" }, quantity, unitSelect);
   const fixedAmount = el("span", {}, entry.amount ?? "–");
   const problem = el("div", { class: "edit-error", hidden: true });
@@ -90,10 +105,11 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     if (!canEditAmount()) return undefined;
     // With no amount stated, an empty field means the user is only changing the meal.
     if (!logged && !quantity.value.trim()) return undefined;
-    const q = Number(quantity.value);
-    if (!quantity.value.trim() || !Number.isFinite(q) || q <= 0) throw new Error("Enter an amount greater than 0.");
-    if (logged && isLoggedAmount(logged, measure(), q, unitSelect.value)) return undefined;
-    return { quantity: q, unit: unitSelect.value, ...(food ? { food } : {}) };
+    const read = amountField.read(lookingUp);
+    if (read.state === "typing") throw new StillTyping();
+    if (read.state === "problem") throw new Error(read.message);
+    if (logged && isLoggedAmount(logged, measure(), read.quantity, read.unit)) return undefined;
+    return { quantity: read.quantity, unit: read.unit, ...(food ? { food } : {}) };
   };
 
   const chosenMeal = (): MealType | undefined => (mealSelect.value ? (mealSelect.value as MealType) : undefined);
@@ -119,7 +135,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
         blocked = !edit.amount && chosenMeal() === meal0;
       }
     } catch (e) {
-      error = errorMessage(e);
+      if (e instanceof StillTyping) waiting = true;
+      else error = errorMessage(e);
     }
     const blank = waiting ? "…" : "–";
     energy.textContent = shown ? fmtEnergy(shown.profile.energyKcal) : blank;
@@ -143,33 +160,17 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   const showUnits = () => {
     if (!canEditAmount()) return;
     // No amount stated: start from the food's own unit, with the field empty.
-    if (!shownUnit) shownUnit = food!.basis;
-    replaceChildren(unitSelect, ...unitOptions(measure()));
-    unitSelect.value = shownUnit;
+    amountField.show(measure(), (m) => ({ text: quantity.value, unit: m.basis }));
   };
 
   function submit() {
+    // Enter leaves the focus in the field, so the typed unit has not moved yet.
+    amountField.settle();
     if (save.disabled) return;
     onSave(currentEdit());
   }
 
-  quantity.addEventListener("input", refresh);
   mealSelect.addEventListener("input", refresh);
-  // The same amount in the new unit, so that the nutrients do not jump: 375 ml becomes 1 × can.
-  unitSelect.addEventListener("input", () => {
-    const q = Number(quantity.value);
-    try {
-      if (q > 0) {
-        // Back in the logged unit, the logged number, or the rounding on the way would count as an edit: 40 g, 1.41 oz, 39.97 g.
-        const backToLogged = logged && unitSelect.value === logged.unit && isLoggedAmount(logged, measure(), q, shownUnit);
-        quantity.value = String(backToLogged ? logged.amount : convertQuantity(measure(), q, shownUnit, unitSelect.value));
-      }
-    } catch {
-      // The food cannot convert to this unit: the row says why.
-    }
-    shownUnit = unitSelect.value;
-    refresh();
-  });
 
   for (const control of [mealSelect, amountCell, actions]) {
     control.addEventListener("keydown", (ev) => {
@@ -181,7 +182,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   }
 
   if (logged) {
-    quantity.value = String(logged.amount);
+    amountField.set(String(logged.amount), logged.unit);
     showUnits();
   } else {
     log.warn("This entry states no amount in g or ml; it can change only if its food is found", { serving: nutritionLog.serving, name: entry.displayName, ref: entry.ref });

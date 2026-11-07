@@ -1,3 +1,4 @@
+import { defaultAmount } from "../core/amount-text";
 import { nutrientsForAmount, type FoodItem } from "../core/food";
 import { kjToKcal } from "../core/nutrients";
 import { toDateTimeLocalValue } from "../core/time";
@@ -6,9 +7,10 @@ import { MEAL_TYPES, type LogDraft } from "../health/mapping";
 import type { MealType } from "../health/types";
 import type { FoodCatalog } from "../food/catalog";
 import { describeError, logger } from "../debug/log";
-import { el, errorMessage, replaceChildren } from "./dom";
+import { createAmountField } from "./amount-field";
+import { el, errorMessage } from "./dom";
 import { createFoodCombobox } from "./food-combobox";
-import { field, unitOptions } from "./form-fields";
+import { field } from "./form-fields";
 import { summary } from "./format";
 
 const log = logger("log-form");
@@ -53,8 +55,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     el("div", { class: "row" }, field("Protein (g)", cProtein), field("Carbs (g)", cCarbs), field("Fat (g)", cFat)),
   );
 
-  const quantity = el("input", { id: "qty", type: "number", min: "0.01", step: "any", value: "1", required: true, inputmode: "decimal" });
-  const unitSelect = el("select", { id: "unit", required: true });
+  const amount = createAmountField({ id: "qty", unitId: "unit", placeholder: "e.g. 90 g", onChange: () => refreshPreview() });
   const now = new Date();
   const mealSelect = el(
     "select",
@@ -92,30 +93,14 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
 
   const refreshUnits = () => {
     const food = currentFood();
-    if (!food) {
-      replaceChildren(unitSelect);
-      return;
-    }
-    const previous = unitSelect.value;
-    const options = unitOptions(food);
-    replaceChildren(unitSelect, ...options);
-    if (options.some((o) => o.value === previous)) {
-      unitSelect.value = previous;
-    } else if (food.portions.length > 0) {
-      // A portion is the natural default ("1 × can")...
-      unitSelect.selectedIndex = 0;
-      quantity.value = "1";
-    } else {
-      // ...otherwise 100 of the base unit.
-      unitSelect.value = food.basis;
-      quantity.value = "100";
-    }
+    if (food) amount.show(food, defaultAmount);
+    else amount.hideUnits();
   };
 
   /** Why the entry cannot be logged as entered, if anything. */
   const validationError = (): string | undefined => {
-    const q = Number(quantity.value);
-    if (!quantity.value.trim() || !Number.isFinite(q) || q <= 0) return "Enter an amount greater than 0.";
+    const read = amount.read();
+    if (read.state === "problem") return read.message;
     if (custom) {
       const values = [cEnergy, cProtein, cCarbs, cFat].map((i) => Number(i.value));
       if (values.some((v) => !Number.isFinite(v) || v < 0)) return "Custom food values must be numbers of 0 or more.";
@@ -129,7 +114,8 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       if (!food) throw new Error(loading ? `Loading ${loading}…` : "Search for a food, or choose “Custom food”.");
       const invalid = validationError();
       if (invalid) throw new Error(invalid);
-      preview.textContent = `≈ ${summary(nutrientsForAmount(food, Number(quantity.value), unitSelect.value))}`;
+      const read = amount.read();
+      preview.textContent = read.state === "ok" ? `≈ ${summary(nutrientsForAmount(food, read.quantity, read.unit))}` : "…";
       preview.classList.remove("error");
     } catch (e) {
       preview.textContent = errorMessage(e);
@@ -167,8 +153,9 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       chosen = undefined;
       custom = false;
       loading = hit.summary.name;
+      amount.clear();
       refreshAll();
-      quantity.focus();
+      amount.input.focus();
       catalog.get(hit.summary.ref).then(
         (food) => {
           if (mine !== choice) return; // the user moved on
@@ -194,6 +181,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       loading = undefined;
       custom = true;
       if (query && !cName.value.trim()) cName.value = query;
+      amount.clear();
       refreshAll();
       cName.focus();
     },
@@ -210,15 +198,15 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     refreshUnits();
     refreshPreview();
   });
-  for (const i of [quantity, unitSelect]) i.addEventListener("input", refreshPreview);
 
   const form = el(
     "form",
-    { class: "card log-form", novalidate: false },
+    // Every field is checked below: the browser's own check would stop Enter before the form can say why.
+    { class: "card log-form", novalidate: true },
     el("h2", {}, "Log food"),
     el("div", { class: "field" }, el("span", {}, el("label", { for: "food" }, "Food")), combobox.element),
     customFields,
-    el("div", { class: "row" }, field("Amount", quantity), field("Unit", unitSelect)),
+    el("div", { class: "row" }, field("Amount", amount.input), field("Unit", amount.unitSelect)),
     el("div", { class: "row" }, field("Meal", mealSelect), field("Time", time)),
     preview,
     el("div", { class: "actions" }, submit),
@@ -228,12 +216,16 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
 
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
+    // Enter leaves the focus in the field, so the typed unit has not moved yet.
+    amount.settle();
     const food = currentFood();
     const when = timeTouched ? new Date(time.value) : new Date();
     const invalid = validationError() ?? (Number.isNaN(when.getTime()) ? "Enter a valid time." : undefined);
-    if (!food || invalid) {
+    const read = amount.read();
+    if (!food || invalid || read.state !== "ok") {
       status.textContent = invalid ?? (loading ? `Still loading ${loading}…` : "Search for a food first.");
       status.classList.add("error");
+      if (read.state === "problem" && read.inUnit) amount.unitSelect.focus();
       return;
     }
     saving = true;
@@ -241,8 +233,9 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     status.textContent = "Saving to Google Health…";
     status.classList.remove("error");
     try {
-      await onSubmit({ food, quantity: Number(quantity.value), unit: unitSelect.value, ...(mealSelect.value ? { mealType: mealSelect.value as MealType } : {}), time: when });
+      await onSubmit({ food, quantity: read.quantity, unit: read.unit, ...(mealSelect.value ? { mealType: mealSelect.value as MealType } : {}), time: when });
       status.textContent = `Logged ${food.name}.`;
+      amount.forgetTyping();
       timeTouched = false;
       time.value = toDateTimeLocalValue(new Date());
       mealSelect.value = "";

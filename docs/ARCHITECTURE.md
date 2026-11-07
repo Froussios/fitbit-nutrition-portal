@@ -75,6 +75,8 @@ A `FoodItem` stores nutrients **per 100 g or per 100 ml** (its `basis`), plus na
   metric: tsp 5 ml, tbsp 20 ml, cup 250 ml.
 * Mass ↔ volume conversion happens **only** with an explicit density. Otherwise the UI offers no unit of
   the other kind. We never assume 1 ml = 1 g.
+* Amounts are typed as free text (`90 g`, `1 1/2 cups`, `2 × can`) and read by fixed rules in `core/amount-text.ts`. A bare
+  number uses the unit already showing, and a unit is never decided after it was typed (DR-25).
 * `fromOffProduct()` turns an Open Food Facts product record into a `FoodItem`. It handles `_100g` values
   that really mean per 100 ml (legacy liquids), per-serving-only data (typical for restaurant items) and
   kJ-only energy. The fake catalogue is written as Open Food Facts records and runs through this
