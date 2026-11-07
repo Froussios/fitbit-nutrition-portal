@@ -2,6 +2,7 @@ import { sumProfiles } from "../core/nutrients";
 import { byTime, mealLabel, type DiaryEntry } from "../health/mapping";
 import { el } from "./dom";
 import { energyLabel, fmtEnergy, fmtGrams, fmtTime } from "./format";
+import type { RowEditor } from "./row-editor";
 
 export interface DiaryTableOptions {
   readonly entries: readonly DiaryEntry[];
@@ -13,6 +14,8 @@ export interface DiaryTableOptions {
   readonly busy: ReadonlyMap<string, string>;
   /** These actions need a connection, so the buttons are disabled while the browser is offline. */
   readonly offline: boolean;
+  /** The row being edited, whose cells hold the editor's own controls. Only one at a time. */
+  readonly editing?: RowEditor;
   readonly onEdit: (entry: DiaryEntry) => void;
   readonly onDelete: (entry: DiaryEntry) => void;
   readonly onUndo: (entry: DiaryEntry) => void;
@@ -64,7 +67,7 @@ function rowTag(id: string, deleted: ReadonlySet<string>, busy: ReadonlyMap<stri
   return text ? el("span", { class: "tag" }, text) : undefined;
 }
 
-export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, onEdit, onDelete, onUndo }: DiaryTableOptions): HTMLElement {
+export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo }: DiaryTableOptions): HTMLElement {
   if (entries.length === 0 && deleted.length === 0) {
     return el("p", { class: "empty" }, "Nothing logged today yet.");
   }
@@ -83,26 +86,29 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
       el(
         "tbody",
         {},
-        ...[...entries, ...deleted].sort(byTime).map((e) =>
-          el(
+        ...[...entries, ...deleted].sort(byTime).map((e) => {
+          const editor = editing?.id === e.id ? editing : undefined;
+          return el(
             "tr",
-            { class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busy.has(e.id)) && "pending"].filter(Boolean).join(" ") || undefined },
+            { class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busy.has(e.id)) && "pending", editor && "editing"].filter(Boolean).join(" ") || undefined },
             el("td", {}, fmtTime(e.start)),
-            el("td", {}, mealLabel(e.mealType)),
+            el("td", {}, editor ? editor.meal : mealLabel(e.mealType)),
             el("td", {}, e.displayName, rowTag(e.id, deletedIds, busy, pendingIds)),
-            el("td", { class: "num" }, e.amount ?? "–"),
-            el("td", { class: "num" }, fmtEnergy(e.profile.energyKcal)),
-            el("td", { class: "num" }, fmtGrams(e.profile.nutrients.protein)),
-            el("td", { class: "num" }, fmtGrams(e.profile.nutrients.carbohydrates)),
-            el("td", { class: "num" }, fmtGrams(e.profile.nutrients.fat)),
+            el("td", { class: "num" }, editor ? editor.amount : (e.amount ?? "–")),
+            el("td", { class: "num" }, editor ? editor.energy : fmtEnergy(e.profile.energyKcal)),
+            el("td", { class: "num" }, editor ? editor.protein : fmtGrams(e.profile.nutrients.protein)),
+            el("td", { class: "num" }, editor ? editor.carbs : fmtGrams(e.profile.nutrients.carbohydrates)),
+            el("td", { class: "num" }, editor ? editor.fat : fmtGrams(e.profile.nutrients.fat)),
             el(
               "td",
               {},
               el(
                 "div",
                 { class: "row-actions" },
-                // The write scope only covers entries this app created.
-                !e.own
+                editor
+                  ? editor.actions
+                  : // The write scope only covers entries this app created.
+                    !e.own
                   ? notOwnedMark(e)
                   : deletedIds.has(e.id)
                     ? el(
@@ -114,7 +120,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
                     : [
                         el(
                           "button",
-                          { type: "button", class: "icon edit", "data-entry-edit": e.id, title: offline ? "Editing needs a connection" : "Edit entry", "aria-label": `Edit ${e.displayName}`, disabled: offline || busy.has(e.id), onclick: () => onEdit(e) },
+                          { type: "button", class: "icon edit", "data-entry-edit": e.id, title: offline ? "Editing needs a connection" : editing ? "Finish the edit you started first" : "Edit entry", "aria-label": `Edit ${e.displayName}`, disabled: offline || busy.has(e.id) || Boolean(editing), onclick: () => onEdit(e) },
                           pencilIcon(),
                         ),
                         el(
@@ -125,8 +131,8 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
                       ],
               ),
             ),
-          ),
-        ),
+          );
+        }),
       ),
       el(
         "tfoot",
