@@ -435,9 +435,19 @@ class App {
   private async saveEdit(entry: DiaryEntry, edit: EntryEdit): Promise<void> {
     const log = entry.point.nutritionLog;
     if (this.busy.has(entry.id) || !log) return;
+    let point: DataPoint;
+    try {
+      point = editedNutritionLogPoint(log, edit, { id: copiedEntryId(entry.id), servingUnits: this.servingUnits, unitNames: this.unitNames });
+    } catch (e) {
+      appLog.error("Could not build the edited entry", describeError(e));
+      this.showRowFailure(entry, actionRefused("edit", entry.displayName, errorMessage(e)));
+      return;
+    }
     this.startRowAction(entry, "saving…");
-    this.editor?.setSaving(true);
-    const point = editedNutritionLogPoint(log, edit, { id: copiedEntryId(entry.id), servingUnits: this.servingUnits, unitNames: this.unitNames });
+    // The row can leave the diary during the write, and another row can be opened: the answer is only for this one's editor.
+    const editor = this.editor;
+    editor?.setSaving(true);
+    const stillEditing = () => editor !== undefined && this.editor === editor;
     appLog.info(`Editing ${entry.name}`, { replacement: point.name, mealType: edit.mealType, quantity: edit.amount?.quantity, unit: edit.amount?.unit, fromFoodRecord: Boolean(edit.amount?.food) });
     // The replacement has no name for its unit until the API lists it, but the original did.
     if (log.serving?.foodMeasurementUnitDisplayName) this.unitNames.set(log.serving.foodMeasurementUnit, log.serving.foodMeasurementUnitDisplayName);
@@ -449,9 +459,9 @@ class App {
       this.handleError(e, false);
       this.busy.delete(entry.id);
       this.showRowFailure(entry, isConnectionFailure(e) ? editNotConfirmed(entry.displayName) : actionRefused("edit", entry.displayName, refusalReason(e)));
-      this.editor?.setSaving(false);
+      if (stillEditing()) editor?.setSaving(false);
       this.renderDiary();
-      this.editor?.focusSave();
+      if (stillEditing()) editor?.focusSave();
       return;
     }
     const { key, created } = written;
@@ -460,8 +470,12 @@ class App {
     this.catalog.merge(toLoggedFoods([created], this.clientId));
     const replacement = toDiaryEntry(created, this.diaryContext());
     this.entries = [...this.entries.filter((e) => e.id !== entry.id), ...(replacement ? [replacement] : [])].sort(byTime);
-    this.stopEditing();
-    this.renderDiary(undefined, key);
+    if (stillEditing()) {
+      this.stopEditing();
+      this.renderDiary(undefined, key);
+    } else {
+      this.renderDiary();
+    }
     void this.removeReplaced(entry);
   }
 
