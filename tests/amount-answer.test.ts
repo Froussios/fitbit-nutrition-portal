@@ -92,6 +92,8 @@ describe("checkAnswer refuses a guess", () => {
     ["a similar short word", "1 mug", answer(1, "1", "1 cup", "mug")],
     ["words for one unit, labelled as another", "1 slcie", answer(1, "1", "1 cup", "slcie")],
     ["a unit not on the list", "1 cpu", answer(1, "1", "bucket", "cpu")],
+    ["a metric prefix read as a typing mistake", "500 kgram", answer(500, "500", "g", "kgram")],
+    ["a plural metric prefix", "500 mgrams", answer(500, "500", "g", "mgrams")],
     ["a number that is not typed", "some cpus", answer(3, "3", "1 cup", "cpus")],
     ["a number that does not match its words", "2 cpus", answer(3, "2", "1 cup", "cpus")],
     ["a vague word as a number", "a couple of cpus", answer(2, "a couple", "1 cup", "cpus")],
@@ -115,6 +117,26 @@ describe("checkAnswer refuses a guess", () => {
     for (const reply of [null, "2 cups", 2, {}, [], { quantity: "2", quantityText: "2", unit: "", unitText: "" }, { quantity: Number.NaN, quantityText: "2", unit: "", unitText: "" }]) {
       expect(checkAnswer("2 cpus", reply, flour)).toMatchObject({ ok: false });
     }
+  });
+
+  it("refuses a metric prefix on a volume, either way", () => {
+    expect(checkAnswer("250 mlitre", answer(250, "250", "l", "mlitre"), liquid)).toMatchObject({ ok: false });
+    expect(checkAnswer("250 mliter", answer(250, "250", "l", "mliter"), liquid)).toMatchObject({ ok: false });
+    expect(checkAnswer("250 mlitre", answer(250, "250", "ml", "mlitre"), liquid)).toMatchObject({ ok: false });
+  });
+
+  it("refuses words that look just as much like another unit", () => {
+    expect(checkAnswer("5 mgl", answer(5, "5", "ml", "mgl"), liquid)).toMatchObject({ ok: false });
+    expect(checkAnswer("5 mgl", answer(5, "5", "mg", "mgl"), liquid)).toMatchObject({ ok: false });
+    const carrot: Measurable = { basis: "g", portions: [{ name: "1 cup, diced", amount: 130, unit: "g" }, { name: "1 cup, sliced", amount: 120, unit: "g" }] };
+    expect(checkAnswer("1 cpu", answer(1, "1", "1 cup, diced", "cpu"), carrot)).toMatchObject({ ok: false });
+  });
+
+  it("still accepts a mistake that points at one unit", () => {
+    expect(checkAnswer("10 millilters", answer(10, "10", "ml", "millilters"), liquid)).toEqual({ ok: true, quantity: 10, unit: "ml" });
+    expect(checkAnswer("1 tablspoon", answer(1, "1", "tbsp", "tablspoon"), liquid)).toEqual({ ok: true, quantity: 1, unit: "tbsp" });
+    const carrot: Measurable = { basis: "g", portions: [{ name: "1 cup, diced", amount: 130, unit: "g" }, { name: "1 cup, sliced", amount: 120, unit: "g" }] };
+    expect(checkAnswer("1 cup dicde", answer(1, "1", "1 cup, diced", "cup dicde"), carrot)).toEqual({ ok: true, quantity: 1, unit: `${PORTION_PREFIX}1 cup, diced` });
   });
 
   it("refuses a unit this food cannot use, even if the words fit", () => {

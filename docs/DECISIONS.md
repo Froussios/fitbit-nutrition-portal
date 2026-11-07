@@ -274,7 +274,8 @@ is usually measured in cups. Owner decision (7 November 2026): the download star
 is the only one a static site can reach without a server.
 **How it cannot guess.** This is enforced in `core/amount-answer.ts`, not left to the prompt. A bare number never reaches the
 model. The food's name is never sent, only the typed text and the food's units. The model must quote the words it read: the
-quote must be in the text, and spelled close enough to the chosen unit to be a typing mistake, so `1 scoop` cannot become a cup.
+quote must be in the text, and spelled close enough to the chosen unit to be a typing mistake, starting with the same letter
+and no closer to another unit. So `1 scoop` cannot become a cup, `250 mlitre` cannot become litres, and `1 cpu` cannot pick one of two cups.
 Its number counts only if the rules read the quoted words as that number, and the rules' number is the one used. Every other
 typed word must be accounted for, so `1-2 cups` and `about 2 cups` are refused.
 **Consequence.** Since numbers have to be readable by the rules, phrases such as `two and a half` moved into the rules, which

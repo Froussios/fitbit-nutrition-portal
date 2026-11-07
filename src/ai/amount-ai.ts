@@ -47,8 +47,8 @@ export interface Interpretation {
 
 export interface AmountInterpreter {
   isOn(): boolean;
-  /** Resolves undefined when there is no usable answer: refused, timed out or cancelled. Never rejects. */
-  interpret(text: string, food: Measurable, signal: AbortSignal): Promise<Interpretation | undefined>;
+  /** "refused" when the answer failed the checks, so that asking again is pointless. "no-answer" when the model failed, timed out or was cancelled. Never rejects. */
+  interpret(text: string, food: Measurable, signal: AbortSignal): Promise<Interpretation | "refused" | "no-answer">;
 }
 
 export interface AmountAi extends AmountInterpreter {
@@ -67,6 +67,15 @@ function readStored(storage: Pick<Storage, "getItem"> | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+/** Waits for `promise`, but no longer than `signal` allows. Readings share the model's start, so it cannot take any one reading's signal. */
+function until<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) reject(signal.reason);
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    promise.then(resolve, reject);
+  });
 }
 
 export function createAmountAi(api: LanguageModelApi | undefined, storage: Pick<Storage, "getItem" | "setItem"> | undefined): AmountAi {
@@ -163,20 +172,21 @@ export function createAmountAi(api: LanguageModelApi | undefined, storage: Pick<
     },
     isOn: () => state.kind === "ready",
     async interpret(text, food, signal) {
-      if (state.kind !== "ready" || signal.aborted) return undefined;
+      if (state.kind !== "ready" || signal.aborted) return "no-answer";
       const prompt = amountPrompt(text, food);
       const limited = AbortSignal.any([signal, AbortSignal.timeout(ANSWER_TIMEOUT_MS)]);
       let reading: ModelSession | undefined;
       try {
         // A session remembers what it was asked, and one amount must have no bearing on the next.
-        reading = await (await (session ?? openSession())).clone({ signal: limited });
+        const base = await until(session ?? openSession(), limited);
+        reading = await base.clone({ signal: limited });
         const reply = await reading.prompt(prompt, { responseConstraint: amountSchema(food), signal: limited });
         const check = checkAnswer(text, JSON.parse(reply), food);
         log.info("On-device model answered", { text, reply, check });
-        return check.ok ? { quantity: check.quantity, ...(check.unit ? { unit: check.unit } : {}) } : undefined;
+        return check.ok ? { quantity: check.quantity, ...(check.unit ? { unit: check.unit } : {}) } : "refused";
       } catch (error) {
         if (!signal.aborted) log.warn("The on-device model gave no usable answer", { text, error: describeError(error) });
-        return undefined;
+        return "no-answer";
       } finally {
         reading?.destroy();
       }

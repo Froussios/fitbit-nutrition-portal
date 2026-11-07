@@ -13,7 +13,7 @@ function fakeAi(start: AiState) {
     turnOff: vi.fn(),
     onChange: (l) => void listeners.push(l),
     isOn: () => state.kind === "ready",
-    interpret: async () => undefined,
+    interpret: async () => "no-answer",
   };
   return { ai, set: (next: AiState) => ((state = next), listeners.forEach((l) => l())) };
 }

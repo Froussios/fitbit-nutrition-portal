@@ -48,7 +48,7 @@ describe("the setting", () => {
     const ai = createAmountAi(api, fakeStorage());
     await ai.start();
     expect(ai.getState().kind).toBe("off");
-    expect(await ai.interpret("2 cpus", food, signal())).toBeUndefined();
+    expect(await ai.interpret("2 cpus", food, signal())).toBe("no-answer");
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -107,7 +107,7 @@ describe("the setting", () => {
     await settled();
     expect(ai.getState().kind).toBe("off");
     expect(baseDestroy).toHaveBeenCalled();
-    expect(await ai.interpret("2 cpus", food, signal())).toBeUndefined();
+    expect(await ai.interpret("2 cpus", food, signal())).toBe("no-answer");
     expect(storage.items.get("foodDiary.aiInput")).toBe("off");
   });
 
@@ -155,19 +155,19 @@ describe("reading an amount", () => {
 
   it("drops an answer that fails the checks", async () => {
     const ai = await on(fakeApi("available", '{"quantity":1,"quantityText":"1","unit":"1 cup","unitText":"scoop"}').api);
-    expect(await ai.interpret("1 scoop", food, signal())).toBeUndefined();
+    expect(await ai.interpret("1 scoop", food, signal())).toBe("refused");
   });
 
   it("drops a reply that is not JSON", async () => {
     const ai = await on(fakeApi("available", "I think 2 cups").api);
-    expect(await ai.interpret("2 cpus", food, signal())).toBeUndefined();
+    expect(await ai.interpret("2 cpus", food, signal())).toBe("no-answer");
   });
 
   it("does not reject when the model fails, and tries again next time", async () => {
     const { api, create } = fakeApi();
     create.mockRejectedValueOnce(new Error("gone"));
     const ai = await on(api);
-    expect(await ai.interpret("2 cpus", food, signal())).toBeUndefined();
+    expect(await ai.interpret("2 cpus", food, signal())).toBe("no-answer");
     expect(await ai.interpret("2 cpus", food, signal())).toEqual({ quantity: 2, unit: "portion:1 cup" });
   });
 
@@ -180,6 +180,23 @@ describe("reading an amount", () => {
     await settled();
     controller.abort();
     expect(prompt.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  });
+
+  it("gives up on a model that never finishes starting", async () => {
+    const limit = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(limit.signal);
+    try {
+      const { api, create, clone } = fakeApi();
+      create.mockImplementationOnce(() => new Promise(() => {}) as never);
+      const ai = await on(api);
+      const reading = ai.interpret("2 cpus", food, signal());
+      await settled();
+      limit.abort();
+      expect(await reading).toBe("no-answer");
+      expect(clone).not.toHaveBeenCalled();
+    } finally {
+      timeout.mockRestore();
+    }
   });
 
   it("gives up on its own when the model takes too long", async () => {

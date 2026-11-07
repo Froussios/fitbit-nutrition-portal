@@ -98,8 +98,9 @@ export function createAmountField(options: AmountFieldOptions): AmountField {
       if (mine !== asking) return; // The user has moved on.
       asking = undefined;
       showNote("");
-      if (answer) {
-        asked = "";
+      // A model that was slow to wake up may do better next time. One that was refused would only be refused again.
+      if (answer !== "refused") asked = "";
+      if (answer !== "refused" && answer !== "no-answer") {
         input.value = String(answer.quantity);
         if (answer.unit) showUnit(answer.unit);
         showNote("Read by on-device AI. Check the amount and unit.");

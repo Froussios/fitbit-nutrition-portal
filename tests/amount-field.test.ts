@@ -251,14 +251,14 @@ describe("clear", () => {
 describe("an on-device model", () => {
   /** Answers only when the test says so. */
   function fakeModel(on = true) {
-    const resolvers: ((answer: Interpretation | undefined) => void)[] = [];
+    const resolvers: ((answer: Interpretation | "refused" | "no-answer") => void)[] = [];
     const signals: AbortSignal[] = [];
     const interpret = vi.fn((_text: string, _food: Measurable, signal: AbortSignal) => {
       signals.push(signal);
-      return new Promise<Interpretation | undefined>((resolve) => resolvers.push(resolve));
+      return new Promise<Interpretation | "refused" | "no-answer">((resolve) => resolvers.push(resolve));
     });
     const interpreter: AmountInterpreter = { isOn: () => on, interpret };
-    const answer = async (value: Interpretation | undefined) => {
+    const answer = async (value: Interpretation | "refused" | "no-answer") => {
       resolvers.shift()!(value);
       await Promise.resolve();
     };
@@ -339,7 +339,7 @@ describe("an on-device model", () => {
     field.show(flour, defaultAmount);
     type(field, "1 scoop");
     field.settle();
-    await model.answer(undefined);
+    await model.answer("refused");
     expect(field.input.value).toBe("1 scoop");
     expect(field.read().state).toBe("problem");
     expect(field.note.hidden).toBe(true);
@@ -352,9 +352,24 @@ describe("an on-device model", () => {
     type(field, "1 scoop");
     field.settle();
     field.settle();
-    await model.answer(undefined);
+    await model.answer("refused");
     field.settle();
     expect(model.interpret).toHaveBeenCalledTimes(1);
+  });
+
+  it("is asked again after failing to answer, as a model waking up can", async () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "10 grms");
+    field.settle();
+    await model.answer("no-answer");
+    expect(field.input.value).toBe("10 grms");
+    expect(field.read().state).toBe("problem");
+    field.settle();
+    expect(model.interpret).toHaveBeenCalledTimes(2);
+    await model.answer({ quantity: 10, unit: "g" });
+    expect(shown(field)).toEqual(["10", "g"]);
   });
 
   it("is dropped when the user types again", async () => {

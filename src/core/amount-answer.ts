@@ -88,9 +88,14 @@ function editDistance(a: string, b: string): number {
   return rows[a.length]![b.length]!;
 }
 
-/** Close enough to be a typing mistake: "grms" for "grams", but not "scoop" for "cup" or "mug" for "cup". */
-function spelledLike(typed: string, name: string): boolean {
-  return editDistance(typed, name) <= Math.floor(Math.max(typed.length, name.length) / 3);
+/**
+ * How many edits away a typing mistake is, or Infinity when it is too far to be one: "grms" for "grams", but not "scoop"
+ * or "mug" for "cup". The first letter must match, because prefixes change the size: "mlitre" is not "litre", nor "kgram" "gram".
+ */
+function typoDistance(typed: string, name: string): number {
+  if (typed[0] !== name[0]) return Number.POSITIVE_INFINITY;
+  const distance = editDistance(typed, name);
+  return distance <= Math.floor(Math.max(typed.length, name.length) / 3) ? distance : Number.POSITIVE_INFINITY;
 }
 
 /** Every way the chosen unit can be written. */
@@ -146,7 +151,13 @@ export function checkAnswer(text: string, answer: unknown, food: Measurable): An
   if (Boolean(chosen) !== Boolean(unitWords)) return refuse("a unit without its words, or words without a unit");
   const left = unitWords ? without(rest, unitWords) : rest;
   if (left === undefined) return refuse("the unit's words are not in the text");
-  if (chosen && !namesOf(chosen.value).some((name) => spelledLike(unitWords, name) || spelledLike(comparable(unitWords), name))) return refuse("the words do not look like that unit");
+  if (chosen) {
+    const distanceTo = (value: string) => Math.min(...namesOf(value).flatMap((name) => [typoDistance(unitWords, name), typoDistance(comparable(unitWords), name)]));
+    const distance = distanceTo(chosen.value);
+    if (distance === Number.POSITIVE_INFINITY) return refuse("the words do not look like that unit");
+    // "mgl" could be mg or ml, and "cpu" either of two cups: choosing between them is not the model's to do.
+    if (allowedUnits(food).some((u) => u.value !== chosen.value && distanceTo(u.value) <= distance)) return refuse("the words look just as much like another unit");
+  }
 
   // Everything else
   const unexplained = left.split(/[^\p{L}\p{N}]+/u).filter((word) => word && !FILLER_WORDS.has(word));
