@@ -165,7 +165,7 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 4px; }
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 th, td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
-tbody tbody td:nth-child(3) { white-space: normal; min-width: 12em; }
+tbody td:nth-child(3) { white-space: normal; min-width: 12em; }
 thead th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
 tbody tr:nth-child(even) { background: var(--row-alt); }
 tfoot th, tfoot td { font-weight: 600; border-bottom: none; }

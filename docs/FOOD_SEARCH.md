@@ -18,7 +18,7 @@ Set by the owner on 2 November 2026.
 | R2 | Options appear below the field, like a dropdown. | An editable combobox with a listbox popup (section 3). |
 | R3 | Matching and ordering; show the top 10 best matches. Revised: no typo tolerance; every query word must be in the result, in any order; a result ranks higher the more of it the query covers ("chocolate" beats "dark chocolate"). Revised 5 November 2026 (DR-15): unless given evidence otherwise, assume the generic product. | Exact words, last word as a prefix while typing; ranked by where the words matched, generic before branded, then coverage, then popularity (section 4). |
 | R4 | One food source for now: Open Food Facts. Revised 5 November 2026 (DR-16): generic foods come from authoritative sources, and every row shows its source. | Open Food Facts holds products only. A small file of AFCD and USDA FNDDS foods is searched in the browser and shown first (section 13). |
-| R5 | Rich visuals in the dropdown: a summary per food, starting with calories per unit. | Two-line rows with kcal per 100 g / 100 ml and per serving, built from a summary view model that can grow (section 3.3). |
+| R5 | Rich visuals in the dropdown: a summary per food, starting with calories per unit. | Two-line rows with energy (kcal or kJ, per DR-21) per 100 g / 100 ml and per serving, built from a summary view model that can grow (section 3.3). |
 | R6 | Arrow keys move through the options; the selected row is filled into the input. | Keyboard model in section 3.2; the typed query is kept so Escape and ArrowUp can restore it. |
 | R7 | Open Food Facts is large and its APIs throttle; host our own copy of the **whole world** dataset (Australian tagging is incomplete), at no monthly cost, without the browser downloading it. The dataset may be slimmed (drop fields and dead rows). | A slimmed, pre-sorted word index built weekly by a GitHub Action and stored as static files on Cloudflare Pages. The browser fetches only the files each search needs, often hundreds of KB while typing (sections 5 and 9.1). |
 | R8 | Set 6 November 2026: products logged recently are likely to be logged again. A major boost for the last 20 products and for the last 2 weeks: they appear in the suggestions. A minor boost for a food logged at any time: favoured only if a good match. The history must not be searched exhaustively. | One request for the newest entries, in the background; matching foods go first (section 14). |
@@ -35,7 +35,6 @@ index builder; publishing the index; a `FoodCatalog` that queries it.
 * AUSNUT 2023 and more USDA data: [#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38), and section 13.
 * Typo tolerance. Dropped from R3; section 4.4 lists cheap additions if misses show it is needed.
 * Product images, Nutri-Score, macro bars. The row layout leaves room for them (section 3.3).
-* kJ display preference ([#21](https://github.com/Froussios/fitbit-nutrition-portal/issues/21)). Rows show kcal for now.
 
 ## 3. User experience
 
@@ -101,11 +100,11 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 (values illustrative)
 ```
 
-* **Line 1:** product name, with the matched parts in bold. Right: kcal per 100 g or per 100 ml (the
+* **Line 1:** product name, with the matched parts in bold. Right: energy in the chosen unit (DR-21) per 100 g or per 100 ml (the
   food's `basis`), always shown, so rows compare like for like.
 * **Line 2:** brand · pack size (Open Food Facts `quantity`), or **Generic** for a food from an authoritative
   source, or **No brand listed** for an Open Food Facts product with no brand. Then a tag naming the row's source,
-  so a bad value can be traced to its database: `Open Food Facts`, `AFCD` or `FNDDS`. Right: kcal per serving when the
+  so a bad value can be traced to its database: `Open Food Facts`, `AFCD` or `FNDDS`. Right: energy per serving when the
   product has a serving size, e.g. `107 kcal / 30 g serving`.
 * A row is built from a `FoodSummary` view model computed from the `FoodItem` by a pure function in
   `src/core/`. The index builder runs the same function, so search results arrive as summaries and the full
