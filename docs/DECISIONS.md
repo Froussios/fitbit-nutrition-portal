@@ -13,7 +13,7 @@ labelled `decision`; when one closes, its outcome is added here. Supporting fact
 ## Decided
 
 ### DR-01 No custom backend
-Revised by DR-21, which adds a database for meal prep.
+Revised by DR-21: meal prep may keep user data in a database, so its API is not stateless. Everything else stays as below.
 **Decision.** The app is a static site. Everything runs in the browser. A server-side component is allowed
 only as a recorded exception here, and must be stateless (no user data at rest).
 **Why.** Owner requirement: keep all data in existing services, with no database of our own.

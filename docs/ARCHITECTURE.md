@@ -134,13 +134,16 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
 
 * **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
   index can change. Editing them affects later portions only: diary entries cannot be edited.
-* **Identity.** The browser sends its Google access token. The API checks with `tokeninfo` that it was issued to this
-  app, and takes `healthUserId` from `users/me/identity`. No new scopes are needed. It caches the result under a hash of the
-  token until the token expires, and never stores or logs the token. The user ID never comes from the request.
+* **Identity.** The browser sends its Google access token. The API checks with `tokeninfo` that its `aud` is this app's
+  client ID, so that a token issued to another app is refused, and takes `healthUserId` from `users/me/identity`. No new
+  scopes are needed. It caches the result under a hash of the token until the token expires, so a token revoked earlier still
+  works until then. It never stores or logs the token. The user ID never comes from the request.
 * **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
   so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
-  rejects the entry, the portion is removed. If the answer is lost, the portion counts as eaten and stays unconfirmed until
-  a listing finds the entry; the user can also give it back.
+  rejects the entry, the portion is removed. If the answer is lost or the browser closes first, the portion counts as eaten
+  and stays unconfirmed. Each diary refresh looks for unconfirmed portions in the listing for the day they were eaten, and
+  confirms any it finds. An unconfirmed portion is never released automatically, because its entry may exist; the prep shows
+  it, and the user can give it back.
 * **Removing a portion.** Deleting one in the diary gives it back, and Undo is refused if it would pass 100%. The diary shows
   only today, so the prep also lists its portions, each with a remove button. Deletes made in the Google Health app
   are not detected; removing the portion from the prep corrects the amount left.
