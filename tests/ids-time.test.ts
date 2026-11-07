@@ -1,9 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { ID_PATTERN, idFromName, newEntryId, parseEntryId } from "../src/core/ids";
+import { copiedEntryId, ID_PATTERN, idFromName, newEntryId, parseEntryId } from "../src/core/ids";
 import { nextCivilDate, nutritionDayFilter, parseDurationSeconds, utcOffsetDuration } from "../src/core/time";
 
 describe("entry ids", () => {
   const now = Date.UTC(2026, 10, 1, 8, 30);
+
+  it("gives a copy a new ID that records the same food", () => {
+    const original = newEntryId({ source: "off", id: "9300633000001" }, now, "ab12");
+    const copy = copiedEntryId(original, now + 60_000, "cd34");
+    expect(copy).toMatch(ID_PATTERN);
+    expect(copy).not.toBe(original);
+    expect(parseEntryId(copy)).toEqual({ kind: "entry", loggedAt: new Date(now + 60_000), ref: { source: "off", id: "9300633000001" } });
+  });
+
+  it("keeps the source of an ID with no food, and a food ID with hyphens", () => {
+    expect(copiedEntryId("e-abc-ab12-man", now, "cd34")).toBe(`e-${now.toString(36)}-cd34-man`);
+    expect(parseEntryId(copiedEntryId("e-abc-ab12-afcd-f002-1", now, "cd34"))?.ref).toEqual({ source: "afcd", id: "f002-1" });
+  });
+
+  it("gives a copy of an ID the API chose no food reference", () => {
+    const copy = copiedEntryId("1234567890123", now, "cd34");
+    expect(copy).toMatch(ID_PATTERN);
+    expect(parseEntryId(copy)?.ref).toBeUndefined();
+  });
 
   it("round-trips the food reference", () => {
     const id = newEntryId({ source: "off", id: "9300633000001" }, now, "ab12");

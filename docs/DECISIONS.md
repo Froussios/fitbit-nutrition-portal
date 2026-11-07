@@ -179,3 +179,14 @@ and the history must not be searched exhaustively, because that can be expensive
 logged in other apps and custom foods can't be boosted, because the catalogue can't load them again.
 **Reopen if.** One page proves too short or too slow in daily use, or the boosts crowd out foods the user wants.
 
+
+### DR-20 Deleting asks nothing, and can be undone until the page is reloaded
+**Decision.** The delete button acts at once. The entry stays in the diary, crossed out and tagged, and no longer counts
+towards the totals. Its button becomes Undo, which logs an equivalent entry: same food, time, meal and nutrients, under a
+new ID. Deleted rows are kept in memory only, until the page is reloaded, the user signs out or the day changes.
+**Why.** Owner decision ([#53](https://github.com/Froussios/fitbit-nutrition-portal/issues/53), 7 November 2026): feedback and a way back cost less attention than a question every time.
+A new ID because whether a deleted ID can be reused is still open ([#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18)).
+**Consequence.** Undo cannot restore the original data point: the copy has a new ID, and the Google Health app sees a
+delete and a new entry. As with logging (DR-18), an undo whose answer is lost may still have been saved, so the error asks
+the user to check the diary first. A reload ends the chance to undo.
+**Reopen if.** Deleted entries need to survive a reload, or [#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18) shows that the original ID can be reused.

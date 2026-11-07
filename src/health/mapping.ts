@@ -80,6 +80,21 @@ function profileToLogFields(profile: NutrientProfile): Pick<NutritionLog, "total
   return out;
 }
 
+/**
+ * An equivalent entry to write back after a delete: the same food, time and nutrients,
+ * under a new ID (whether a deleted ID can be reused is still open, #18), without the
+ * read-only fields the API added when it listed the original.
+ */
+export function copyNutritionLogPoint(log: NutritionLog, id: string): DataPoint {
+  const { startTime, endTime, startUtcOffset, endUtcOffset } = log.interval;
+  const copy: NutritionLog = { ...log, interval: { startTime, endTime, startUtcOffset, endUtcOffset } };
+  if (log.serving) {
+    const { foodMeasurementUnit, amount } = log.serving;
+    copy.serving = { foodMeasurementUnit, ...(amount !== undefined ? { amount } : {}) };
+  }
+  return { name: `${NUTRITION_LOG_PARENT}/dataPoints/${id}`, nutritionLog: copy };
+}
+
 /** A diary row as the UI shows it, from any writer (this app, the Google Health app, other API clients). */
 export interface DiaryEntry {
   readonly name: string;
@@ -96,6 +111,8 @@ export interface DiaryEntry {
   readonly own: boolean;
   /** Who wrote it, for entries from other apps ("Google Health app", "com.example.app"...). */
   readonly sourceLabel?: string;
+  /** The data point it was read from, which undoing a delete writes again. */
+  readonly point: DataPoint;
 }
 
 const NUTRIENT_BY_GOOGLE = new Map<string, NutrientKey>(
@@ -177,6 +194,7 @@ export function toDiaryEntry(point: DataPoint, ctx: DiaryContext = {}): DiaryEnt
     own,
     ...(ref ? { ref } : {}),
     ...(label ? { sourceLabel: label } : {}),
+    point,
   };
   return entry;
 }
@@ -237,12 +255,22 @@ export function reconcilePending(
   return result;
 }
 
+/** The points whose entries the user has not deleted: the API may keep listing a deleted one for a while. */
+export function withoutEntries(points: readonly DataPoint[], ids: ReadonlyMap<string, unknown>): DataPoint[] {
+  return points.filter((p) => !p.name || !ids.has(idFromName(p.name)));
+}
+
+/** Chronological order, for the diary's rows. */
+export function byTime(a: DiaryEntry, b: DiaryEntry): number {
+  return a.start.getTime() - b.start.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
 /** Entries in chronological order (the API returns newest first). */
 export function toDiaryEntries(points: readonly DataPoint[], ctx: DiaryContext = {}): DiaryEntry[] {
   return points
     .map((p) => toDiaryEntry(p, ctx))
     .filter((e): e is DiaryEntry => e !== undefined)
-    .sort((a, b) => a.start.getTime() - b.start.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    .sort(byTime);
 }
 
 /** The amount buildNutritionLogPoint puts in the name when the API's unit could not be resolved. */

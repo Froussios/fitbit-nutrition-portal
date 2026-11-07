@@ -1,6 +1,6 @@
 import { SOURCE_TAGS } from "../core/food";
 import { sumProfiles } from "../core/nutrients";
-import { mealLabel, type DiaryEntry } from "../health/mapping";
+import { byTime, mealLabel, type DiaryEntry } from "../health/mapping";
 import { el } from "./dom";
 import { fmtGrams, fmtKcal, fmtKj, fmtTime } from "./format";
 
@@ -8,9 +8,14 @@ export interface DiaryTableOptions {
   readonly entries: readonly DiaryEntry[];
   /** IDs written in this session that the API has not returned yet. */
   readonly pendingIds: ReadonlySet<string>;
-  /** Deleting needs a connection, so the buttons are disabled while the browser is offline. */
+  /** Entries deleted in this session: still shown, crossed out, with an Undo. They do not count towards the totals. */
+  readonly deleted: readonly DiaryEntry[];
+  /** IDs of the entries with a delete or undo under way. */
+  readonly busyIds: ReadonlySet<string>;
+  /** Deleting and undoing need a connection, so the buttons are disabled while the browser is offline. */
   readonly offline: boolean;
   readonly onDelete: (entry: DiaryEntry) => void;
+  readonly onUndo: (entry: DiaryEntry) => void;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -19,12 +24,13 @@ const SOURCE_LABELS: Record<string, string> = {
   manual: "custom food",
 };
 
-export function renderDiaryTable({ entries, pendingIds, offline, onDelete }: DiaryTableOptions): HTMLElement {
-  if (entries.length === 0) {
+export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offline, onDelete, onUndo }: DiaryTableOptions): HTMLElement {
+  if (entries.length === 0 && deleted.length === 0) {
     return el("p", { class: "empty" }, "Nothing logged today yet.");
   }
 
   const total = sumProfiles(entries.map((e) => e.profile));
+  const deletedIds = new Set(deleted.map((e) => e.id));
   const head = ["Time", "Meal", "Food", "Amount", "kcal", "kJ", "Protein", "Carbs", "Fat", "Logged by", ""];
 
   return el(
@@ -37,13 +43,13 @@ export function renderDiaryTable({ entries, pendingIds, offline, onDelete }: Dia
       el(
         "tbody",
         {},
-        ...entries.map((e) =>
+        ...[...entries, ...deleted].sort(byTime).map((e) =>
           el(
             "tr",
-            { class: pendingIds.has(e.id) ? "pending" : undefined },
+            { class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busyIds.has(e.id)) && "pending"].filter(Boolean).join(" ") || undefined },
             el("td", {}, fmtTime(e.start)),
             el("td", {}, mealLabel(e.mealType)),
-            el("td", {}, e.displayName, pendingIds.has(e.id) && el("span", { class: "tag" }, "syncing")),
+            el("td", {}, e.displayName, deletedIds.has(e.id) ? el("span", { class: "tag" }, "deleted") : pendingIds.has(e.id) && el("span", { class: "tag" }, "syncing")),
             el("td", { class: "num" }, e.amount ?? "–"),
             el("td", { class: "num" }, fmtKcal(e.profile.energyKcal)),
             el("td", { class: "num" }, fmtKj(e.profile.energyKcal)),
@@ -56,11 +62,17 @@ export function renderDiaryTable({ entries, pendingIds, offline, onDelete }: Dia
               {},
               // The write scope only covers entries this app created.
               e.own &&
-                el(
-                  "button",
-                  { type: "button", class: "icon", title: offline ? "Deleting needs a connection" : "Delete entry", "aria-label": `Delete ${e.displayName}`, disabled: offline, onclick: () => onDelete(e) },
-                  "✕",
-                ),
+                (deletedIds.has(e.id)
+                  ? el(
+                      "button",
+                      { type: "button", class: "link", "data-entry": e.id, title: offline ? "Undoing needs a connection" : "Log this entry again", "aria-label": `Undo deleting ${e.displayName}`, "aria-busy": String(busyIds.has(e.id)), disabled: offline, onclick: () => onUndo(e) },
+                      "Undo",
+                    )
+                  : el(
+                      "button",
+                      { type: "button", class: "icon", "data-entry": e.id, title: offline ? "Deleting needs a connection" : "Delete entry", "aria-label": `Delete ${e.displayName}`, "aria-busy": String(busyIds.has(e.id)), disabled: offline, onclick: () => onDelete(e) },
+                      "✕",
+                    )),
             ),
           ),
         ),

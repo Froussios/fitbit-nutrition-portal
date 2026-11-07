@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PORTION_PREFIX } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { buildNutritionLogPoint, findServingUnits, mealLabel, MEAL_TYPES, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf } from "../src/health/mapping";
+import { buildNutritionLogPoint, copyNutritionLogPoint, findServingUnits, mealLabel, MEAL_TYPES, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
 import type { DataPoint } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
@@ -93,6 +93,61 @@ describe("buildNutritionLogPoint", () => {
     expect(e.profile.nutrients.protein).toBe(12);
     expect(e.profile.nutrients.carbohydrates).toBe(58);
     expect(e.start).toEqual(time);
+  });
+});
+
+describe("copyNutritionLogPoint", () => {
+  const original = buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", mealType: "BREAKFAST", time }, { id: "e-test-0001-smp-oats", servingUnits: { g: "units/gram" } });
+
+  it("writes the same entry under the new ID", () => {
+    const copy = copyNutritionLogPoint(original.nutritionLog!, "e-test-0002-smp-oats");
+    expect(copy).toEqual({ ...original, name: "users/me/dataTypes/nutrition-log/dataPoints/e-test-0002-smp-oats" });
+  });
+
+  it("leaves out the read-only fields the API adds when it lists an entry", () => {
+    const log = original.nutritionLog!;
+    const listed: DataPoint = {
+      ...original,
+      dataSource: { platform: "GOOGLE_WEB_API", application: { googleWebClientId: "our-client" } },
+      nutritionLog: {
+        ...log,
+        interval: { ...log.interval, civilStartTime: { date: { year: 2026, month: 11, day: 1 } }, civilEndTime: { date: { year: 2026, month: 11, day: 1 } } },
+        serving: { ...log.serving!, foodMeasurementUnitDisplayName: "gram" },
+      },
+    };
+    const copy = copyNutritionLogPoint(listed.nutritionLog!, "e-test-0002-smp-oats");
+    expect(copy).toEqual({ ...original, name: "users/me/dataTypes/nutrition-log/dataPoints/e-test-0002-smp-oats" });
+  });
+
+  it("keeps the entry's place on the day, its meal and its nutrients", () => {
+    const entry = toDiaryEntry(original)!;
+    const copy = toDiaryEntry(copyNutritionLogPoint(original.nutritionLog!, "e-test-0002-smp-oats"))!;
+    expect(copy.start).toEqual(entry.start);
+    expect(copy.mealType).toBe("BREAKFAST");
+    expect(copy.profile).toEqual(entry.profile);
+    expect(copy.id).not.toBe(entry.id);
+  });
+
+  it("copies an entry with no serving or meal", () => {
+    const bare = buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", time }, { id: "e-test-0003-smp-oats" });
+    expect(copyNutritionLogPoint(bare.nutritionLog!, "e-test-0004-smp-oats").nutritionLog).toEqual(bare.nutritionLog);
+  });
+});
+
+describe("withoutEntries", () => {
+  const point = (id: string): DataPoint => buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", time }, { id });
+
+  it("hides deleted entries the API still lists", () => {
+    const listed = [point("e-test-0001-smp-oats"), point("e-test-0002-smp-oats")];
+    expect(withoutEntries(listed, new Map([["e-test-0001-smp-oats", {}]])).map((p) => p.name)).toEqual([listed[1]!.name]);
+  });
+
+  it("stops a copy matching the original the API still lists, by content", () => {
+    const original = point("e-test-0001-smp-oats");
+    const copy = point("e-test-0002-smp-oats");
+    const pending = new Map([["e-test-0002-smp-oats", copy]]);
+    expect(reconcilePending(pending, [original]).listedByContent).toEqual(["e-test-0002-smp-oats"]);
+    expect(reconcilePending(pending, withoutEntries([original], new Map([["e-test-0001-smp-oats", {}]]))).stillPending).toEqual(["e-test-0002-smp-oats"]);
   });
 });
 

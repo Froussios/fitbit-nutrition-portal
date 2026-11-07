@@ -75,3 +75,8 @@ export const CONNECT_FAILED = "Google Health did not answer. Check your connecti
 export function deleteFailed(name: string): string {
   return `Could not delete "${name}" because Google Health did not answer.`;
 }
+
+/** Like LOG_NOT_CONFIRMED: undoing again sends a new ID, so it could create a second entry. */
+export function undoNotConfirmed(name: string): string {
+  return `Google Health did not answer, so "${name}" may not be back in the diary. When the connection is back, check today's diary before undoing again.`;
+}
