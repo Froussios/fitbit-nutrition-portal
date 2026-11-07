@@ -204,9 +204,9 @@ time, never its nutrients ([design](ARCHITECTURE.md#45-meal-prep-planned)).
 (V7). Browser storage stays on one device and can be cleared. Google Drive's app-data folder was considered and rejected.
 Reusing the project and domain avoids new hosting, and the domain avoids the firewall that intercepts `*.pages.dev`
 (DR-14).
-**Consequence.** This is the first server and the first user data at rest, an exception to DR-01. The Functions receive
-the user's Google access token, which can read and write the diary until it expires, so they must never store or log it.
-A Pages deploy replaces the whole site, so an API change ships only with the Food index workflow, and a rollback there
+The API identifies users by a Google ID token, because a token that can use the diary must not reach it.
+**Consequence.** This is the first server and the first user data at rest, an exception to DR-01. Users sign in to
+Sign In With Google as well as granting Google Health access, and its token needs renewing about hourly. A Pages deploy replaces the whole site, so an API change ships only with the Food index workflow, and a rollback there
 covers both. Recipes can be lost with the database; D1's Time Travel covers the last 7 days, and the diary is unaffected.
-**Reopen if.** Shipping the API with the index becomes a real obstacle, the free limits are reached, or the app needs
-users beyond the owner: sending this token to a server would likely matter to the security assessment ([#28](https://github.com/Froussios/fitbit-nutrition-portal/issues/28)).
+**Reopen if.** Shipping the API with the index becomes a real obstacle, the free limits are reached, or renewing the ID
+token proves too disruptive in daily use.

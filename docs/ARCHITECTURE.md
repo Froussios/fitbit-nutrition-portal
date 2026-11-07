@@ -134,10 +134,11 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
 
 * **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
   index can change. Editing them affects later portions only: diary entries cannot be edited.
-* **Identity.** The browser sends its Google access token. The API checks with `tokeninfo` that its `aud` is this app's
-  client ID, so that a token issued to another app is refused, and takes `healthUserId` from `users/me/identity`. No new
-  scopes are needed. It caches the result under a hash of the token until the token expires, so a token revoked earlier still
-  works until then. It never stores or logs the token. The user ID never comes from the request.
+* **Identity.** The Google access token never leaves the browser for our API, because it can read and write the diary. The
+  browser instead gets a Google **ID token** from Sign In With Google, which proves who the user is and grants no API
+  access. The API checks its signature against Google's public keys, and its `aud` (this app's client ID), `iss` and `exp`.
+  `user_id` is its `sub`, which is stable and never reused. An ID alone would not do: anyone who knew it could use it. The
+  user ID never comes from the request, and the API ignores the token's email and name and does not store the token.
 * **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
   so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
   rejects the entry, the portion is removed. If the answer is lost or the browser closes first, the portion counts as eaten
