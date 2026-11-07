@@ -21,7 +21,7 @@ export type AmountReading =
   /** Several of the food's portions fit and they differ, so the user has to say which. */
   | { readonly kind: "ambiguous"; readonly quantity: number; readonly word: string; readonly choices: readonly string[]; readonly typing: boolean };
 
-const UNIT_ALIASES: Readonly<Record<string, string>> = {
+export const UNIT_ALIASES: Readonly<Record<string, string>> = {
   g: "g", gm: "g", gms: "g", gram: "g", gramme: "g",
   kg: "kg", kgs: "kg", kilo: "kg", kilogram: "kg", kilogramme: "kg",
   mg: "mg", mgs: "mg", milligram: "mg", milligramme: "mg",
@@ -42,9 +42,18 @@ const VULGAR_FRACTIONS: Readonly<Record<string, number>> = {
 };
 const VULGAR = `[${Object.keys(VULGAR_FRACTIONS).join("")}]`;
 
-const NUMBER_WORDS: Readonly<Record<string, number>> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+const NUMBER_WORDS: Readonly<Record<string, number>> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
+};
+const FRACTION_WORDS: Readonly<Record<string, number>> = { half: 1 / 2, quarter: 1 / 4, third: 1 / 3, "three quarters": 3 / 4, "two thirds": 2 / 3 };
+const WHOLE_NUMBER = `\\d+|${Object.keys(NUMBER_WORDS).join("|")}`;
+/** "half", "a quarter of a", "two and a half", "1 and three quarters" */
+const FRACTION_PHRASE = new RegExp(`^(?:(${WHOLE_NUMBER})\\s+and\\s+)?(?:an?\\s+)?(${Object.keys(FRACTION_WORDS).reverse().join("|")})(\\s+of)?(\\s+an?)?(?=\\s|$)`);
 /** Everything a number made of words can start as, to tell "ha" on the way to "half" from nonsense. */
-const NUMBER_WORD_STARTS = ["a", "an", "half", "quarter", "half of", "quarter of", "a half", "a quarter", ...Object.keys(NUMBER_WORDS)];
+const NUMBER_WORD_STARTS = ["a", "an", "half of", "quarter of", "third of", "a half", "a quarter", "a third", ...Object.keys(FRACTION_WORDS), ...Object.keys(NUMBER_WORDS)];
+/** What can follow a whole number on the way to a fraction, such as "and a h" in "two and a half". */
+const FRACTION_CONTINUATIONS = ["and a half", "and a quarter", "and a third", "and half", "and three quarters", "and two thirds", "quarters", "thirds"];
 
 interface Leading {
   readonly quantity: number;
@@ -60,6 +69,10 @@ function leadingNumber(text: string): Leading | undefined {
   const number = (quantity: number, length: number, needsUnit = false): Leading => ({ quantity, rest: text.slice(length).trim(), needsUnit });
   let m: RegExpMatchArray | null;
 
+  if ((m = FRACTION_PHRASE.exec(text))) {
+    const whole = m[1] === undefined ? 0 : (NUMBER_WORDS[m[1]] ?? Number(m[1]));
+    return number(roundFraction(whole + FRACTION_WORDS[m[2]!]!), m[0].length, Boolean(m[3] || m[4]));
+  }
   if ((m = /^(\d+)\s+(\d+)\s*\/\s*(\d+)/.exec(text))) return number(roundFraction(Number(m[1]) + Number(m[2]) / Number(m[3])), m[0].length);
   if ((m = /^(\d+)\s*\/\s*(\d+)/.exec(text))) return number(roundFraction(Number(m[1]) / Number(m[2])), m[0].length);
   if ((m = new RegExp(`^(\\d+)\\s*(${VULGAR})`).exec(text))) return number(roundFraction(Number(m[1]) + VULGAR_FRACTIONS[m[2]!]!), m[0].length);
@@ -68,7 +81,6 @@ function leadingNumber(text: string): Leading | undefined {
   if ((m = /^\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d,])/.exec(text))) return number(Number(m[0].replaceAll(",", "")), m[0].length);
   if ((m = /^(?:\d+(?:\.\d*)?|\.\d+)/.exec(text))) return number(Number(m[0]), m[0].length);
 
-  if ((m = /^(?:an?\s+)?(half|quarter)(\s+of)?(\s+an?)?(?=\s|$)/.exec(text))) return number(m[1] === "half" ? 0.5 : 0.25, m[0].length, Boolean(m[2] || m[3]));
   if ((m = /^[a-z]+(?=\s|$)/.exec(text)) && NUMBER_WORDS[m[0]] !== undefined) return number(NUMBER_WORDS[m[0]]!, m[0].length);
   if ((m = /^an?(?=\s|$)/.exec(text))) return number(1, m[0].length, true);
   return undefined;
@@ -90,11 +102,11 @@ function singular(word: string): string {
 }
 
 const stripLeadingOne = (text: string) => text.replace(/^1\s+/, "");
-const literal = (text: string) => stripLeadingOne(text.trim().toLowerCase().replace(/\s+/g, " "));
+export const literal = (text: string) => stripLeadingOne(text.trim().toLowerCase().replace(/\s+/g, " "));
 const withoutBrackets = (text: string) => text.replace(/\([^)]*\)/g, " ");
 
 /** Words for comparing a typed unit with a portion's name: "Tablespoons," and "1 tablespoon" are both "tbsp". */
-function comparable(text: string): string {
+export function comparable(text: string): string {
   return stripLeadingOne(withoutBrackets(text).trim().toLowerCase())
     .replace(/[,.;]/g, " ")
     .split(/\s+/)
@@ -124,6 +136,7 @@ function isTyping(word: string, food: Measurable): boolean {
   // "1 1" may become "1 1/2", and "1 5" may become "1 5.3 oz container".
   if (/^\d[\d.,/ ]*$/.test(word)) return true;
   const raw = word.trim().toLowerCase();
+  if (FRACTION_CONTINUATIONS.some((c) => c.startsWith(raw))) return true;
   const key = comparable(word);
   const startsLonger = (name: string) => (name.length > raw.length && name.startsWith(raw)) || (name.length > key.length && name.startsWith(key));
   return Object.keys(UNIT_ALIASES).some(startsLonger) || food.portions.some((p) => startsLonger(literal(p.name)) || startsLonger(comparable(p.name)));

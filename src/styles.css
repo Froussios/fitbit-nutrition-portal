@@ -60,6 +60,12 @@ h2 { font-size: 1.15rem; margin-bottom: 12px; }
 .account { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; white-space: nowrap; }
 .energy-setting { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
 .energy-setting select { width: auto; }
+.ai-control { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+.ai-setting { display: flex; align-items: center; gap: 6px; }
+.ai-setting input { width: auto; }
+.amount-note { color: var(--muted); font-size: 0.85rem; margin: 0 0 8px; }
+tr.editing .amount-note { margin: 4px 0 0; min-width: 11em; white-space: normal; }
+.amount-note[hidden] { display: none; }
 
 .card {
   background: var(--surface);

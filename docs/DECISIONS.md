@@ -251,7 +251,7 @@ covers both. Recipes can be lost with the database; D1's Time Travel covers the 
 
 ### DR-25 Amounts are typed as free text, read by fixed rules, and a unit is never decided after the number
 **Decision.** Amount is a text field in the log form and the row editor. Fixed rules read numbers, fractions, unit names and
-the food's portions: `90 g`, `1 1/2 cups`, `half a cup`, `2 × can`. On leaving the field or pressing Enter, the number stays
+the food's portions: `90 g`, `1 1/2 cups`, `two and a half cups`, `2 × can`. On leaving the field or pressing Enter, the number stays
 in Amount and the unit moves to Unit. A bare number uses the unit that was already showing when it was typed. If none was
 showing because the food was still loading, Unit stays blank and asks, and nothing logs until the user chooses. A food's
 own portion beats a metric cup, tablespoon or teaspoon, and exact weights and volumes beat portions. What the rules cannot
@@ -261,6 +261,25 @@ telling the user the unit after they entered the amount is wrong, so `90` means 
 **Consequence.** `1 cup` is refused on the 46% of generic foods with no cup portion and no density, because DR-06 forbids
 assuming one. The number spinner and arrow-key stepping are gone. A readable amount logs on the first Enter, so the unit
 showing is what counts.
-**Planned.** An optional on-device LLM for what the rules refuse, behind a "Use AI processing of input" setting that downloads
-the model when ticked ([design](https://github.com/Froussios/fitbit-nutrition-portal/issues/64#issuecomment-6703253049)).
 **Reopen if.** Refused input turns out to be common in real use.
+
+### DR-26 An on-device model can read what the rules refuse, behind a setting, and cannot supply a number or a guess
+**Decision.** A "Use AI processing of input" tickbox in the page header turns on Chrome's built-in model. It is off by default,
+kept in `localStorage` on each device, and ticking it starts the model's download, with progress shown. Unticked, the model is
+never used, even if installed. If the browser or computer cannot run it, the box is disabled with the reason. The model is
+asked only when the user has finished typing and the rules have refused the text as unreadable or naming no known unit. Its
+answer fills the fields and says where it came from, and logging it takes another Enter.
+**Why.** Owner requirements ([#64](https://github.com/Froussios/fitbit-nutrition-portal/issues/64)): use an LLM only if one is available locally, and it must use only what was typed, not guess that sugar
+is usually measured in cups. Owner decision (7 November 2026): the download starts when the setting is ticked. Chrome's model
+is the only one a static site can reach without a server.
+**How it cannot guess.** This is enforced in `core/amount-answer.ts`, not left to the prompt. A bare number never reaches the
+model. The food's name is never sent, only the typed text and the food's units. The model must quote the words it read: the
+quote must be in the text, and spelled close enough to the chosen unit to be a typing mistake, starting with the same letter
+and no closer to another unit. So `1 scoop` cannot become a cup, `250 mlitre` cannot become litres, and `1 cpu` cannot pick one of two cups.
+Its number counts only if the rules read the quoted words as that number, and the rules' number is the one used. Every other
+typed word must be accounted for, so `1-2 cups` and `about 2 cups` are refused.
+**Consequence.** Since numbers have to be readable by the rules, phrases such as `two and a half` moved into the rules, which
+leaves the model typos and odd word order. Chrome 148+ on desktop only, with 22 GB free, and more than 4 GB of VRAM or 16 GB of
+RAM with 4+ cores. Unticking does not delete the model, which Chrome manages. The debug log records each question and answer,
+to judge how well the model does. Not yet tried against the real model.
+**Reopen if.** The model turns out too unreliable to be worth keeping, or the header runs out of room for settings (DR-21).

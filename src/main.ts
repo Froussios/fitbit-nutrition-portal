@@ -19,6 +19,8 @@ import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
 import { getEnergyUnit, setEnergyUnit, type EnergyUnit } from "./ui/energy-unit";
 import { createLogForm, type LogForm } from "./ui/log-form";
+import { amountAi } from "./ai/amount-ai";
+import { createAiSetting } from "./ui/ai-setting";
 import { createRowEditor, type RowEditor } from "./ui/row-editor";
 import { createDebugPanel } from "./ui/debug-panel";
 import { describeError, installGlobalErrorHandlers, logger } from "./debug/log";
@@ -33,6 +35,7 @@ const HISTORY_ENTRIES = 300;
 const root = document.getElementById("app")!;
 const appLog = logger("app");
 installGlobalErrorHandlers();
+void amountAi.start();
 
 /** Session details the App adds to the debug log header (never tokens). */
 let sessionInfo: () => Record<string, string> = () => ({});
@@ -85,6 +88,7 @@ class App {
   private readonly form: LogForm;
   /** The diary row being edited. Its controls outlive redraws of the table, so a refresh keeps what the user typed. */
   private editor?: RowEditor;
+  private readonly aiSetting = createAiSetting(amountAi);
   private readonly diary = el("div", { class: "diary" });
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
   private readonly rowFailureList = el("div");
@@ -574,6 +578,7 @@ class App {
         "div",
         { class: "account" },
         signedIn && this.energySetting(),
+        signedIn && this.aiSetting,
         signedIn && el("button", { type: "button", onclick: () => this.signOut() }, "Sign out"),
         !isClientIdBuiltIn() && el("button", { type: "button", class: "link", onclick: () => renderSetup(true) }, "Settings"),
       ),
