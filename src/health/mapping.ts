@@ -256,7 +256,7 @@ export function reconcilePending(
 }
 
 /** The points whose entries the user has not deleted: the API may keep listing a deleted one for a while. */
-export function withoutEntries(points: readonly DataPoint[], ids: ReadonlyMap<string, unknown>): DataPoint[] {
+export function withoutEntries(points: readonly DataPoint[], ids: ReadonlySet<string>): DataPoint[] {
   return points.filter((p) => !p.name || !ids.has(idFromName(p.name)));
 }
 

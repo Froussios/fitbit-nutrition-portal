@@ -59,6 +59,8 @@ class App {
   private entries: DiaryEntry[] = [];
   /** Today's entries deleted in this session, by ID: shown crossed out so the delete can be undone. Not stored (DR-20). */
   private readonly deleted = new Map<string, DiaryEntry>();
+  /** Every ID deleted in this session. Undoing does not take one out: the API may still list the original, and the copy must not match it. */
+  private readonly deletedIds = new Set<string>();
   /** IDs of the entries with a delete or undo under way, so that a second tap sends nothing. */
   private readonly busy = new Set<string>();
   private notice = "";
@@ -253,7 +255,7 @@ class App {
     try {
       const today = civilDate(new Date());
       // Read after the wait: an entry deleted meanwhile may be in this listing, and must not come back.
-      const points = withoutEntries(await this.api.listNutritionLogs(today), this.deleted);
+      const points = withoutEntries(await this.api.listNutritionLogs(today), this.deletedIds);
       const matched = reconcilePending(this.pending, points, this.clientId);
       for (const key of [...matched.listedById, ...matched.listedByContent]) this.dropPending(key);
       const stale = matched.stillPending.filter((key) => Date.now() - (this.pendingSince.get(key) ?? 0) > PENDING_TTL_MS);
@@ -349,6 +351,7 @@ class App {
       this.catalog.remove(entry.id);
       this.entries = this.entries.filter((e) => e.id !== entry.id);
       this.deleted.set(entry.id, entry);
+      this.deletedIds.add(entry.id);
     } catch (e) {
       appLog.error("Deleting the entry failed", describeError(e));
       if (isConnectionFailure(e)) failure = deleteFailed(entry.displayName);
@@ -406,6 +409,8 @@ class App {
     this.pending.clear();
     this.pendingSince.clear();
     this.deleted.clear();
+    this.deletedIds.clear();
+    this.busy.clear();
     this.catalog.clear();
     this.loggedFoodsRead = undefined;
     this.entries = [];

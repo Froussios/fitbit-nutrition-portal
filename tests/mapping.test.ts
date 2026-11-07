@@ -139,7 +139,7 @@ describe("withoutEntries", () => {
 
   it("hides deleted entries the API still lists", () => {
     const listed = [point("e-test-0001-smp-oats"), point("e-test-0002-smp-oats")];
-    expect(withoutEntries(listed, new Map([["e-test-0001-smp-oats", {}]])).map((p) => p.name)).toEqual([listed[1]!.name]);
+    expect(withoutEntries(listed, new Set(["e-test-0001-smp-oats"])).map((p) => p.name)).toEqual([listed[1]!.name]);
   });
 
   it("stops a copy matching the original the API still lists, by content", () => {
@@ -147,7 +147,7 @@ describe("withoutEntries", () => {
     const copy = point("e-test-0002-smp-oats");
     const pending = new Map([["e-test-0002-smp-oats", copy]]);
     expect(reconcilePending(pending, [original]).listedByContent).toEqual(["e-test-0002-smp-oats"]);
-    expect(reconcilePending(pending, withoutEntries([original], new Map([["e-test-0001-smp-oats", {}]]))).stillPending).toEqual(["e-test-0002-smp-oats"]);
+    expect(reconcilePending(pending, withoutEntries([original], new Set(["e-test-0001-smp-oats"]))).stillPending).toEqual(["e-test-0002-smp-oats"]);
   });
 });
 
