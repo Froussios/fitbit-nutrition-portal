@@ -86,6 +86,8 @@ export function createAmountAi(api: LanguageModelApi | undefined, storage: Pick<
   const listeners: (() => void)[] = [];
 
   const setState = (next: AiState) => {
+    // Progress is left out, or a download would fill the log.
+    if (next.kind !== state.kind) log.info("AI setting", { state: next.kind });
     state = next;
     for (const listener of listeners) listener();
   };

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAmountAi, type LanguageModelApi } from "../src/ai/amount-ai";
+import { clearLog, logEntries } from "../src/debug/log";
 import type { Measurable } from "../src/core/units";
 
 const food = { basis: "g", portions: [{ name: "1 cup", amount: 125, unit: "g" }], name: "Sugar" } as Measurable & { name: string };
@@ -69,6 +70,18 @@ describe("the setting", () => {
     await settled();
     expect(resolved).toBe(true);
     expect(storage.items.get("foodDiary.aiInput")).toBe("on");
+  });
+
+  it("records each change of state in the debug log, so that a log shows whether the box was ticked", async () => {
+    clearLog();
+    const { api, monitors } = fakeApi("downloadable");
+    const ai = createAmountAi(api, fakeStorage());
+    ai.turnOn();
+    monitors[0]!.dispatchEvent(Object.assign(new Event("downloadprogress"), { loaded: 0.5 }));
+    await settled();
+    ai.turnOff();
+    const states = logEntries().filter((e) => e.message === "AI setting").map((e) => (e.data as { state: string }).state);
+    expect(states).toEqual(["downloading", "ready", "off"]);
   });
 
   it("remembers being on, across page loads", async () => {

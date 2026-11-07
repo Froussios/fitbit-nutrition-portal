@@ -317,6 +317,20 @@ describe("editing an entry", () => {
       expect(loggedAmount({ ...logFood(milk, 250, "ml"), serving: { foodMeasurementUnit: "x", foodMeasurementUnitDisplayName: "Milliliter", amount: 250 } })).toEqual({ amount: 250, unit: "ml" });
     });
 
+    it("finds the unit when the API names it under users/me rather than the user's ID, as real entries do", () => {
+      const looked = new Map([["users/1234567890/dataTypes/food-measurement-unit/dataPoints/147", "gram"]]);
+      const serving = { amount: 30, foodMeasurementUnit: "users/me/dataTypes/food-measurement-unit/dataPoints/147" };
+      const log = { ...logFood(oats, 30, "g"), serving };
+      expect(loggedAmount(log, looked)).toEqual({ amount: 30, unit: "g" });
+      expect(toDiaryEntry({ name: "users/me/dataTypes/nutrition-log/dataPoints/1", nutritionLog: log }, { unitNames: looked })?.amount).toBe("30 g");
+    });
+
+    it("does not take another unit with the same number", () => {
+      const looked = new Map([["users/1234567890/dataTypes/food-measurement-unit/dataPoints/147", "gram"]]);
+      const serving = { amount: 30, foodMeasurementUnit: "users/me/dataTypes/food-measurement-unit/dataPoints/1470" };
+      expect(loggedAmount({ ...logFood(oats, 30, "g"), serving }, looked)).toBeUndefined();
+    });
+
     it("reads the name when the entry has no serving", () => {
       expect(loggedAmount(logFood(oats, 1000, "g", {}))).toEqual({ amount: 1000, unit: "g" });
     });
