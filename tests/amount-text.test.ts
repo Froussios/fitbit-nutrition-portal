@@ -48,6 +48,15 @@ describe("numbers", () => {
     ["TEN", 10],
     ["half", 0.5],
     ["a quarter", 0.25],
+    ["a third", 0.333],
+    ["three quarters", 0.75],
+    ["two thirds", 0.667],
+    ["twenty", 20],
+    ["two and a half", 2.5],
+    ["two and a quarter", 2.25],
+    ["1 and a half", 1.5],
+    ["one and three quarters", 1.75],
+    ["10 and half", 10.5],
   ])("reads %s", (text, quantity) => expect(readAmountText(text, bare)).toEqual(amount(quantity)));
 
   it.each([
@@ -60,6 +69,9 @@ describe("numbers", () => {
     ["an cup", 1],
     ["one cup", 1],
     ["two cups", 2],
+    ["two and a half cups", 2.5],
+    ["three quarters of a cup", 0.75],
+    ["1 and a half cups", 1.5],
   ])("reads %s with its unit", (text, quantity) => expect(readAmountText(text, liquid)).toEqual(amount(quantity, "cup")));
 
   it.each(["1,5", "1-2 cups", "1e3", "-5", "+5", "1/2/3", "1/0", "1,000,5", "cup", "g", "1.2.3", "abc", "9".repeat(400)])("refuses %s", (text) => {
@@ -184,13 +196,15 @@ describe("units this food cannot use", () => {
 
   it("does not invent a unit", () => {
     expect(readAmountText("1 scoop", bare)).toMatchObject({ kind: "unknown-unit", word: "scoop" });
-    expect(readAmountText("two and a half cups", liquid).kind).toBe("unknown-unit");
+    expect(readAmountText("a couple of cups", liquid).kind).toBe("unknown-unit");
+    expect(readAmountText("2 and a bit cups", liquid).kind).toBe("unknown-unit");
   });
 });
 
 describe("while typing", () => {
   it.each([
     ["1/", bare], ["1 1/", bare], [".", bare], ["1,0", bare], ["ha", bare], ["a", bare], ["half a", bare], ["half of", bare], ["2 x", bare], ["0", bare],
+    ["two and", bare], ["two and a", bare], ["two and a h", bare], ["1 and", bare], ["three q", bare], ["thre", bare],
     ["1 1", bare], ["10 gr", bare], ["10 gra", bare], ["1 l", bare], ["1 cu", bare], ["2 sli", flour],
   ] as const)("%s is not wrong yet", (text, food) => {
     expect(readAmount(text, "g", food, { settled: false })).toEqual({ state: "typing" });

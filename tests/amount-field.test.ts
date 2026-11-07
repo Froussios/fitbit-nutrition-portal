@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultAmount } from "../src/core/amount-text";
 import { PORTION_PREFIX, type Measurable } from "../src/core/units";
+import type { AmountInterpreter, Interpretation } from "../src/ai/amount-ai";
 import { createAmountField, type AmountField, type AmountFieldOptions } from "../src/ui/amount-field";
 
 const CUP = `${PORTION_PREFIX}1 cup`;
@@ -244,5 +245,186 @@ describe("clear", () => {
     expect(shown(field)).toEqual(["", ""]);
     expect(options(field)).toEqual([]);
     expect(field.read()).toEqual({ state: "typing" });
+  });
+});
+
+describe("an on-device model", () => {
+  /** Answers only when the test says so. */
+  function fakeModel(on = true) {
+    const resolvers: ((answer: Interpretation | undefined) => void)[] = [];
+    const signals: AbortSignal[] = [];
+    const interpret = vi.fn((_text: string, _food: Measurable, signal: AbortSignal) => {
+      signals.push(signal);
+      return new Promise<Interpretation | undefined>((resolve) => resolvers.push(resolve));
+    });
+    const interpreter: AmountInterpreter = { isOn: () => on, interpret };
+    const answer = async (value: Interpretation | undefined) => {
+      resolvers.shift()!(value);
+      await Promise.resolve();
+    };
+    return { interpreter, interpret, answer, signals };
+  }
+
+  it("is never asked about what the rules can read", () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    for (const text of ["90", "90 g", "2 cups", "1/2 cup", "two and a half cups", "", "1,5"]) {
+      type(field, text);
+      field.settle();
+    }
+    expect(model.interpret).not.toHaveBeenCalled();
+  });
+
+  it("is not asked while the setting is off", () => {
+    const model = fakeModel(false);
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "10 grms");
+    field.settle();
+    expect(model.interpret).not.toHaveBeenCalled();
+    expect(field.read().state).toBe("problem");
+  });
+
+  it("is not asked until the text is finished", () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "10 grms");
+    expect(model.interpret).not.toHaveBeenCalled();
+    field.settle();
+    expect(model.interpret).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks logging while it reads, and says so", () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "10 grms");
+    field.settle();
+    expect(field.read()).toEqual({ state: "typing" });
+    expect(field.note.textContent).toContain("Reading");
+    expect(field.note.hidden).toBe(false);
+  });
+
+  it("fills the fields with its answer, and says where it came from", async () => {
+    const model = fakeModel();
+    const { field, onChange } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "10 grms");
+    field.settle();
+    onChange.mockClear();
+    await model.answer({ quantity: 10, unit: "g" });
+    expect(shown(field)).toEqual(["10", "g"]);
+    expect(field.read()).toEqual({ state: "ok", quantity: 10, unit: "g" });
+    expect(field.note.textContent).toContain("Read by on-device AI");
+    expect(onChange).toHaveBeenCalled();
+  });
+
+  it("gets no unit from an answer that names none, when none is showing", async () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.clear();
+    type(field, "x two");
+    field.input.blur();
+    field.show(flour, defaultAmount);
+    await model.answer({ quantity: 2 });
+    expect(shown(field)).toEqual(["2", ""]);
+    expect(field.read()).toMatchObject({ state: "problem", inUnit: true });
+  });
+
+  it("leaves the text as typed when it has no answer, and says why it is wrong", async () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "1 scoop");
+    field.settle();
+    await model.answer(undefined);
+    expect(field.input.value).toBe("1 scoop");
+    expect(field.read().state).toBe("problem");
+    expect(field.note.hidden).toBe(true);
+  });
+
+  it("is asked once about the same text", async () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "1 scoop");
+    field.settle();
+    field.settle();
+    await model.answer(undefined);
+    field.settle();
+    expect(model.interpret).toHaveBeenCalledTimes(1);
+  });
+
+  it("is dropped when the user types again", async () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "10 grms");
+    field.settle();
+    type(field, "20 g");
+    expect(model.signals[0]?.aborted).toBe(true);
+    await model.answer({ quantity: 10, unit: "kg" });
+    expect(field.input.value).toBe("20 g");
+    expect(field.read()).toEqual({ state: "ok", quantity: 20, unit: "g" });
+  });
+
+  it("is dropped when the user picks a unit", async () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "10 grms");
+    field.settle();
+    pick(field, "kg");
+    await model.answer({ quantity: 10, unit: "g" });
+    expect(shown(field)).toEqual(["10", "kg"]);
+  });
+
+  it("is dropped when a new food is chosen", async () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "10 grms");
+    field.settle();
+    field.clear();
+    await model.answer({ quantity: 10, unit: "g" });
+    expect(shown(field)).toEqual(["", ""]);
+  });
+
+  it("is dropped when the field goes away", () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "10 grms");
+    field.settle();
+    field.dispose();
+    expect(model.signals[0]?.aborted).toBe(true);
+  });
+
+  it("waits for a food's portions before asking", () => {
+    const model = fakeModel();
+    let pending = true;
+    const { field } = setUp({ interpreter: model.interpreter, isPending: () => pending });
+    field.show({ basis: "g", portions: [] }, defaultAmount);
+    type(field, "1 can");
+    field.settle();
+    expect(model.interpret).not.toHaveBeenCalled();
+    expect(field.read()).toEqual({ state: "typing" });
+    pending = false;
+    field.input.blur();
+    field.show({ basis: "g", portions: [{ name: "bottle", amount: 500, unit: "g" }] }, defaultAmount);
+    expect(model.interpret).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears its note once the entry is logged", async () => {
+    const model = fakeModel();
+    const { field } = setUp({ interpreter: model.interpreter });
+    field.show(flour, defaultAmount);
+    type(field, "10 grms");
+    field.settle();
+    await model.answer({ quantity: 10, unit: "g" });
+    field.forgetTyping();
+    expect(field.note.hidden).toBe(true);
   });
 });

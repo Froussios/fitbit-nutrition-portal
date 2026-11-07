@@ -1,3 +1,5 @@
+import type { AmountInterpreter } from "../ai/amount-ai";
+import { worthAsking } from "../core/amount-answer";
 import { amountForFood, readAmount, readAmountText, settledAmount, typedQuantity, type AmountRead, type ShownAmount } from "../core/amount-text";
 import type { Measurable } from "../core/units";
 import { el, replaceChildren } from "./dom";
@@ -13,13 +15,19 @@ export interface AmountFieldOptions {
   readonly onChange: () => void;
   /** Keeps the amount the same when a unit is picked by hand. Without it, the number stays as it is. May throw if it cannot convert. */
   readonly convert?: (quantity: number, from: string, to: string) => number;
+  /** The food's portions are still loading, so a word may yet turn out to be one. */
+  readonly isPending?: () => boolean;
+  /** Tries to read what the rules could not. Its answer only fills the fields: logging it takes another Enter. */
+  readonly interpreter?: AmountInterpreter;
 }
 
 export interface AmountField {
   readonly input: HTMLInputElement;
   readonly unitSelect: HTMLSelectElement;
-  /** `pending` while a food's portions may still arrive. With no food yet, this is always "typing". */
-  read(pending?: boolean): AmountRead;
+  /** Says when a model is reading the amount, and when it has. The form places it. */
+  readonly note: HTMLElement;
+  /** With no food yet, or while a model reads the text, this is "typing". */
+  read(): AmountRead;
   /** The user has finished: moves a typed unit to its field. */
   settle(): void;
   set(text: string, unit: string): void;
@@ -31,6 +39,8 @@ export interface AmountField {
   hideUnits(): void;
   /** What is showing no longer counts as typed by the user: the entry it was typed for is logged. */
   forgetTyping(): void;
+  /** Stops anything still running, when the field goes away. */
+  dispose(): void;
 }
 
 /**
@@ -42,6 +52,7 @@ export function createAmountField(options: AmountFieldOptions): AmountField {
   const input = el("input", { id: options.id, type: "text", autocomplete: "off", spellcheck: "false", placeholder: options.placeholder, "aria-label": options.label });
   const unitSelect = el("select", { id: options.unitId, "aria-label": options.unitLabel });
   const blankOption = () => el("option", { value: "" }, "Choose unit");
+  const note = el("p", { class: "amount-note", role: "status", hidden: true });
 
   let food: Measurable | undefined;
   /** What the dropdown shows. Setting a select's value does not fire its events, so this is the record of what the number is in. */
@@ -50,11 +61,51 @@ export function createAmountField(options: AmountFieldOptions): AmountField {
   let typed = false;
   /** The user finished typing, so an unfinished text is now simply wrong. */
   let settled = false;
+  /** A model is reading the text. */
+  let asking: AbortController | undefined;
+  /** What the model was last asked, so that leaving the field twice does not ask twice. */
+  let asked = "";
 
   const showUnit = (next: string) => {
     unit = next;
     if (next) unitSelect.querySelector('option[value=""]')?.remove();
     unitSelect.value = next;
+  };
+
+  const showNote = (text: string) => {
+    note.textContent = text;
+    note.hidden = !text;
+  };
+
+  const stopAsking = () => {
+    asking?.abort();
+    asking = undefined;
+    showNote("");
+  };
+
+  /** Only for text the user has finished, once the rules have refused it and the food's units are all known. */
+  const askModel = () => {
+    const { interpreter } = options;
+    if (!food || !interpreter?.isOn() || options.isPending?.() || asking) return;
+    const text = input.value;
+    if (!worthAsking(text, food)) return;
+    const question = `${text}\n${[...unitSelect.options].map((o) => o.value).join()}`;
+    if (question === asked) return;
+    asked = question;
+    const mine = (asking = new AbortController());
+    showNote("Reading this with on-device AI…");
+    void interpreter.interpret(text, food, mine.signal).then((answer) => {
+      if (mine !== asking) return; // The user has moved on.
+      asking = undefined;
+      showNote("");
+      if (answer) {
+        asked = "";
+        input.value = String(answer.quantity);
+        if (answer.unit) showUnit(answer.unit);
+        showNote("Read by on-device AI. Check the amount and unit.");
+      }
+      options.onChange();
+    });
   };
 
   const settle = () => {
@@ -63,12 +114,14 @@ export function createAmountField(options: AmountFieldOptions): AmountField {
     const next = settledAmount({ text: input.value, unit }, food);
     if (next.text !== input.value) input.value = next.text;
     if (next.unit !== unit) showUnit(next.unit);
+    askModel();
     options.onChange();
   };
 
   input.addEventListener("input", () => {
     typed = true;
     settled = false;
+    stopAsking();
     options.onChange();
   });
   input.addEventListener("blur", settle);
@@ -77,6 +130,7 @@ export function createAmountField(options: AmountFieldOptions): AmountField {
   unitSelect.addEventListener("input", () => {
     const from = unit;
     const to = unitSelect.value;
+    stopAsking();
     if (food) {
       const reading = readAmountText(input.value, food);
       const named = typedQuantity(reading);
@@ -96,7 +150,8 @@ export function createAmountField(options: AmountFieldOptions): AmountField {
   return {
     input,
     unitSelect,
-    read: (pending = false) => (food ? readAmount(input.value, unit, food, { settled, pending }) : { state: "typing" }),
+    note,
+    read: () => (food && !asking ? readAmount(input.value, unit, food, { settled, pending: options.isPending?.() ?? false }) : { state: "typing" }),
     settle,
     set(text, nextUnit) {
       input.value = text;
@@ -105,6 +160,7 @@ export function createAmountField(options: AmountFieldOptions): AmountField {
       settled = false;
     },
     clear() {
+      stopAsking();
       input.value = "";
       typed = false;
       settled = false;
@@ -124,12 +180,15 @@ export function createAmountField(options: AmountFieldOptions): AmountField {
       if (typed && !focused) settle();
     },
     hideUnits() {
+      stopAsking();
       food = undefined;
       unit = "";
       replaceChildren(unitSelect);
     },
     forgetTyping() {
       typed = false;
+      showNote("");
     },
+    dispose: stopAsking,
   };
 }

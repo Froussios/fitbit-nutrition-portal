@@ -1,3 +1,4 @@
+import { amountAi } from "../ai/amount-ai";
 import type { FoodItem } from "../core/food";
 import { convertQuantity } from "../core/units";
 import { describeError, logger } from "../debug/log";
@@ -62,6 +63,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     label: `Amount of ${entry.displayName}`,
     unitLabel: `Unit for ${entry.displayName}`,
     onChange: () => refresh(),
+    isPending: () => lookingUp,
+    interpreter: amountAi,
     // The same amount in the new unit, so that the nutrients do not jump: 375 ml becomes 1 × can.
     convert: (q, from, to) => {
       // Back in the logged unit, the logged number, or the rounding on the way would count as an edit: 40 g, 1.41 oz, 39.97 g.
@@ -74,7 +77,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   const fields = el("div", { class: "amount-edit" }, quantity, unitSelect);
   const fixedAmount = el("span", {}, entry.amount ?? "–");
   const problem = el("div", { class: "edit-error", hidden: true });
-  const amountCell = el("div", {}, fixedAmount, fields, problem);
+  const amountCell = el("div", {}, fixedAmount, fields, amountField.note, problem);
 
   const mealSelect = el(
     "select",
@@ -105,7 +108,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     if (!canEditAmount()) return undefined;
     // With no amount stated, an empty field means the user is only changing the meal.
     if (!logged && !quantity.value.trim()) return undefined;
-    const read = amountField.read(lookingUp);
+    const read = amountField.read();
     if (read.state === "typing") throw new StillTyping();
     if (read.state === "problem") throw new Error(read.message);
     if (logged && isLoggedAmount(logged, measure(), read.quantity, read.unit)) return undefined;
@@ -239,6 +242,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     },
     dispose() {
       lookup.abort();
+      amountField.dispose();
     },
   };
 }

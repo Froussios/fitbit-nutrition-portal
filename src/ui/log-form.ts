@@ -1,3 +1,4 @@
+import { amountAi } from "../ai/amount-ai";
 import { defaultAmount } from "../core/amount-text";
 import { nutrientsForAmount, type FoodItem } from "../core/food";
 import { kjToKcal } from "../core/nutrients";
@@ -55,7 +56,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     el("div", { class: "row" }, field("Protein (g)", cProtein), field("Carbs (g)", cCarbs), field("Fat (g)", cFat)),
   );
 
-  const amount = createAmountField({ id: "qty", unitId: "unit", placeholder: "e.g. 90 g", onChange: () => refreshPreview() });
+  const amount = createAmountField({ id: "qty", unitId: "unit", placeholder: "e.g. 90 g", onChange: () => refreshPreview(), interpreter: amountAi });
   const now = new Date();
   const mealSelect = el(
     "select",
@@ -207,6 +208,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     el("div", { class: "field" }, el("span", {}, el("label", { for: "food" }, "Food")), combobox.element),
     customFields,
     el("div", { class: "row" }, field("Amount", amount.input), field("Unit", amount.unitSelect)),
+    amount.note,
     el("div", { class: "row" }, field("Meal", mealSelect), field("Time", time)),
     preview,
     el("div", { class: "actions" }, submit),
@@ -222,6 +224,11 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     const when = timeTouched ? new Date(time.value) : new Date();
     const invalid = validationError() ?? (Number.isNaN(when.getTime()) ? "Enter a valid time." : undefined);
     const read = amount.read();
+    if (food && !invalid && read.state === "typing") {
+      // A model is reading the amount. Its answer only fills the fields, so logging it takes another Enter.
+      clearStatus();
+      return;
+    }
     if (!food || invalid || read.state !== "ok") {
       status.textContent = invalid ?? (loading ? `Still loading ${loading}…` : "Search for a food first.");
       status.classList.add("error");
