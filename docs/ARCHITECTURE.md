@@ -137,8 +137,12 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
 * **Identity.** The Google access token never leaves the browser for our API, because it can read and write the diary. The
   browser instead gets a Google **ID token** from Sign In With Google, which proves who the user is and grants no API
   access. The API checks its signature against Google's public keys, and its `aud` (this app's client ID), `iss` and `exp`.
-  `user_id` is its `sub`, which is stable and never reused. An ID alone would not do: anyone who knew it could use it. The
-  user ID never comes from the request, and the API ignores the token's email and name and does not store the token.
+  `user_id` is its `sub`, which is stable and never reused. The `sub` alone would not do: anyone who knew it could use it. The
+  user ID never comes from the request, and the API ignores the token's email and name and does not store the token. No
+  `nonce` is used, so a stolen ID token can be replayed until it expires. That reaches meal prep data only, not the diary.
+* **Two sign-ins, one account.** A browser with several Google accounts could use one for each sign-in, so that recipes sit
+  under one account and portions are logged to the other's diary. The app passes the ID token's `sub` as the account hint
+  for the Google Health sign-in. Whether that sign-in honours the hint is still to be tested.
 * **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
   so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
   rejects the entry, the portion is removed. If the answer is lost or the browser closes first, the portion counts as eaten
