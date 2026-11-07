@@ -93,8 +93,9 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offlin
                 : deletedIds.has(e.id)
                   ? el(
                       "button",
-                      { type: "button", class: "link", "data-entry": e.id, title: offline ? "Undoing needs a connection" : "Log this entry again", "aria-label": `Undo deleting ${e.displayName}`, "aria-busy": String(busyIds.has(e.id)), disabled: offline || busyIds.has(e.id), onclick: () => onUndo(e) },
-                      "Undo",
+                      { type: "button", class: "icon undo", "data-entry": e.id, title: offline ? "Undoing needs a connection" : "Undo delete (logs this entry again)", "aria-label": `Undo deleting ${e.displayName}`, "aria-busy": String(busyIds.has(e.id)), disabled: offline || busyIds.has(e.id), onclick: () => onUndo(e) },
+                      // U+FE0E: as text, because some phones would otherwise draw this one as an emoji.
+                      "↩\uFE0E",
                     )
                   : el(
                       "button",
