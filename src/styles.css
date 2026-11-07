@@ -140,6 +140,11 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 4px; }
   padding: 10px 14px;
 }
 
+.row-alert { border-color: var(--danger); margin-bottom: 12px; }
+.row-alert:not([hidden]) { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.row-alert p { margin: 0; }
+.row-alert p + p { margin-top: 6px; }
+
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 th, td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }

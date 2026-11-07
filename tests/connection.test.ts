@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConnectionMonitor, connectionBanner, deleteFailed, undoNotConfirmed, type ConnectionEnv, type ConnectionState } from "../src/health/connection";
+import { ConnectionMonitor, actionRefused, connectionBanner, deleteFailed, undoNotConfirmed, type ConnectionEnv, type ConnectionState } from "../src/health/connection";
 
 function setup(onLine = true) {
   const listeners: Partial<Record<"online" | "offline", () => void>> = {};
@@ -81,7 +81,14 @@ describe("connectionBanner", () => {
 
 describe("deleteFailed", () => {
   it("names the entry", () => {
-    expect(deleteFailed("Toast")).toBe('Could not delete "Toast" because Google Health did not answer.');
+    expect(deleteFailed("Toast")).toBe('Could not delete "Toast" because Google Health did not answer. If it is still listed, it was not deleted.');
+  });
+});
+
+describe("actionRefused", () => {
+  it("names the action, the entry and the reason", () => {
+    expect(actionRefused("delete", "Toast", "Not allowed")).toBe('Could not delete "Toast": Not allowed');
+    expect(actionRefused("undo deleting", "Toast", "Not allowed")).toBe('Could not undo deleting "Toast": Not allowed');
   });
 });
 
