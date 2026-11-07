@@ -11,12 +11,13 @@ import { CombinedCatalog } from "./food/combined-catalog";
 import genericsUrl from "./food/data/generics.json?url";
 import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
-import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, actionRefused, connectionBanner, deleteFailed, undoNotConfirmed, type ConnectionState } from "./health/connection";
+import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, actionRefused, connectionBanner, deleteFailed, editNotConfirmed, oldEntryNotRemoved, undoNotConfirmed, type ConnectionState } from "./health/connection";
 import { LoggedFoodsCatalog } from "./food/logged-catalog";
-import { buildNutritionLogPoint, byTime, copyNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type LogDraft } from "./health/mapping";
+import { buildNutritionLogPoint, byTime, copyNutritionLogPoint, editedNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
+import { createEditDialog, type EditDialog } from "./ui/edit-dialog";
 import { getEnergyUnit, setEnergyUnit, type EnergyUnit } from "./ui/energy-unit";
 import { createLogForm, type LogForm } from "./ui/log-form";
 import { createDebugPanel } from "./ui/debug-panel";
@@ -62,8 +63,8 @@ class App {
   private readonly deleted = new Map<string, DiaryEntry>();
   /** Every ID deleted in this session. Undoing does not take one out: the API may still list the original, and the copy must not match it. */
   private readonly deletedIds = new Set<string>();
-  /** IDs of the entries with a delete or undo under way, so that a second tap sends nothing. */
-  private readonly busy = new Set<string>();
+  /** The entries with a delete, undo or edit under way, by ID, so that a second tap sends nothing. The value is the row's tag. */
+  private readonly busy = new Map<string, string>();
   private notice = "";
   private signInError = "";
   private loading = false;
@@ -72,7 +73,7 @@ class App {
   /** The connection came back during a load that may have failed: load again when it ends. */
   private reloadAfterLoad = false;
   private listError = "";
-  /** Why a delete or undo failed, by entry ID. Kept until dismissed or tried again, so that a refresh does not hide it. */
+  /** Why a delete, undo or edit failed, by entry ID. Kept until dismissed or tried again, so that a refresh does not hide it. */
   private readonly rowFailures = new Map<string, HTMLElement>();
   private ready = false;
   /** Why connecting to Google Health failed; shown with a Retry button instead of "Connecting…". */
@@ -82,6 +83,9 @@ class App {
   /** Kept across renders, so a change in connection does not disturb what the user is typing. */
   private readonly connectionNotice = el("p", { class: "notice", role: "alert", hidden: true });
   private readonly form: LogForm;
+  private readonly editor: EditDialog;
+  /** The row whose edit button takes focus when the dialog closes: the new entry, once one is saved. */
+  private editedId?: string;
   private readonly diary = el("div", { class: "diary" });
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
   private readonly rowFailureList = el("div");
@@ -98,6 +102,13 @@ class App {
     private readonly catalog: LoggedFoodsCatalog,
   ) {
     this.form = createLogForm(catalog, (d) => this.log(d));
+    // Outside the page's root, so that redrawing the page leaves an open dialog alone.
+    this.editor = createEditDialog(
+      catalog,
+      (entry, edit) => this.saveEdit(entry, edit),
+      () => this.editedId && this.diary.querySelector<HTMLElement>(`[data-entry-edit="${CSS.escape(this.editedId)}"]`)?.focus(),
+    );
+    document.body.append(this.editor.element);
     // Logging needs the write scope; the read scope (whole diary) is asked for but optional.
     this.auth = new GoogleAuth(clientId, SCOPES, [NUTRITION_WRITE_SCOPE]);
     this.api = new HealthClient((o) => this.auth.getAccessToken(o));
@@ -140,6 +151,7 @@ class App {
     this.connectionNotice.textContent = message ?? "";
     this.connectionNotice.hidden = !message;
     this.form.setOffline(this.connection.state === "offline");
+    this.editor.setOffline(this.connection.state === "offline");
   }
 
   /** The browser is back online: pick up what the outage interrupted. */
@@ -276,7 +288,8 @@ class App {
       }
       const waiting = matched.stillPending.filter((key) => this.pending.has(key));
       if (waiting.length) appLog.info("Entries written but not listed by the API yet", waiting);
-      const pending = [...this.pending.values()].filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === today);
+      // An edit's old entry leaves the diary before its delete is answered, and may be one written this session.
+      const pending = withoutEntries([...this.pending.values()], this.deletedIds).filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === today);
       this.entries = toDiaryEntries([...points, ...pending], this.diaryContext());
       for (const [id, entry] of this.deleted) {
         if (civilDate(entry.start) !== today) this.deleted.delete(id);
@@ -347,7 +360,7 @@ class App {
     if (this.busy.has(entry.id)) return;
     // Disabling the button takes keyboard focus from it, so it is given back at the end.
     const hadFocus = focusedEntryId() === entry.id;
-    this.startRowAction(entry);
+    this.startRowAction(entry, "deleting…");
     appLog.info(`Deleting ${entry.name}`);
     try {
       const op = await this.api.deleteNutritionLogs([entry.name]);
@@ -375,7 +388,7 @@ class App {
     const log = entry.point.nutritionLog;
     if (this.busy.has(entry.id) || !log) return;
     const hadFocus = focusedEntryId() === entry.id;
-    this.startRowAction(entry);
+    this.startRowAction(entry, "deleting…");
     const point = copyNutritionLogPoint(log, copiedEntryId(entry.id));
     appLog.info(`Undoing the delete of ${entry.name}`, { copy: point.name });
     // The copy has no name for its unit until the API lists it, but the original did.
@@ -398,9 +411,63 @@ class App {
     await this.loadToday();
   }
 
-  /** Disables the row, and forgets why this row failed last time. */
-  private startRowAction(entry: DiaryEntry) {
-    this.busy.add(entry.id);
+  /**
+   * Applies an edit: writes the corrected entry, then deletes the original, so that a failure can
+   * never lose the entry (DR-22). Rejects if nothing was saved, and the dialog stays open to say why.
+   */
+  private async saveEdit(entry: DiaryEntry, edit: EntryEdit): Promise<void> {
+    const log = entry.point.nutritionLog;
+    if (this.busy.has(entry.id) || !log) return;
+    this.startRowAction(entry, "saving…");
+    const point = editedNutritionLogPoint(log, edit, { id: copiedEntryId(entry.id), servingUnits: this.servingUnits, unitNames: this.unitNames });
+    appLog.info(`Editing ${entry.name}`, { replacement: point.name, mealType: edit.mealType, quantity: edit.amount?.quantity, unit: edit.amount?.unit, fromFoodRecord: Boolean(edit.amount?.food) });
+    // The replacement has no name for its unit until the API lists it, but the original did.
+    if (log.serving?.foodMeasurementUnitDisplayName) this.unitNames.set(log.serving.foodMeasurementUnit, log.serving.foodMeasurementUnitDisplayName);
+    let written: { key: string; created: DataPoint };
+    try {
+      written = await this.write(point);
+    } catch (e) {
+      appLog.error("Saving the edit failed", describeError(e));
+      this.handleError(e, false);
+      this.busy.delete(entry.id);
+      this.renderDiary();
+      if (e instanceof SignInRequiredError) this.showRowFailure(entry, actionRefused("edit", entry.displayName, refusalReason(e)));
+      throw isConnectionFailure(e) ? new Error(editNotConfirmed(entry.displayName), { cause: e }) : e;
+    }
+    const { key, created } = written;
+    // No wait since the write: a listing that still has the original must not match the replacement to it (a meal-only edit looks the same).
+    this.deletedIds.add(entry.id);
+    this.catalog.merge(toLoggedFoods([created], this.clientId));
+    const replacement = toDiaryEntry(created, this.diaryContext());
+    this.entries = [...this.entries.filter((e) => e.id !== entry.id), ...(replacement ? [replacement] : [])].sort(byTime);
+    this.editedId = key;
+    this.renderDiary();
+    this.editor.close();
+    void this.removeReplaced(entry);
+  }
+
+  /** Deletes the entry an edit replaced. If that fails both exist, so the old row comes back and an alert says so. */
+  private async removeReplaced(entry: DiaryEntry) {
+    try {
+      const op = await this.api.deleteNutritionLogs([entry.name]);
+      if (op.error) throw new Error(op.error.message ?? "Google Health could not delete the entry.");
+      this.dropPending(entry.id);
+      this.catalog.remove(entry.id);
+    } catch (e) {
+      appLog.error("Removing the entry an edit replaced failed", describeError(e));
+      this.handleError(e, false);
+      this.deletedIds.delete(entry.id);
+      this.entries = [...this.entries.filter((other) => other.id !== entry.id), entry].sort(byTime);
+      this.showRowFailure(entry, oldEntryNotRemoved(entry.displayName));
+    }
+    this.busy.delete(entry.id);
+    this.renderDiary();
+    await this.loadToday();
+  }
+
+  /** Disables the row, tags it with `tag`, and forgets why this row failed last time. */
+  private startRowAction(entry: DiaryEntry, tag: string) {
+    this.busy.set(entry.id, tag);
     this.rowFailures.get(entry.id)?.remove();
     this.rowFailures.delete(entry.id);
     this.rowAlert.hidden = this.rowFailures.size === 0;
@@ -433,6 +500,7 @@ class App {
 
   /** Signs out and forgets this user's diary state (the per-user unit cache stays). */
   private signOut() {
+    this.editor.close();
     this.pending.clear();
     this.pendingSince.clear();
     this.deleted.clear();
@@ -478,6 +546,7 @@ class App {
     );
 
     if (!signedIn) {
+      this.editor.close();
       const expired = this.auth.hasExpiredSession;
       replaceChildren(
         root,
@@ -525,7 +594,7 @@ class App {
             "p",
             { class: "hint" },
             "Everything in your Google Health nutrition diary for today, whichever app logged it. " +
-              "Only entries made by this app can be deleted here. A deleted entry stays crossed out, with an undo button, until you reload the page.",
+              "Only entries made by this app can be edited or deleted here. A deleted entry stays crossed out, with an undo button, until you reload the page.",
           ),
         ),
       debugPanel,
@@ -570,9 +639,11 @@ class App {
   /**
    * Redrawing replaces the table. On a narrow screen it keeps its sideways scroll, so that Undo stays where Delete was,
    * and the button with keyboard focus (or `focusId`'s, when the row changed ID) takes it back.
+   * Edit buttons are found separately, because a row's Delete has the first claim on `focusId`.
    */
   private renderDiary(focusId = focusedEntryId()) {
     const scrollLeft = this.diary.querySelector(".table-wrap")?.scrollLeft ?? 0;
+    const editFocus = document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entryEdit"] : undefined;
     this.diaryStatus.textContent = this.loading ? "Loading…" : this.listError;
     this.diaryStatus.classList.toggle("error", !this.loading && Boolean(this.listError));
     // With nothing loaded, an error must not read as "Nothing logged today yet".
@@ -584,14 +655,19 @@ class App {
           entries: this.entries,
           pendingIds: new Set(this.pending.keys()),
           deleted: [...this.deleted.values()],
-          busyIds: this.busy,
+          busy: this.busy,
           offline: this.connection.state === "offline",
+          onEdit: (e) => {
+            this.editedId = e.id;
+            this.editor.open(e, this.unitNames);
+          },
           onDelete: (e) => void this.remove(e),
           onUndo: (e) => void this.undoDelete(e),
         }),
     );
     this.diary.querySelector(".table-wrap")?.scrollTo({ left: scrollLeft });
     if (focusId) this.diary.querySelector<HTMLElement>(`[data-entry="${CSS.escape(focusId)}"]`)?.focus();
+    else if (editFocus) this.diary.querySelector<HTMLElement>(`[data-entry-edit="${CSS.escape(editFocus)}"]`)?.focus();
   }
 }
 
@@ -600,7 +676,7 @@ function focusedEntryId(): string | undefined {
   return document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entry"] : undefined;
 }
 
-/** Why a delete or undo failed. It may be read after signing in again, so an expired session says so in the past tense. */
+/** Why a delete, undo or edit failed. It may be read after signing in again, so an expired session says so in the past tense. */
 function refusalReason(e: unknown): string {
   return e instanceof SignInRequiredError ? "your session had expired. Try again." : errorMessage(e);
 }

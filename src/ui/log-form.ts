@@ -1,13 +1,14 @@
 import { nutrientsForAmount, type FoodItem } from "../core/food";
 import { kjToKcal } from "../core/nutrients";
 import { toDateTimeLocalValue } from "../core/time";
-import { PORTION_PREFIX, selectableUnits, type BaseUnit } from "../core/units";
+import type { BaseUnit } from "../core/units";
 import { MEAL_TYPES, type LogDraft } from "../health/mapping";
 import type { MealType } from "../health/types";
 import type { FoodCatalog } from "../food/catalog";
 import { describeError, logger } from "../debug/log";
 import { el, errorMessage, replaceChildren } from "./dom";
 import { createFoodCombobox } from "./food-combobox";
+import { field, unitOptions } from "./form-fields";
 import { summary } from "./format";
 
 const log = logger("log-form");
@@ -96,10 +97,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       return;
     }
     const previous = unitSelect.value;
-    const options = [
-      ...food.portions.map((p) => el("option", { value: PORTION_PREFIX + p.name }, `× ${p.name}`)),
-      ...selectableUnits(food).map((u) => el("option", { value: u.key }, u.label)),
-    ];
+    const options = unitOptions(food);
     replaceChildren(unitSelect, ...options);
     if (options.some((o) => o.value === previous)) {
       unitSelect.value = previous;
@@ -272,8 +270,4 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
 
 function numberInput(id: string, min: string, step: string): HTMLInputElement {
   return el("input", { id, type: "number", min, step, value: "0", inputmode: "decimal" });
-}
-
-function field(label: string, control: HTMLElement): HTMLElement {
-  return el("label", { class: "field", for: control.id }, el("span", {}, label), control);
 }

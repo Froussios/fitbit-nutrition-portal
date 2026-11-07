@@ -9,10 +9,11 @@ export interface DiaryTableOptions {
   readonly pendingIds: ReadonlySet<string>;
   /** Entries deleted in this session: still shown, crossed out, with an Undo. They do not count towards the totals. */
   readonly deleted: readonly DiaryEntry[];
-  /** IDs of the entries with a delete or undo under way: disabled until it succeeds or fails. */
-  readonly busyIds: ReadonlySet<string>;
-  /** Deleting and undoing need a connection, so the buttons are disabled while the browser is offline. */
+  /** The entries with a delete, undo or edit under way, by ID, each with the tag to show: disabled until it succeeds or fails. */
+  readonly busy: ReadonlyMap<string, string>;
+  /** These actions need a connection, so the buttons are disabled while the browser is offline. */
   readonly offline: boolean;
+  readonly onEdit: (entry: DiaryEntry) => void;
   readonly onDelete: (entry: DiaryEntry) => void;
   readonly onUndo: (entry: DiaryEntry) => void;
 }
@@ -31,28 +32,39 @@ function lockIcon(): SVGElement {
   return svg;
 }
 
+function pencilIcon(): SVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("fill", "currentColor");
+  path.setAttribute("d", "M11.3 1.3a1.5 1.5 0 0 1 2.1 0l1.3 1.3a1.5 1.5 0 0 1 0 2.1l-1.2 1.2-3.4-3.4ZM9 3.6 12.4 7l-7.6 7.6-4 .8.8-4Z");
+  svg.append(path);
+  return svg;
+}
+
 /**
  * Stands in for the delete button on an entry from another app, which the write scope does not cover.
  * A tap or a key opens the explanation, since a title alone never shows on a touch screen.
  */
 function notOwnedMark(e: DiaryEntry): DocumentFragment {
-  const note = e.sourceLabel ? `Logged by ${e.sourceLabel}, not this app, so it can't be deleted here.` : "Logged by another app, so it can't be deleted here.";
+  const note = e.sourceLabel ? `Logged by ${e.sourceLabel}, not this app, so it can't be changed here.` : "Logged by another app, so it can't be changed here.";
   const id = `not-owned-${e.id}`;
   const mark = document.createDocumentFragment();
   mark.append(
-    el("button", { type: "button", class: "icon not-owned", "data-entry": e.id, title: note, "aria-label": `Why ${e.displayName} can't be deleted`, popovertarget: id }, lockIcon()),
+    el("button", { type: "button", class: "icon not-owned", "data-entry": e.id, title: note, "aria-label": `Why ${e.displayName} can't be changed`, popovertarget: id }, lockIcon()),
     el("div", { id, class: "not-owned-note", popover: "auto" }, note),
   );
   return mark;
 }
 
 /** What a row is going through, if anything. */
-function rowTag(id: string, deleted: ReadonlySet<string>, busy: ReadonlySet<string>, pending: ReadonlySet<string>): HTMLElement | undefined {
-  const text = deleted.has(id) ? "deleted" : busy.has(id) ? "deleting…" : pending.has(id) ? "syncing" : undefined;
+function rowTag(id: string, deleted: ReadonlySet<string>, busy: ReadonlyMap<string, string>, pending: ReadonlySet<string>): HTMLElement | undefined {
+  const text = deleted.has(id) ? "deleted" : (busy.get(id) ?? (pending.has(id) ? "syncing" : undefined));
   return text ? el("span", { class: "tag" }, text) : undefined;
 }
 
-export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offline, onDelete, onUndo }: DiaryTableOptions): HTMLElement {
+export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, onEdit, onDelete, onUndo }: DiaryTableOptions): HTMLElement {
   if (entries.length === 0 && deleted.length === 0) {
     return el("p", { class: "empty" }, "Nothing logged today yet.");
   }
@@ -74,10 +86,10 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offlin
         ...[...entries, ...deleted].sort(byTime).map((e) =>
           el(
             "tr",
-            { class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busyIds.has(e.id)) && "pending"].filter(Boolean).join(" ") || undefined },
+            { class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busy.has(e.id)) && "pending"].filter(Boolean).join(" ") || undefined },
             el("td", {}, fmtTime(e.start)),
             el("td", {}, mealLabel(e.mealType)),
-            el("td", {}, e.displayName, rowTag(e.id, deletedIds, busyIds, pendingIds)),
+            el("td", {}, e.displayName, rowTag(e.id, deletedIds, busy, pendingIds)),
             el("td", { class: "num" }, e.amount ?? "–"),
             el("td", { class: "num" }, fmtEnergy(e.profile.energyKcal)),
             el("td", { class: "num" }, fmtGrams(e.profile.nutrients.protein)),
@@ -86,21 +98,32 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busyIds, offlin
             el(
               "td",
               {},
-              // The write scope only covers entries this app created.
-              !e.own
-                ? notOwnedMark(e)
-                : deletedIds.has(e.id)
-                  ? el(
-                      "button",
-                      { type: "button", class: "icon undo", "data-entry": e.id, title: offline ? "Undoing needs a connection" : "Undo delete (logs this entry again)", "aria-label": `Undo deleting ${e.displayName}`, "aria-busy": String(busyIds.has(e.id)), disabled: offline || busyIds.has(e.id), onclick: () => onUndo(e) },
-                      // U+FE0E: as text, because some phones would otherwise draw this one as an emoji.
-                      "↩\uFE0E",
-                    )
-                  : el(
-                      "button",
-                      { type: "button", class: "icon", "data-entry": e.id, title: offline ? "Deleting needs a connection" : "Delete entry", "aria-label": `Delete ${e.displayName}`, "aria-busy": String(busyIds.has(e.id)), disabled: offline || busyIds.has(e.id), onclick: () => onDelete(e) },
-                      "✕",
-                    ),
+              el(
+                "div",
+                { class: "row-actions" },
+                // The write scope only covers entries this app created.
+                !e.own
+                  ? notOwnedMark(e)
+                  : deletedIds.has(e.id)
+                    ? el(
+                        "button",
+                        { type: "button", class: "icon undo", "data-entry": e.id, title: offline ? "Undoing needs a connection" : "Undo delete (logs this entry again)", "aria-label": `Undo deleting ${e.displayName}`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onUndo(e) },
+                        // U+FE0E: as text, because some phones would otherwise draw this one as an emoji.
+                        "↩\uFE0E",
+                      )
+                    : [
+                        el(
+                          "button",
+                          { type: "button", class: "icon edit", "data-entry-edit": e.id, title: offline ? "Editing needs a connection" : "Edit entry", "aria-label": `Edit ${e.displayName}`, disabled: offline || busy.has(e.id), onclick: () => onEdit(e) },
+                          pencilIcon(),
+                        ),
+                        el(
+                          "button",
+                          { type: "button", class: "icon", "data-entry": e.id, title: offline ? "Deleting needs a connection" : "Delete entry", "aria-label": `Delete ${e.displayName}`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onDelete(e) },
+                          "✕",
+                        ),
+                      ],
+              ),
             ),
           ),
         ),
