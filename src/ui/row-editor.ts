@@ -174,7 +174,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   for (const control of [mealSelect, amountCell, actions]) {
     control.addEventListener("keydown", (ev) => {
       const { key, target } = ev as KeyboardEvent;
-      if (key === "Escape" && !saving) onCancel();
+      // On a dropdown, Escape may be closing its list, which must not discard what was typed.
+      if (key === "Escape" && !saving && !(target instanceof HTMLSelectElement)) onCancel();
       if (key === "Enter" && target === quantity) submit();
     });
   }
