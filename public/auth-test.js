@@ -87,7 +87,12 @@
     attempt = undefined;
     clearTimeout(current.timer);
     $("status").textContent = "Checking the answer…";
-    const results = await check(message, current);
+    let results;
+    try {
+      results = await check(message, current);
+    } catch (e) {
+      results = { browser: navigator.userAgent, passed: false, checkFailed: e.name, answerArrivedThrough: message.via, googleError: message.answer.error ?? null };
+    }
     $("status").textContent = results.passed ? "Passed." : "Did not pass. Please send these results.";
     $("results").textContent = JSON.stringify(results, null, 2);
     $("results").hidden = false;
