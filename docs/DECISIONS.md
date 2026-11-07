@@ -220,9 +220,10 @@ delete the old one. If a food's record has changed since logging, an amount edit
 chosen is not stored, so "1 × can" reopens as 375 ml. There is no Undo for an edit: the user edits the entry back. The
 Google Health app sees a delete and a new entry. The amount of every entry this app wrote can be changed. It is in g or
 ml when the entry states one, in the food's units when its food is found, and otherwise a multiple of the entry as logged
-("2 × this entry" doubles every value), which needs no amount at all. Google does not specify how it words its unit
-names, so they are read loosely, and how real entries word them is still to be confirmed; the debug log records an entry
-with no readable amount.
+("2 × this entry" doubles every value), which needs no amount at all. Real entries name their unit under `users/me/`,
+while the unit list uses the user's own ID (V12), so units are matched whichever user path they are written under. Unit
+names are also read loosely, since Google does not specify them, and any entry with no readable amount is noted in the
+debug log.
 **Reopen if.** Identified logs become practical ([#29](https://github.com/Froussios/fitbit-nutrition-portal/issues/29)), or scaling turns out to be common because lookups fail or Google does not keep our IDs.
 
 ### DR-23 The app is for desktop browsers; phones are not a requirement
