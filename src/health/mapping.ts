@@ -101,6 +101,21 @@ export interface LoggedAmount {
   readonly unit: BaseUnit;
 }
 
+/**
+ * The name this app knows for a unit resource. Google lists units under the user's own ID
+ * (`users/<user ID>/dataTypes/food-measurement-unit/dataPoints/147`), but entries refer to the same
+ * unit under `users/me/`, so the user part cannot be compared as written.
+ */
+function nameOfUnit(unitNames: ReadonlyMap<string, string> | undefined, unit: string): string | undefined {
+  if (!unitNames) return undefined;
+  const exact = unitNames.get(unit);
+  if (exact !== undefined) return exact;
+  const anyUser = (name: string) => name.replace(/^users\/[^/]+\//, "users/me/");
+  const wanted = anyUser(unit);
+  for (const [name, displayName] of unitNames) if (anyUser(name) === wanted) return displayName;
+  return undefined;
+}
+
 /** Which base unit a name means. Loose, because the API's wording is not specified: "gram", "Grams", "gram (g)". */
 function baseUnitNamed(name: string | undefined): BaseUnit | undefined {
   const n = name?.trim().toLowerCase() ?? "";
@@ -117,7 +132,7 @@ function baseUnitNamed(name: string | undefined): BaseUnit | undefined {
 export function loggedAmount(log: NutritionLog, unitNames?: ReadonlyMap<string, string>): LoggedAmount | undefined {
   if (log.serving) {
     const { amount, foodMeasurementUnit, foodMeasurementUnitDisplayName } = log.serving;
-    const unit = baseUnitNamed(unitNames?.get(foodMeasurementUnit)) ?? baseUnitNamed(foodMeasurementUnitDisplayName);
+    const unit = baseUnitNamed(nameOfUnit(unitNames, foodMeasurementUnit)) ?? baseUnitNamed(foodMeasurementUnitDisplayName);
     const value = Number(amount);
     return unit && value > 0 ? { amount: value, unit } : undefined;
   }
@@ -279,7 +294,7 @@ const UNIT_ABBREVIATIONS: Record<string, string> = { gram: "g", grams: "g", mill
 function servingText(log: NutritionLog, unitNames?: ReadonlyMap<string, string>): string | undefined {
   const s = log.serving;
   if (!s || s.amount === undefined) return undefined;
-  const name = (s.foodMeasurementUnitDisplayName ?? unitNames?.get(s.foodMeasurementUnit) ?? "").trim();
+  const name = (s.foodMeasurementUnitDisplayName ?? nameOfUnit(unitNames, s.foodMeasurementUnit) ?? "").trim();
   return `${formatNumber(s.amount)} ${UNIT_ABBREVIATIONS[name.toLowerCase()] ?? name}`.trim();
 }
 
