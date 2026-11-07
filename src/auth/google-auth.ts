@@ -1,19 +1,26 @@
 /**
- * Browser-only Google OAuth using Google Identity Services (token model).
+ * Browser-only Google sign-in. There is no client secret and no refresh token: a
+ * popup returns an access token and an ID token, each lasting about an hour. When they
+ * expire, the user clicks "Continue" and Google issues new ones (DR-24).
  *
- * There is no backend, so there is no client secret and no refresh token: the
- * app gets an access token (about 1 hour) from a Google popup. When it
- * expires, the user clicks "Continue" and Google re-issues one, normally
- * without showing the consent screen again.
+ * The app asks Google directly because Google's token client never returns an ID token.
+ * Google answers on auth-callback.html, which passes the answer back to this window.
  */
 
 import { logger } from "../debug/log";
+import { readSignInAnswer, signInUrl } from "./sign-in-answer";
 
 const log = logger("auth");
-const GIS_SRC = "https://accounts.google.com/gsi/client";
+const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const STORAGE_KEY = "foodDiary.token";
+/** The last account signed in with, so that Google need not ask again. Not a secret. */
+const ACCOUNT_KEY = "foodDiary.account";
+const POPUP_NAME = "food-diary-sign-in";
 /** Treat tokens as expired a little early so in-flight requests don't fail. */
 const EXPIRY_MARGIN_MS = 60_000;
+const POPUP_CHECK_MS = 500;
+/** The answer is sent just before the popup closes, so a closed popup gets this long for it to arrive. */
+const CLOSED_GRACE_MS = 1_000;
 
 export class SignInRequiredError extends Error {
   override name = "SignInRequiredError";
@@ -24,38 +31,21 @@ export class SignInRequiredError extends Error {
 
 interface StoredToken {
   accessToken: string;
+  idToken: string;
+  subject: string;
   expiresAt: number;
   scope: string;
   clientId: string;
 }
 
-let gisLoading: Promise<void> | undefined;
-
-export function loadGoogleIdentityServices(): Promise<void> {
-  if (window.google?.accounts?.oauth2) return Promise.resolve();
-  gisLoading ??= new Promise<void>((resolve, reject) => {
-    log.debug(`Loading Google Identity Services from ${GIS_SRC}`);
-    const s = document.createElement("script");
-    s.src = GIS_SRC;
-    s.async = true;
-    s.onload = () => {
-      log.info("Google Identity Services loaded");
-      resolve();
-    };
-    s.onerror = () => {
-      gisLoading = undefined;
-      log.error(`Could not load ${GIS_SRC} (network error or blocked by an extension)`);
-      reject(new Error("Could not load Google sign-in. Check your connection or content blockers."));
-    };
-    document.head.append(s);
-  });
-  return gisLoading;
+function randomValue(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export class GoogleAuth {
-  private client?: google.accounts.oauth2.TokenClient;
   private token?: StoredToken;
-  private pending?: { resolve: () => void; reject: (e: Error) => void };
+  /** Ends the sign-in under way, if any. */
+  private cancelPending?: (reason: Error) => void;
   private readonly listeners = new Set<() => void>();
   private expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -67,7 +57,7 @@ export class GoogleAuth {
   ) {
     this.token = this.restore();
     if (this.token) {
-      log.info("Restored access token from this tab's session", {
+      log.info("Restored the sign-in from this tab's session", {
         expiresAt: new Date(this.token.expiresAt).toISOString(),
         valid: this.isSignedIn,
         scopes: this.grantedScopes,
@@ -94,28 +84,69 @@ export class GoogleAuth {
     return () => this.listeners.delete(listener);
   }
 
-  /** Must run inside a user gesture (click), or the popup is blocked. */
-  async signIn(prompt: "" | "consent" | "select_account" = ""): Promise<void> {
-    await loadGoogleIdentityServices();
-    if (!this.client) {
-      log.info("Creating token client", { clientId: this.clientId, scopes: this.scopes, origin: location.origin });
-      this.client = google.accounts.oauth2.initTokenClient({
-        client_id: this.clientId,
-        scope: this.scopes.join(" "),
-        callback: (r) => this.handleToken(r),
-        error_callback: (e) => {
-          log.error(`Sign-in popup error: ${e.type}`, e);
-          this.settle(new Error(popupErrorMessage(e.type)));
-        },
-      });
-    }
-    const done = new Promise<void>((resolve, reject) => {
-      this.pending?.reject(new Error("Sign-in superseded by a new attempt."));
-      this.pending = { resolve, reject };
+  /** Must run inside a user gesture (click), or the popup is blocked: nothing may wait before it opens. */
+  signIn(prompt: "" | "consent" | "select_account" = ""): Promise<void> {
+    if (!navigator.onLine) return Promise.reject(new Error("You are offline. Signing in needs a connection."));
+
+    const state = randomValue();
+    const nonce = randomValue();
+    const loginHint = prompt === "select_account" ? undefined : this.lastAccount();
+    const url = signInUrl({
+      clientId: this.clientId,
+      redirectUri: new URL("auth-callback.html", location.href).href,
+      scopes: this.scopes,
+      state,
+      nonce,
+      prompt: prompt || undefined,
+      loginHint,
     });
-    log.info(`Requesting access token (prompt: "${prompt}")`);
-    this.client.requestAccessToken({ prompt });
-    return done;
+    log.info(`Opening the Google sign-in popup (prompt: "${prompt}")`, { scopes: this.scopes, origin: location.origin, accountHint: Boolean(loginHint) });
+    const popup = window.open(url, POPUP_NAME, "width=500,height=650");
+    if (!popup) {
+      log.error("The browser blocked the sign-in popup");
+      return Promise.reject(new Error("The Google sign-in popup was blocked. Allow popups for this site and try again."));
+    }
+
+    this.cancelPending?.(new Error("Sign-in superseded by a new attempt."));
+    return new Promise<void>((resolve, reject) => {
+      let closedTimer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        window.removeEventListener("message", onMessage);
+        clearInterval(closedCheck);
+        clearTimeout(closedTimer);
+        this.cancelPending = undefined;
+      };
+      const onMessage = (event: MessageEvent) => {
+        if (event.origin !== location.origin || event.source !== popup) return;
+        const data = event.data as { type?: unknown; answer?: Record<string, string> } | null;
+        if (data?.type !== "google-sign-in" || !data.answer) return;
+        if (data.answer["state"] !== state) {
+          log.warn("Ignored a sign-in answer with the wrong state");
+          return;
+        }
+        finish();
+        try {
+          this.accept(data.answer, nonce);
+          resolve();
+        } catch (e) {
+          reject(e instanceof Error ? e : new Error("Google sign-in failed."));
+        }
+      };
+      const closedCheck = setInterval(() => {
+        if (!popup.closed) return;
+        clearInterval(closedCheck);
+        closedTimer = setTimeout(() => {
+          finish();
+          log.warn("The sign-in popup closed without an answer");
+          reject(new Error("The Google sign-in window was closed before finishing."));
+        }, CLOSED_GRACE_MS);
+      }, POPUP_CHECK_MS);
+      this.cancelPending = (reason) => {
+        finish();
+        reject(reason);
+      };
+      window.addEventListener("message", onMessage);
+    });
   }
 
   /** Returns a valid access token, or throws SignInRequiredError (the UI then asks for a click). */
@@ -131,42 +162,42 @@ export class GoogleAuth {
     return this.token.accessToken;
   }
 
+  /** The proof of identity for our own API, which grants no access to Google's (DR-24). */
+  getIdToken(): string {
+    if (!this.isSignedIn || !this.token) throw new SignInRequiredError();
+    return this.token.idToken;
+  }
+
   signOut(): void {
     log.info("Signing out and revoking the access token");
-    const t = this.token?.accessToken;
+    this.cancelPending?.(new Error("Signed out."));
+    const accessToken = this.token?.accessToken;
     this.token = undefined;
     this.persist();
+    this.forgetAccount();
     this.scheduleExpiry();
-    if (t && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(t, () => undefined);
+    if (accessToken) void revoke(accessToken);
     this.emit();
   }
 
-  private handleToken(r: google.accounts.oauth2.TokenResponse): void {
-    if (r.error) {
-      log.error(`Token response error: ${r.error}`, { error: r.error, description: r.error_description, uri: r.error_uri });
-      this.settle(new Error(r.error_description || r.error));
-      return;
+  /** Throws if the answer is not good enough to sign in with. */
+  private accept(answer: Readonly<Record<string, string>>, nonce: string): void {
+    let tokens;
+    try {
+      tokens = readSignInAnswer(answer, { clientId: this.clientId, nonce, now: Date.now() });
+    } catch (e) {
+      log.error("Google's sign-in answer was refused", { error: e instanceof Error ? e.message : "unknown" });
+      throw e;
     }
-    const missing = this.requiredScopes.filter((s) => !google.accounts.oauth2.hasGrantedAllScopes(r, s));
-    // Never log r.access_token.
-    log.info("Access token received", {
-      expiresInSeconds: Number(r.expires_in),
-      grantedScopes: r.scope.split(" "),
-      missingRequiredScopes: missing,
-    });
-    if (missing.length) {
-      this.settle(new Error("Google Health nutrition access was not granted. Sign in again and tick the nutrition permission."));
-      return;
-    }
-    this.token = {
-      accessToken: r.access_token,
-      expiresAt: Date.now() + Number(r.expires_in) * 1000,
-      scope: r.scope,
-      clientId: this.clientId,
-    };
+    const granted = tokens.scope.split(" ");
+    const missing = this.requiredScopes.filter((s) => !granted.includes(s));
+    // Never log the tokens.
+    log.info("Signed in", { expiresAt: new Date(tokens.expiresAt).toISOString(), grantedScopes: granted, missingRequiredScopes: missing });
+    if (missing.length) throw new Error("Google Health nutrition access was not granted. Sign in again and tick the nutrition permission.");
+    this.token = { ...tokens, clientId: this.clientId };
     this.persist();
+    this.rememberAccount(tokens.subject);
     this.scheduleExpiry();
-    this.settle();
     this.emit();
   }
 
@@ -186,13 +217,6 @@ export class GoogleAuth {
     }, Math.max(0, delay) + 50);
   }
 
-  private settle(error?: Error): void {
-    const p = this.pending;
-    this.pending = undefined;
-    if (error) p?.reject(error);
-    else p?.resolve();
-  }
-
   private emit(): void {
     for (const l of this.listeners) l();
   }
@@ -202,7 +226,8 @@ export class GoogleAuth {
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       const t = raw ? (JSON.parse(raw) as StoredToken) : undefined;
-      return t && t.clientId === this.clientId ? t : undefined;
+      // One stored before the app asked for an ID token has none, so that user signs in again.
+      return t && t.clientId === this.clientId && t.idToken ? t : undefined;
     } catch {
       return undefined;
     }
@@ -216,15 +241,47 @@ export class GoogleAuth {
       // Storage blocked: the token lives in memory only.
     }
   }
+
+  private lastAccount(): string | undefined {
+    if (this.token) return this.token.subject;
+    try {
+      return localStorage.getItem(ACCOUNT_KEY) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private rememberAccount(subject: string): void {
+    try {
+      localStorage.setItem(ACCOUNT_KEY, subject);
+    } catch {
+      // Storage blocked: Google asks which account to use.
+    }
+  }
+
+  private forgetAccount(): void {
+    try {
+      localStorage.removeItem(ACCOUNT_KEY);
+    } catch {
+      // Storage blocked: nothing was remembered.
+    }
+  }
 }
 
-function popupErrorMessage(type: string): string {
-  switch (type) {
-    case "popup_failed_to_open":
-      return "The Google sign-in popup was blocked. Allow popups for this site and try again.";
-    case "popup_closed":
-      return "The Google sign-in window was closed before finishing.";
-    default:
-      return `Google sign-in failed (${type}).`;
+/**
+ * Best effort. Google documents this endpoint as having no CORS support, so the
+ * response cannot be relied on, and the token expires within the hour anyway.
+ */
+async function revoke(accessToken: string): Promise<void> {
+  try {
+    await fetch(REVOKE_URL, {
+      method: "POST",
+      mode: "no-cors",
+      keepalive: true,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: accessToken }),
+    });
+  } catch {
+    log.warn("Could not reach Google to revoke the access token");
   }
 }

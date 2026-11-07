@@ -149,8 +149,8 @@ export class HealthClient {
       res = await send(await this.getToken());
       if (res.status === 401) {
         log.warn(`${call}: 401, the access token was rejected`, { body: truncate(await res.text()) });
-        // Ask the provider for a fresh token. The current Google Identity Services provider cannot
-        // refresh silently and throws SignInRequiredError (the UI then asks for a click); a
+        // Ask the provider for a fresh token. The current popup sign-in cannot refresh
+        // silently and throws SignInRequiredError (the UI then asks for a click); a
         // refresh-token provider (milestone M3) would return a new token, and we retry once.
         res = await send(await this.getToken({ forceRefresh: true }));
       }

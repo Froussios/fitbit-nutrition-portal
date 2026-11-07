@@ -12,7 +12,10 @@ export const NUTRITION_READ_SCOPE = "https://www.googleapis.com/auth/googlehealt
 /** Create entries, and edit or delete the entries this app created. */
 export const NUTRITION_WRITE_SCOPE = "https://www.googleapis.com/auth/googlehealth.nutrition.writeonly";
 
-export const SCOPES = [NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE] as const;
+/** Adds an ID token to the sign-in: proof of who the user is, with no access to their data (DR-24). */
+export const OPENID_SCOPE = "openid";
+
+export const SCOPES = [OPENID_SCOPE, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE] as const;
 
 const CLIENT_ID_KEY = "foodDiary.clientId";
 

@@ -766,7 +766,7 @@ function renderSetup(canCancel = false) {
       "This build has no OAuth client ID. Set VITE_GOOGLE_CLIENT_ID at build time, or paste the app's Web client ID here for local testing. " +
         "This page's origin (",
       el("code", {}, location.origin),
-      ") must be one of the client's Authorized JavaScript origins. See the README.",
+      ") must be one of the client's Authorized JavaScript origins, and its auth-callback.html one of the Authorized redirect URIs. See the README.",
     ),
     el("label", { class: "field", for: "client-id" }, el("span", {}, "OAuth client ID"), clientId),
     el(

@@ -46,7 +46,7 @@ flowchart LR
     UI["UI"] --> Core["Domain core<br/>units · nutrients · food model"]
     UI --> HC["Health client"]
     UI --> FC["FoodCatalog interface"]
-    Auth["Google Identity Services<br/>token client"] --> HC
+    Auth["Google sign-in popup<br/>access token + ID token"] --> HC
   end
   HC -- "Bearer token, CORS" --> GHAPI["Google Health API v4<br/>nutrition-log = the diary"]
   FC --> Fake["M0: local fake data"]
@@ -59,7 +59,7 @@ flowchart LR
 | Domain core | `src/core/` | Pure TypeScript, no I/O, unit-tested. The unit model, the nutrient model (each nutrient maps to an Open Food Facts key and to a Google Health slot), `FoodItem`, the Open Food Facts record normaliser, ID encoding and time helpers. |
 | Google Health client | `src/health/` | Thin `fetch` wrapper typed from the discovery document. Maps a `LogDraft` to a `DataPoint` and a `DataPoint` to a `DiaryEntry`. |
 | Food data | `src/food/` | `FoodCatalog` interface, implemented in M0 by `LocalFoodCatalog` over fake data (section 6). |
-| Auth | `src/auth/` | Google Identity Services token model (section 5). |
+| Auth | `src/auth/`, `public/auth-callback.*` | Popup sign-in returning an access token and an ID token (section 5). |
 | UI | `src/ui/`, `src/main.ts` | Plain TypeScript and DOM. Three screens; no framework yet. |
 
 Hosting is the static build (`vite build`), deployed to GitHub Pages by `.github/workflows/ci.yml`.
@@ -145,8 +145,8 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
   until it expires. That reaches meal prep data only, not the diary.
 * **One sign-in.** One request to Google returns both tokens (V11), so they are always for the same account, and **Continue**
   renews both. The app opens its own popup, and a callback page with no other scripts passes the answer back through
-  `window.opener`. It never uses a `BroadcastChannel`, because `froussios.github.io` is shared with other Pages sites. The
-  browser checks `state` and `nonce`. Passing `sub` as `login_hint` on renewal should skip the account chooser; to be tested. If a renewal
+  `window.opener` (section 5.1). It never uses a `BroadcastChannel`, because `froussios.github.io` is shared with other Pages
+  sites. If a renewal
   returns a different `sub`, the user switched account, so the app drops the meal prep state it holds for the previous one.
 * **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
   so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
@@ -169,11 +169,19 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
 
 ## 5. Authentication
 
-### 5.1 Current: Google Identity Services, token model
+### 5.1 Current: a popup returning two tokens
 
-A popup returns an access token that lasts about an hour. It is kept in `sessionStorage`. When it expires
-the user clicks **Continue**; the popup normally closes by itself because consent is remembered. After
-sign-in the app calls `users.getIdentity` to detect `ACCOUNT_NOT_LINKED`.
+One request to Google (`response_type=token id_token`) returns an access token and an ID token, each lasting
+about an hour (V11). The app asks directly because Google's token client never returns an ID token, although Google
+recommends its library for this flow (DR-24). Google answers on `auth-callback.html`, a page with no other scripts, which
+removes the tokens from its URL and passes them to the window that opened it. The app accepts the answer only from that
+window on its own origin with the right `state`, and checks the ID token's `aud`, `iss`, `exp` and `nonce`. It keeps the
+tokens in `sessionStorage`. The access token is only ever sent to Google, and the ID token only to our own API.
+
+When they expire the user clicks **Continue**. The app passes the account's `sub` as `login_hint`, kept in `localStorage`
+until the user signs out, so that Google should not ask which account to use. Consent is remembered. After sign-in the app
+calls `users.getIdentity` to detect `ACCOUNT_NOT_LINKED`. Signing out revokes the access token, as best it can, because
+Google documents no CORS support for revoking.
 
 ### 5.2 Long-lived sessions: deferred to milestone 3
 
@@ -189,12 +197,11 @@ Two more constraints apply to every option:
 * While the OAuth app is in **Testing** status, refresh tokens die after 7 days (V9). Long-lived login
   also requires moving the app to **In production**. Unverified, that means a 100-user cap and an
   "unverified app" warning. Verified, it means a security assessment.
-* A silent refresh in the background (no click) is not possible with the Google Identity Services token
-  model: it needs a user gesture for its popup.
+* A silent refresh in the background (no click) is not possible with the popup: it needs a user gesture.
 
 | Option | Long-lived? | What it costs |
 |---|---|---|
-| A0. Status quo (token model) | No, hourly click | Nothing |
+| A0. Status quo (popup) | No, hourly click | Nothing |
 | A1. Client secret shipped in the static app (code + PKCE from the browser; the token endpoint allows CORS) | Yes, in Production status | Breaks Google's rule that web-client secrets stay confidential. Anyone can copy the secret and pose as the app's client. Refresh tokens sit in browser storage. Would fail the security assessment needed above 100 users. |
 | A2. Stateless token broker: one serverless function with `/token` (code → tokens) and `/refresh`. It holds the secret and stores nothing; the refresh token stays with the browser (an encrypted HttpOnly cookie is safest). | Yes, in Production status | A deployed function, so a small exception to "no backend", but with no database and no user data at rest. |
 
