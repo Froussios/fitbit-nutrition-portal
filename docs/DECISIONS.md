@@ -32,7 +32,7 @@ Android companions and the legacy Fitbit Web API are out of scope.
 
 ### DR-04 Read the whole diary; write and delete only our own entries
 **Decision.** Request `googlehealth.nutrition.readonly` and `googlehealth.nutrition.writeonly`. Show
-all sources; offer delete (and later edit) only on entries whose `dataSource.application.googleWebClientId`
+all sources; offer edit and delete only on entries whose `dataSource.application.googleWebClientId`
 is ours. If the user withholds the read scope, fall back to our own entries with a notice.
 **Why.** Totals must match the Google Health app (V2, V3). The write scope covers only data the app added (V4).
 
@@ -42,7 +42,7 @@ Client-supplied IDs `e-<time>-<rand>-<source>[-<foodId>]` record which food it w
 `serving` (the API's gram or millilitre unit, keeping the kind of unit the user chose); only if that unit
 cannot be resolved does the amount go into the display name.
 **Why.** `NutritionLog` has no metadata field (V7); IDs enable "log again" and meals without a database.
-**Consequence.** Anonymous logs cannot be updated: edit = delete and recreate ([#17](https://github.com/Froussios/fitbit-nutrition-portal/issues/17), [#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18)).
+**Consequence.** Anonymous logs cannot be updated, so an edit writes a corrected copy and deletes the original (DR-22).
 **Reopen if.** Identified logs become practical ([#29](https://github.com/Froussios/fitbit-nutrition-portal/issues/29)).
 
 ### DR-06 Unit model
@@ -218,7 +218,8 @@ typically 5% out, and a value rounded to 0 stays 0. A new ID because whether a d
 delete the old one. If a food's record has changed since logging, an amount edit takes the new values. The unit originally
 chosen is not stored, so "1 × can" reopens as 375 ml. There is no Undo for an edit: the user edits the entry back. The
 Google Health app sees a delete and a new entry. An amount can be changed if the entry states one in g or ml, or if its food
-is found. Otherwise, as with a meal prep portion, only the meal can be changed, and the debug log says why.
+is found. Otherwise, as with a meal prep portion, only the meal can be changed, and the debug log says why. Google does not
+specify how it words its unit names, so they are read loosely, and how real entries word them is still to be confirmed.
 **Reopen if.** Identified logs become practical ([#29](https://github.com/Froussios/fitbit-nutrition-portal/issues/29)), or scaling turns out to be common because lookups fail or Google does not keep our IDs.
 
 ### DR-23 The app is for desktop browsers; phones are not a requirement
