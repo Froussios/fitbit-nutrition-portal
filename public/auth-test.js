@@ -1,0 +1,138 @@
+// Temporary test for issue #55: does one Google sign-in return an access token and an ID token?
+(() => {
+  const CALLBACK = new URL("auth-callback.html", location.href).href;
+  const SCOPES = ["openid", "https://www.googleapis.com/auth/googlehealth.nutrition.readonly", "https://www.googleapis.com/auth/googlehealth.nutrition.writeonly"];
+  const clientId = new URLSearchParams(location.search).get("client_id");
+  const $ = (id) => document.getElementById(id);
+  let attempt;
+
+  const random = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  const bytes = (part) => Uint8Array.from(atob(part.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+  const json = (part) => JSON.parse(new TextDecoder().decode(bytes(part)));
+
+  /** The same check the API will make: Google's signature over the token. */
+  async function signatureValid(idToken) {
+    const [header, payload, signature] = idToken.split(".");
+    const { keys } = await (await fetch("https://www.googleapis.com/oauth2/v3/certs")).json();
+    const jwk = keys.find((k) => k.kid === json(header).kid);
+    if (!jwk) return false;
+    const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+    return crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, bytes(signature), new TextEncoder().encode(`${header}.${payload}`));
+  }
+
+  async function status(accessToken, path) {
+    let res;
+    try {
+      res = await fetch(`https://health.googleapis.com/v4/${path}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    } catch (e) {
+      return { httpStatus: `no answer: ${e.message}` };
+    }
+    return { httpStatus: res.status, body: res.ok ? await res.json().catch(() => undefined) : undefined };
+  }
+
+  async function check({ answer, via }, { nonce, popup, started }) {
+    const results = {
+      browser: navigator.userAgent,
+      secondsUntilAnswer: Math.round((performance.now() - started) / 100) / 10,
+      answerArrivedThrough: via,
+      googleError: answer.error ?? null,
+      grantedScopes: answer.scope?.split(" ") ?? [],
+      accessTokenReturned: Boolean(answer.access_token),
+      idTokenReturned: Boolean(answer.id_token),
+    };
+    if (answer.id_token) {
+      const claims = json(answer.id_token.split(".")[1]);
+      Object.assign(results, {
+        idTokenIssuerValid: claims.iss === "https://accounts.google.com" || claims.iss === "accounts.google.com",
+        idTokenAudienceIsThisApp: claims.aud === clientId,
+        idTokenNonceMatches: claims.nonce === nonce,
+        idTokenHasSub: Boolean(claims.sub),
+        idTokenSubEnding: claims.sub?.slice(-4),
+        idTokenMinutesValid: Math.round((claims.exp - claims.iat) / 60),
+      });
+      try {
+        results.idTokenSignatureValid = await signatureValid(answer.id_token);
+      } catch (e) {
+        results.idTokenSignatureValid = `not checked: ${e.message}`;
+      }
+      if (answer.access_token) {
+        const identity = await status(answer.access_token, "users/me/identity");
+        results.identityStatus = identity.httpStatus;
+        results.healthUserIdReturned = Boolean(identity.body?.healthUserId);
+        results.healthUserIdEqualsSub = identity.body?.healthUserId === claims.sub;
+      }
+    }
+    if (answer.access_token) {
+      results.accessTokenMinutesValid = Math.round(Number(answer.expires_in) / 60);
+      results.readDiaryStatus = (await status(answer.access_token, "users/me/dataTypes/nutrition-log/dataPoints?pageSize=1")).httpStatus;
+    }
+    // Read last: closing takes a moment after the answer arrives. A cut link reports closed whatever really happened.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    results.popupClosedItself = via === "opener" ? popup.closed : "unknown: look at the screen";
+    results.passed =
+      results.accessTokenReturned &&
+      results.idTokenReturned &&
+      results.idTokenIssuerValid &&
+      results.idTokenAudienceIsThisApp &&
+      results.idTokenNonceMatches &&
+      results.idTokenHasSub &&
+      results.idTokenSignatureValid === true &&
+      results.readDiaryStatus === 200;
+    return results;
+  }
+
+  async function receive(message) {
+    if (message?.type !== "google-sign-in" || !attempt || message.answer?.state !== attempt.state) return;
+    const current = attempt;
+    attempt = undefined;
+    clearTimeout(current.timer);
+    $("status").textContent = "Checking the answer…";
+    const results = await check(message, current);
+    $("status").textContent = results.passed ? "Passed." : "Did not pass. Please send these results.";
+    $("results").textContent = JSON.stringify(results, null, 2);
+    $("results").hidden = false;
+    $("copy").hidden = false;
+  }
+
+  function signIn(prompt) {
+    if (!clientId) {
+      $("status").textContent = "This link has no client_id.";
+      return;
+    }
+    const state = random();
+    const nonce = random();
+    const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    const params = { client_id: clientId, redirect_uri: CALLBACK, response_type: "token id_token", scope: SCOPES.join(" "), state, nonce, ...(prompt ? { prompt } : {}) };
+    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+    const popup = window.open(url, "google-sign-in", "width=500,height=650");
+    if (!popup) {
+      $("status").textContent = "The browser blocked the popup.";
+      return;
+    }
+    if (attempt) clearTimeout(attempt.timer);
+    $("results").hidden = true;
+    $("copy").hidden = true;
+    $("status").textContent = "Waiting for Google…";
+    attempt = {
+      state,
+      nonce,
+      popup,
+      started: performance.now(),
+      timer: setTimeout(() => {
+        $("status").textContent = "No answer after 5 minutes.";
+        attempt = undefined;
+      }, 300_000),
+    };
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.origin === location.origin) void receive(event.data);
+  });
+  new BroadcastChannel("food-diary-sign-in").addEventListener("message", (event) => void receive(event.data));
+  $("sign-in").addEventListener("click", () => signIn(""));
+  $("choose").addEventListener("click", () => signIn("select_account"));
+  $("copy").addEventListener("click", async () => {
+    await navigator.clipboard.writeText($("results").textContent);
+    $("status").textContent = "Copied.";
+  });
+})();

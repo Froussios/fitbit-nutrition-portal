@@ -9,25 +9,6 @@
   </head>
   <body>
     <p id="message">Signing in…</p>
-    <!-- Google's answer arrives here with tokens in the URL, so this page must load no other scripts. -->
-    <script>
-      (() => {
-        const answer = Object.fromEntries([...new URLSearchParams(location.search), ...new URLSearchParams(location.hash.slice(1))]);
-        history.replaceState(null, "", location.pathname);
-        const message = { type: "google-sign-in", answer };
-        // Google's pages can cut the link to the window that opened this one. The channel covers that case.
-        if (window.opener) {
-          window.opener.postMessage({ ...message, via: "opener" }, location.origin);
-        } else {
-          const channel = new BroadcastChannel("food-diary-sign-in");
-          channel.postMessage({ ...message, via: "channel" });
-          channel.close();
-        }
-        window.close();
-        setTimeout(() => {
-          document.getElementById("message").textContent = "Signed in. You can close this tab.";
-        }, 500);
-      })();
-    </script>
+    <script src="auth-callback.js"></script>
   </body>
 </html>
