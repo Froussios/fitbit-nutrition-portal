@@ -3,7 +3,7 @@ import { idFromName, parseEntryId } from "../core/ids";
 import type { LoggedFood } from "../core/logged-foods";
 import { NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "../core/nutrients";
 import { utcOffsetDuration } from "../core/time";
-import { formatNumber, metricAmount, toBaseAmount, type BaseUnit, type Measurable } from "../core/units";
+import { formatNumber, metricAmount, PORTION_PREFIX, toBaseAmount, type BaseUnit, type Measurable } from "../core/units";
 import type { DataPoint, EnergyQuantity, MealType, NutrientQuantity, NutritionLog, WeightQuantity } from "./types";
 
 export const NUTRITION_LOG_PARENT = "users/me/dataTypes/nutrition-log";
@@ -146,6 +146,15 @@ export function basicMeasure(unit: BaseUnit): Measurable {
   return { basis: unit, portions: [] };
 }
 
+/** The portion that stands for an entry as it was logged, when nothing says how much that was: 2 of it doubles every value. */
+export const AS_LOGGED = "this entry";
+export const AS_LOGGED_UNIT = PORTION_PREFIX + AS_LOGGED;
+
+/** What measures an entry whose amount can't be read and whose food isn't found: only "× this entry". */
+export function asLoggedMeasure(): Measurable {
+  return { basis: "g", portions: [{ name: AS_LOGGED, amount: 1, unit: "g" }], portionsOnly: true };
+}
+
 /** Whether a food can convert the entry's amount. It may have lost its density since the entry was logged. */
 export function canConvertLogged(food: Measurable, logged: LoggedAmount): boolean {
   try {
@@ -201,6 +210,13 @@ function scaleLog(log: NutritionLog, factor: number): NutritionLog {
 function atNewAmount(log: NutritionLog, edit: AmountEdit, opts: EditOptions): NutritionLog {
   const logged = loggedAmount(log, opts.unitNames);
   const { food, quantity, unit } = edit;
+  if (!food && unit === AS_LOGGED_UNIT) {
+    // A multiple of the entry: every value scales, the serving too if it has a number, whatever its unit.
+    const out = scaleLog(copyNutritionLogPoint(log, opts.id).nutritionLog!, quantity);
+    const served = Number(out.serving?.amount);
+    if (out.serving && served > 0) out.serving = { ...out.serving, amount: round(served * quantity, 2) };
+    return out;
+  }
   // The food's record needs nothing from the entry. Scaling needs its amount.
   const measure = food ?? (logged && basicMeasure(logged.unit));
   if (!measure) throw new Error("This entry has no amount to change.");

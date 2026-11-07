@@ -1,9 +1,9 @@
 import { amountAi } from "../ai/amount-ai";
 import type { FoodItem } from "../core/food";
-import { convertQuantity } from "../core/units";
+import { convertQuantity, type Measurable } from "../core/units";
 import { describeError, logger } from "../debug/log";
 import type { FoodCatalog } from "../food/catalog";
-import { basicMeasure, canConvertLogged, editedNutritionLogPoint, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, toDiaryEntry, type AmountEdit, type DiaryEntry, type EntryEdit } from "../health/mapping";
+import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, canConvertLogged, editedNutritionLogPoint, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, toDiaryEntry, type AmountEdit, type DiaryEntry, type EntryEdit } from "../health/mapping";
 import type { MealType } from "../health/types";
 import { createAmountField } from "./amount-field";
 import { el, errorMessage } from "./dom";
@@ -50,6 +50,10 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   const logged = loggedAmount(nutritionLog, unitNames);
   /** The food's record, once found. If the entry states an amount, only if the food can convert it. */
   let food: FoodItem | undefined;
+  /** With no amount to read and no food, the amount is a multiple of the entry as logged, so it can always change. */
+  const asLogged = asLoggedMeasure();
+  /** The user has typed in the amount or picked a unit, so a food that arrives later must not replace what they chose. */
+  let touched = false;
   let lookingUp = false;
   const lookup = new AbortController();
   let saving = false;
@@ -75,9 +79,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   const quantity = amountField.input;
   const unitSelect = amountField.unitSelect;
   const fields = el("div", { class: "amount-edit" }, quantity, unitSelect);
-  const fixedAmount = el("span", {}, entry.amount ?? "–");
   const problem = el("div", { class: "edit-error", hidden: true });
-  const amountCell = el("div", {}, fixedAmount, fields, amountField.note, problem);
+  const amountCell = el("div", {}, fields, amountField.note, problem);
 
   const mealSelect = el(
     "select",
@@ -96,22 +99,22 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   // The cells say this by changing; a screen reader needs it said.
   const announce = el("span", { class: "visually-hidden", role: "status" });
 
-  const save = el("button", { type: "button", class: "icon save", title: "Save changes", "aria-label": `Save changes to ${entry.displayName}`, onclick: () => submit() }, "✓︎");
-  const cancel = el("button", { type: "button", class: "icon", title: "Cancel", "aria-label": `Cancel editing ${entry.displayName}`, onclick: () => onCancel() }, "✕");
+  // Words, not icons: Cancel must never look like the delete button it replaces.
+  const save = el("button", { type: "button", class: "primary edit-save", "aria-label": `Save changes to ${entry.displayName}`, onclick: () => submit() }, "Save");
+  const cancel = el("button", { type: "button", class: "link edit-cancel", "aria-label": `Cancel editing ${entry.displayName}`, onclick: () => onCancel() }, "Cancel");
   const actions = el("div", { class: "row-actions" }, save, cancel, announce);
 
-  const canEditAmount = () => Boolean(logged || food);
-  const measure = () => food ?? basicMeasure(logged!.unit);
+  const measure = (): Measurable => food ?? (logged ? basicMeasure(logged.unit) : asLogged);
 
   /** Throws with the reason the amount can't be used. Undefined when the amount stays as logged. */
   const amountEdit = (): AmountEdit | undefined => {
-    if (!canEditAmount()) return undefined;
-    // With no amount stated, an empty field means the user is only changing the meal.
+    // No amount was stated, so an empty field means the user is only changing the meal.
     if (!logged && !quantity.value.trim()) return undefined;
     const read = amountField.read();
     if (read.state === "typing") throw new StillTyping();
     if (read.state === "problem") throw new Error(read.message);
     if (logged && isLoggedAmount(logged, measure(), read.quantity, read.unit)) return undefined;
+    if (read.unit === AS_LOGGED_UNIT && read.quantity === 1) return undefined;
     return { quantity: read.quantity, unit: read.unit, ...(food ? { food } : {}) };
   };
 
@@ -150,9 +153,6 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     problem.hidden = !error;
     announce.textContent = error || (shown ? summary(shown.profile) : "");
     quantity.setAttribute("aria-invalid", String(Boolean(error)));
-    const editable = canEditAmount();
-    fixedAmount.hidden = editable;
-    fields.hidden = !editable;
     save.disabled = blocked || saving || offline;
     cancel.disabled = saving;
     quantity.disabled = saving;
@@ -160,11 +160,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     mealSelect.disabled = saving;
   };
 
-  const showUnits = () => {
-    if (!canEditAmount()) return;
-    // No amount stated: start from the food's own unit, with the field empty.
-    amountField.show(measure(), (m) => ({ text: quantity.value, unit: m.basis }));
-  };
+  /** An entry that stated no amount starts from its food's own unit with the field empty, so nothing changes until the user types. */
+  const showUnits = () => amountField.show(measure(), (m) => ({ text: logged ? quantity.value : "", unit: m.basis }));
 
   function submit() {
     // Enter leaves the focus in the field, so the typed unit has not moved yet.
@@ -174,6 +171,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   }
 
   mealSelect.addEventListener("input", refresh);
+  quantity.addEventListener("input", () => (touched = true));
+  unitSelect.addEventListener("input", () => (touched = true));
 
   for (const control of [mealSelect, amountCell, actions]) {
     control.addEventListener("keydown", (ev) => {
@@ -186,10 +185,11 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
 
   if (logged) {
     amountField.set(String(logged.amount), logged.unit);
-    showUnits();
   } else {
-    log.warn("This entry states no amount in g or ml; it can change only if its food is found", { serving: nutritionLog.serving, name: entry.displayName, ref: entry.ref });
+    amountField.set("1", AS_LOGGED_UNIT);
+    log.warn("This entry states no amount in g or ml, so its amount is offered as a multiple of the entry unless its food is found", { id: entry.id, serving: nutritionLog.serving, name: entry.displayName, ref: entry.ref });
   }
+  showUnits();
 
   // Basic units work straight away. The food only adds to them, so a failed lookup costs its portions and exact values.
   if (entry.ref && entry.ref.source !== "manual") {
@@ -198,7 +198,10 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
       .get(entry.ref, { signal: lookup.signal })
       .then(
         (found) => {
-          if (found && (!logged || canConvertLogged(found, logged))) food = found;
+          if (!found || (logged && !canConvertLogged(found, logged))) return;
+          // Once the user has typed a multiple of the entry, it stays: switching units would throw away what they typed.
+          if (!logged && touched) return;
+          food = found;
         },
         (error: unknown) => {
           if (!lookup.signal.aborted) log.warn("Could not load the food; scaling the logged values instead", { ref: entry.ref, error: describeError(error) });
@@ -224,9 +227,8 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     fat,
     actions,
     focus() {
-      const target = canEditAmount() ? quantity : mealSelect;
-      target.focus();
-      if (target === quantity) quantity.select();
+      quantity.focus();
+      quantity.select();
     },
     focusSave() {
       save.focus();
