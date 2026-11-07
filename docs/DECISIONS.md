@@ -150,8 +150,8 @@ dinner and snack stay available, and the form returns to "No meal" after each en
 unnoticed. The app no longer guesses the meal from the time of day, and no longer offers or writes `ANYTIME`.
 **Why.** Owner decision (6 November 2026). The API marks `mealType` as optional, and describes `ANYTIME` as legacy
 while listing only the other four values for this field.
-**Consequence.** Entries logged without a meal cannot gain one later except by deleting and logging them again:
-Google does not allow editing logs created from a typed-in food. The diary shows them with a dash.
+**Consequence.** Google does not allow editing logs created from a typed-in food, so giving an entry a meal later
+replaces it with a copy (DR-22). The diary shows entries with no meal with a dash.
 **Reopen if.** Google Health rejects or misplaces entries with no meal.
 
 ### DR-18 No offline queue: the app assumes a connection and says when it has none
@@ -201,3 +201,19 @@ still stores kcal. A custom food's energy can still be typed in either unit, wha
 default because it is what Google Health stores and what the food search already showed.
 **Consequence.** The setting does not follow the user to another device or browser.
 **Reopen if.** The app gets more settings than the header can hold, or the choice needs to follow the user across devices.
+
+### DR-22 Editing replaces the entry, and recalculates from the food's record when it can
+**Decision.** An entry's amount and meal can be edited, on this app's own entries. Time and food cannot. Saving writes a
+corrected copy under a new ID, then deletes the original. For a new amount, nutrients are calculated again from the food's
+record, found through the reference in the entry's ID. With no record (a custom food, or a failed lookup), the logged values
+are scaled. A meal-only edit copies the logged values. Any entry offers the units of the kind it was logged in; a food found
+in the catalogue adds its named portions, and the other kind of unit if it has a density.
+**Why.** Owner decisions ([#17](https://github.com/Froussios/fitbit-nutrition-portal/issues/17), 7 November 2026). Logs cannot be updated (DR-05). Writing first means a failure cannot
+lose the entry. The record gives exact values, while the logged ones are rounded to 0.1 mg: scaling 40 g to 400 g leaves iron
+typically 5% out, and a value rounded to 0 stays 0. A new ID because whether a deleted ID can be reused is still open ([#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18)).
+**Consequence.** If the delete fails, both entries stay in the diary and both count in the totals, with an alert saying to
+delete the old one. If a food's record has changed since logging, an amount edit takes the new values. The unit originally
+chosen is not stored, so "1 × can" reopens as 375 ml. There is no Undo for an edit: the user edits the entry back. The
+Google Health app sees a delete and a new entry. An amount with no g or ml to read, such as a meal prep portion, cannot be
+changed here.
+**Reopen if.** Identified logs become practical ([#29](https://github.com/Froussios/fitbit-nutrition-portal/issues/29)), or scaling turns out to be common because lookups fail or Google does not keep our IDs.

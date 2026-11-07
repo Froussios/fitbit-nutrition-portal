@@ -3,8 +3,8 @@ import { idFromName, parseEntryId } from "../core/ids";
 import type { LoggedFood } from "../core/logged-foods";
 import { NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "../core/nutrients";
 import { utcOffsetDuration } from "../core/time";
-import { formatNumber, metricAmount, type BaseUnit } from "../core/units";
-import type { DataPoint, MealType, NutrientQuantity, NutritionLog } from "./types";
+import { formatNumber, metricAmount, toBaseAmount, type BaseUnit, type Measurable } from "../core/units";
+import type { DataPoint, EnergyQuantity, MealType, NutrientQuantity, NutritionLog, WeightQuantity } from "./types";
 
 export const NUTRITION_LOG_PARENT = "users/me/dataTypes/nutrition-log";
 
@@ -93,6 +93,127 @@ export function copyNutritionLogPoint(log: NutritionLog, id: string): DataPoint 
     copy.serving = { foodMeasurementUnit, ...(amount !== undefined ? { amount } : {}) };
   }
   return { name: `${NUTRITION_LOG_PARENT}/dataPoints/${id}`, nutritionLog: copy };
+}
+
+/** How much of a food an entry says was eaten. */
+export interface LoggedAmount {
+  readonly amount: number;
+  readonly unit: BaseUnit;
+}
+
+const SERVING_UNIT_NAMES: Record<string, BaseUnit> = {
+  g: "g",
+  gram: "g",
+  grams: "g",
+  ml: "ml",
+  milliliter: "ml",
+  milliliters: "ml",
+  millilitre: "ml",
+  millilitres: "ml",
+};
+
+/**
+ * The amount in an entry: from `serving`, or from its name when the API's units could not be
+ * resolved. Undefined when it has none to work from, such as a meal prep portion (`Chili (1/6)`).
+ */
+export function loggedAmount(log: NutritionLog, unitNames?: ReadonlyMap<string, string>): LoggedAmount | undefined {
+  if (log.serving) {
+    const { amount, foodMeasurementUnit, foodMeasurementUnitDisplayName } = log.serving;
+    const unit = SERVING_UNIT_NAMES[(foodMeasurementUnitDisplayName ?? unitNames?.get(foodMeasurementUnit) ?? "").trim().toLowerCase()];
+    return unit && amount && amount > 0 ? { amount, unit } : undefined;
+  }
+  const inName = AMOUNT_IN_NAME.exec(log.foodDisplayName ?? "");
+  const amount = Number(inName?.[1]?.replace(/,/g, ""));
+  return inName && amount > 0 ? { amount, unit: inName[2] as BaseUnit } : undefined;
+}
+
+/** What converts amounts for an entry with no food record: the units of the kind it was logged in. */
+export function basicMeasure(unit: BaseUnit): Measurable {
+  return { basis: unit, portions: [] };
+}
+
+/** Whether a food can convert the entry's amount. It may have lost its density since the entry was logged. */
+export function canConvertLogged(food: Measurable, logged: LoggedAmount): boolean {
+  try {
+    toBaseAmount(food, logged.amount, logged.unit);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether an amount is the one logged. Across units, the number in the form was rounded when the unit
+ * changed, so a small difference is not an edit: 40 g shown as 1.41 oz stays 40 g.
+ */
+export function isLoggedAmount(logged: LoggedAmount, measure: Measurable, quantity: number, unit: string): boolean {
+  if (unit === logged.unit) return quantity === logged.amount;
+  return Math.abs(toBaseAmount(measure, quantity, unit) / toBaseAmount(measure, logged.amount, logged.unit) - 1) < 0.005;
+}
+
+export interface AmountEdit {
+  readonly quantity: number;
+  /** A unit key (g, ml, cup...) or `portion:<name>`. */
+  readonly unit: string;
+  /** The food's record, when the catalogue has it. Without one, the logged values are scaled. */
+  readonly food?: FoodItem;
+}
+
+export interface EntryEdit {
+  /** Left out for no meal. */
+  readonly mealType?: MealType;
+  /** Left out when the amount stays as logged, so the nutrients do too. */
+  readonly amount?: AmountEdit;
+}
+
+export interface EditOptions extends BuildOptions {
+  readonly unitNames?: ReadonlyMap<string, string>;
+}
+
+function scaleLog(log: NutritionLog, factor: number): NutritionLog {
+  const energy = (q: EnergyQuantity) => ({ ...q, kcal: round(q.kcal * factor, 1) });
+  const weight = (q: WeightQuantity) => ({ ...q, grams: round(q.grams * factor, 4) });
+  return {
+    ...log,
+    ...(log.energy ? { energy: energy(log.energy) } : {}),
+    ...(log.energyFromFat ? { energyFromFat: energy(log.energyFromFat) } : {}),
+    ...(log.totalFat ? { totalFat: weight(log.totalFat) } : {}),
+    ...(log.totalCarbohydrate ? { totalCarbohydrate: weight(log.totalCarbohydrate) } : {}),
+    ...(log.nutrients ? { nutrients: log.nutrients.map((n) => ({ ...n, quantity: weight(n.quantity) })) } : {}),
+  };
+}
+
+/** An entry's log at a new amount: calculated again from the food's record if there is one, else scaled from the logged values. */
+function atNewAmount(log: NutritionLog, edit: AmountEdit, opts: EditOptions): NutritionLog {
+  const logged = loggedAmount(log, opts.unitNames);
+  if (!logged) throw new Error("This entry has no amount to change.");
+  const copy = copyNutritionLogPoint(log, opts.id).nutritionLog!;
+  const { food, quantity, unit } = edit;
+  // The entry's own unit needs no lookup, and the food stays under the name it was logged with.
+  const servingUnits = { ...opts.servingUnits, ...(log.serving ? { [logged.unit]: log.serving.foodMeasurementUnit } : {}) };
+  const out: NutritionLog = food
+    ? { ...buildNutritionLogPoint({ food, quantity, unit, time: new Date(log.interval.startTime) }, { id: opts.id, servingUnits }).nutritionLog!, interval: copy.interval }
+    : scaleLog(copy, toBaseAmount(basicMeasure(logged.unit), quantity, unit) / logged.amount);
+
+  const metric = metricAmount(food ?? basicMeasure(logged.unit), quantity, unit);
+  const servingUnit = servingUnits[metric.unit];
+  const name = log.serving ? (log.foodDisplayName ?? "") : (log.foodDisplayName ?? "").replace(AMOUNT_IN_NAME, "");
+  if (servingUnit) {
+    out.foodDisplayName = name;
+    out.serving = { foodMeasurementUnit: servingUnit, amount: round(metric.amount, 2) };
+  } else {
+    out.foodDisplayName = `${name} (${formatNumber(metric.amount)} ${metric.unit})`;
+    delete out.serving;
+  }
+  return out;
+}
+
+/** The entry that replaces one the user edited. Time and name stay as logged; only a new amount changes the nutrients. */
+export function editedNutritionLogPoint(log: NutritionLog, edit: EntryEdit, opts: EditOptions): DataPoint {
+  const nutritionLog = edit.amount ? atNewAmount(log, edit.amount, opts) : copyNutritionLogPoint(log, opts.id).nutritionLog!;
+  if (edit.mealType) nutritionLog.mealType = edit.mealType;
+  else delete nutritionLog.mealType;
+  return { name: `${NUTRITION_LOG_PARENT}/dataPoints/${opts.id}`, nutritionLog };
 }
 
 /** A diary row as the UI shows it, from any writer (this app, the Google Health app, other API clients). */
@@ -274,7 +395,7 @@ export function toDiaryEntries(points: readonly DataPoint[], ctx: DiaryContext =
 }
 
 /** The amount buildNutritionLogPoint puts in the name when the API's unit could not be resolved. */
-const AMOUNT_IN_NAME = / \([\d,.]+ (?:g|ml)\)$/;
+const AMOUNT_IN_NAME = / \(([\d,.]+) (g|ml)\)$/;
 
 /**
  * The entries a search can boost: this app's, with a food the catalogue can load again.

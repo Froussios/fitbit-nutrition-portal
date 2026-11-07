@@ -89,7 +89,7 @@ A `FoodItem` stores nutrients **per 100 g or per 100 ml** (its `basis`), plus na
 | other nutrients | `nutrients[]`: protein, sugars, fibre, saturated, trans, mono- and poly-unsaturated fat, cholesterol, sodium, potassium, calcium, iron, caffeine, vitamin C |
 
 Entries are **anonymous** logs: they supply their own name and nutrients, because our foods are not
-Google `food` resources. Anonymous logs cannot be updated, so a future edit is delete and recreate.
+Google `food` resources. Anonymous logs cannot be updated, so an edit writes a corrected copy and deletes the original (DR-22).
 
 ### 4.3 Client-supplied IDs carry the food reference
 
@@ -105,12 +105,13 @@ fit in 63 characters or is not ID-safe.
 ### 4.4 Reading the diary
 
 The "Today" list reads **all sources** (with `nutrition.readonly`), so its totals match the Google Health
-app. Each row shows its amount (from `serving`). A delete button appears only on this app's entries, because
-the write scope covers only data the app added. Other apps' entries show a lock in its place, with a note naming
+app. Each row shows its amount (from `serving`). Edit and delete buttons appear only on this app's entries, because
+the write scope covers only data the app added. Other apps' entries show a lock instead, with a note naming
 the app that logged them (the Google Health app or another app's package name), or saying another app did if the
 writer is unknown. Deleting asks nothing: the row stays crossed out and out of the totals, with an
 Undo that logs an equivalent entry under a new ID (DR-20). If a delete or undo fails, the row is enabled again and
-an alert says so until it is dismissed or the action is tried again. If the user unticks the read permission on Google's consent screen, the
+an alert says so until it is dismissed or the action is tried again. Editing changes an entry's amount and meal
+(DR-22). If the user unticks the read permission on Google's consent screen, the
 app falls back to its own entries and says so.
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the

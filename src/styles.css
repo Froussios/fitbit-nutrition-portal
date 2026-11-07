@@ -84,6 +84,7 @@ h2 { font-size: 1.15rem; margin-bottom: 12px; }
 }
 .field > span { font-size: 0.85rem; color: var(--muted); }
 .row { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.row[hidden] { display: none; }
 
 input, select, button {
   font: inherit;
@@ -125,9 +126,11 @@ button.link { border: none; background: none; color: var(--accent); text-decorat
 button.icon { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; padding: 0; border: none; background: none; color: var(--muted); line-height: 1; }
 button.icon:focus-visible { outline-offset: -2px; }
 button.icon:not(:disabled):hover { color: var(--danger); }
-button.icon.undo:not(:disabled):hover { color: var(--accent); }
+button.icon.undo:not(:disabled):hover, button.icon.edit:not(:disabled):hover { color: var(--accent); }
 button.not-owned:not(:disabled):hover { color: var(--text); }
-.not-owned svg { display: block; width: 1em; height: 1em; }
+.not-owned svg, button.edit svg { display: block; width: 1em; height: 1em; }
+/* Room for two icons on every row, with Delete on the right: Undo and the lock take its place, and nothing moves. */
+.row-actions { display: flex; justify-content: flex-end; min-width: 5.5rem; }
 .not-owned-note {
   max-width: min(22em, calc(100vw - 32px));
   padding: 10px 14px;
@@ -165,6 +168,19 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 4px; }
 .row-alert:not([hidden]) { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .row-alert p { margin: 0; }
 .row-alert p + p { margin-top: 6px; }
+
+.edit-dialog {
+  width: min(28rem, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+.edit-dialog::backdrop { background: rgb(0 0 0 / 0.5); }
+.edit-dialog h2 { margin-top: 0; }
+.edit-food { margin: 0 0 12px; overflow-wrap: anywhere; }
+.edit-food span { color: var(--muted); }
 
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
