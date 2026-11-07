@@ -287,3 +287,11 @@ leaves the model typos and odd word order. Chrome 148+ on desktop only, with 22 
 RAM with 4+ cores. Unticking does not delete the model, which Chrome manages. The debug log records each question and answer,
 to judge how well the model does. Not yet tried against the real model.
 **Reopen if.** The model turns out too unreliable to be worth keeping, or the header runs out of room for settings (DR-21).
+
+### DR-27 The diary is ordered by meal and has no time column
+**Decision.** The diary's rows are grouped by meal, in the order of the day (breakfast, lunch, dinner, then snack), and
+in the order they were logged within a meal. Entries with no meal come last. The diary does not show the time.
+**Why.** Owner decision (7 November 2026): the time and the meal say the same thing, and conflict when they disagree,
+such as a breakfast logged at 9 pm.
+**Consequence.** Entries still have a time in Google Health, which the log form sets.
+**Reopen if.** The owner wants the time back, for example to see when snacks were eaten.

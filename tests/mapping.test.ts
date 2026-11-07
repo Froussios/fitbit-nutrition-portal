@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FoodItem } from "../src/core/food";
 import { PORTION_PREFIX, selectableUnits } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
+import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, byMeal, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
 import type { DataPoint, MealType, NutritionLog } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
@@ -174,6 +174,19 @@ describe("toDiaryEntries", () => {
     expect(list[1]!.sourceLabel).toBe("Health Connect");
     expect(list[1]!.mealType).toBe("MEAL_TYPE_UNSPECIFIED");
     expect(list[1]!.profile.nutrients.carbohydrates).toBe(9);
+  });
+
+  it("orders the diary by meal, then by time within a meal, with no meal last", () => {
+    const at = (iso: string, mealType: MealType | undefined, id: string) => toDiaryEntry(buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", time: new Date(iso), ...(mealType ? { mealType } : {}) }, { id }))!;
+    const rows = [
+      at("2026-11-01T06:00:00+11:00", undefined, "e-test-0001-smp-a"),
+      at("2026-11-01T09:00:00+11:00", "DINNER", "e-test-0002-smp-b"),
+      at("2026-11-01T08:00:00+11:00", "BREAKFAST", "e-test-0003-smp-c"),
+      at("2026-11-01T07:00:00+11:00", "SNACK", "e-test-0004-smp-d"),
+      at("2026-11-01T07:30:00+11:00", "BREAKFAST", "e-test-0005-smp-e"),
+      at("2026-11-01T12:00:00+11:00", "LUNCH", "e-test-0006-smp-f"),
+    ];
+    expect(rows.sort(byMeal).map((e) => e.id)).toEqual(["e-test-0005-smp-e", "e-test-0003-smp-c", "e-test-0006-smp-f", "e-test-0002-smp-b", "e-test-0004-smp-d", "e-test-0001-smp-a"]);
   });
 });
 

@@ -178,7 +178,7 @@ legend { font-size: 0.85rem; color: var(--muted); padding: 0 4px; }
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 th, td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
-tbody td:nth-child(3) { white-space: normal; min-width: 12em; }
+tbody td:nth-child(2) { white-space: normal; min-width: 12em; }
 thead th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
 tbody tr:nth-child(even) { background: var(--row-alt); }
 tfoot th, tfoot td { font-weight: 600; border-bottom: none; }
@@ -188,7 +188,7 @@ tr.pending { opacity: 0.7; }
 /* A row being edited keeps its height and the table's width. If the window is too narrow for that, Save and Cancel stay in view. */
 tr.editing td { padding-block: 0; }
 /* Their controls make these the widest cells in their columns, so a little less padding keeps the table its width. */
-tr.editing td:nth-child(2), tr.editing td:nth-child(4) { padding-inline: 4px; }
+tr.editing td:nth-child(1), tr.editing td:nth-child(3) { padding-inline: 4px; }
 tr.editing input, tr.editing select { padding: 4px 6px; }
 tr.editing select { width: auto; }
 tr.editing input { width: 4rem; text-align: right; }
