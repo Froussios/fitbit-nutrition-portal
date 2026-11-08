@@ -154,6 +154,7 @@ export function formatAmount(n: number): string {
 export function formatMeasurementLabel(label: string): string {
   // Match whole decimal tokens (including grouped thousands), not fractions, codes or versions.
   // Attached units are allowed: source labels often say "354.88199999999995mL".
+  // Leave other attached text and punctuation alone rather than guess what it measures.
   return label.replace(
     /(?<![\w.,/])(?:\d{1,3}(?:,\d{3})+|\d+)?\.\d+(?=$|[\s)×]|(?:ml|cl|dl|l|mg|kg|g|oz|lbs?)\b)/gi,
     (value) => formatAmount(Number(value.replace(/,/g, ""))),
