@@ -129,7 +129,7 @@ background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-fo
 
 ### 4.5 Meal prep
 
-The API is built and its screens are not ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55), DR-24). The user records a recipe when cooking, then logs fractions of it (`1/6`, `25%`) until it is finished or
+[#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55), DR-24. The user records a recipe when cooking, then logs fractions of it (`1/6`, `25%`) until it is finished or
 discarded. Fractions are of the whole batch. Weights are not offered, because the ingredients do not add up to the cooked weight.
 
 **The database adds to the diary and does not mirror it.** A portion is one ordinary diary entry with summed nutrients,
@@ -140,6 +140,12 @@ preps(user_id, id, name, ingredients, created_at, updated_at, discarded_at)     
 portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at)    -- PRIMARY KEY (user_id, id); migrations/0001_meal_prep.sql
 ```
 
+* **Screens.** A Meal prep card sits under the log form (`src/ui/prep-card.ts`). Each prep shows what is left, how long
+  ago it was made, and the energy of the fraction typed. It has Eat, Eat the rest, Edit and Discard, and a list of what
+  was eaten, where a portion can be removed. A portion's row in the diary can be deleted and undone, but not edited, because
+  its fraction lives in the prep. The builder (`src/ui/prep-builder.ts`) finds each ingredient in the food catalogue;
+  custom foods can't be ingredients yet. Eat logs the portion now, with the meal chosen. The card is hidden on a site
+  without the API.
 * **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
   index can change. Editing them affects later portions only: a portion already in the diary keeps its nutrients.
 * **Identity.** The Google access token never goes to our API, because it can read and write the diary. It receives a Google
@@ -156,8 +162,8 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
 * **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
   so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
   rejects the entry, the portion is removed. If the answer is lost or the browser closes first, the portion counts as eaten
-  and stays unconfirmed. Each diary refresh looks for unconfirmed portions in the listing for the day they were eaten, and
-  confirms any it finds. An unconfirmed portion is never released automatically, because its entry may exist; the prep shows
+  and stays unconfirmed. A portion is logged at the moment it is eaten, so each refresh of today's diary confirms the
+  unconfirmed portions its listing shows. An unconfirmed portion is never released automatically, because its entry may exist; the prep shows
   it, and the user can give it back.
 * **Removing a portion.** Deleting one in the diary gives it back, and Undo is refused if it would pass 100%. The diary shows
   only today, so the prep also lists its portions, each with a remove button. Deletes made in the Google Health app

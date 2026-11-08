@@ -294,3 +294,25 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Meal prep (#55) */
+.prep-card .prep-list { display: grid; gap: 16px; }
+.prep { border-top: 1px solid var(--border); padding-top: 12px; }
+.prep:first-child { border-top: none; padding-top: 0; }
+.prep-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.prep-head h3 { margin: 0; font-size: 1.05rem; }
+.prep-left { font-weight: 600; }
+.prep-age { color: var(--muted); font-size: 0.85rem; }
+.prep meter { width: 100%; height: 0.6rem; margin: 8px 0; }
+.prep.discarded { color: var(--muted); }
+.prep-eat .field { flex: 0 1 auto; }
+.prep-portions { margin-top: 8px; }
+.prep-portions ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
+.prep-portions li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.prep-builder { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.prep-builder[hidden] { display: none; }
+.prep-builder h3 { margin: 0 0 8px; }
+.prep-ingredients { list-style: none; padding: 0; margin: 8px 0; }
+.prep-ingredients li { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+.prep-ingredient-name { flex: 1; }
+.prep-ingredient-amount { color: var(--muted); }

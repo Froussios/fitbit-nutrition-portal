@@ -1,4 +1,4 @@
-import { foodLabel, nutrientsForAmount, type FoodItem, type FoodRef } from "../core/food";
+import { canReload, foodLabel, nutrientsForAmount, type FoodItem, type FoodRef } from "../core/food";
 import { idFromName, parseEntryId } from "../core/ids";
 import type { LoggedFood } from "../core/logged-foods";
 import { NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "../core/nutrients";
@@ -63,6 +63,27 @@ export function buildNutritionLogPoint(draft: LogDraft, opts: BuildOptions): Dat
   if (servingUnit) log.serving = { foodMeasurementUnit: servingUnit, amount: round(metric.amount, 2) };
 
   return { name: `${NUTRITION_LOG_PARENT}/dataPoints/${opts.id}`, nutritionLog: log };
+}
+
+/**
+ * A portion of a meal prep (#55): one entry with the batch's nutrients scaled to the portion. It has no `serving`,
+ * because the ingredients don't add up to the cooked weight, so the fraction goes in the name (`Chili (1/6)`).
+ */
+export function buildPortionPoint(portion: { readonly name: string; readonly profile: NutrientProfile; readonly mealType?: MealType | undefined; readonly time: Date }, id: string): DataPoint {
+  const end = new Date(portion.time.getTime() + ENTRY_DURATION_MS);
+  const log: NutritionLog = {
+    interval: {
+      startTime: portion.time.toISOString(),
+      endTime: end.toISOString(),
+      startUtcOffset: utcOffsetDuration(portion.time),
+      endUtcOffset: utcOffsetDuration(end),
+    },
+    foodDisplayName: portion.name,
+    ...(portion.mealType ? { mealType: portion.mealType } : {}),
+    energy: { kcal: round(portion.profile.energyKcal, 1), userProvidedUnit: "KILOCALORIE" },
+    ...profileToLogFields(portion.profile),
+  };
+  return { name: `${NUTRITION_LOG_PARENT}/dataPoints/${id}`, nutritionLog: log };
 }
 
 function profileToLogFields(profile: NutrientProfile): Pick<NutritionLog, "totalFat" | "totalCarbohydrate" | "nutrients"> {
@@ -450,7 +471,7 @@ const AMOUNT_IN_NAME = / \(([\d,.]+) (g|ml)\)$/;
 export function toLoggedFoods(points: readonly DataPoint[], ownClientId?: string): LoggedFood[] {
   return points.flatMap((point) => {
     const entry = toDiaryEntry(point, ownClientId === undefined ? {} : { ownClientId });
-    if (!entry?.ref || entry.ref.source === "manual") return [];
+    if (!entry?.ref || !canReload(entry.ref.source)) return [];
     return [{ id: entry.id, ref: entry.ref, label: entry.displayName.replace(AMOUNT_IN_NAME, ""), at: entry.start.getTime() }];
   });
 }

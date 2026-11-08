@@ -230,7 +230,7 @@ describe("meal prep API", () => {
     expect((await call("PATCH", "/api/preps/chili001", { discarded: true })).status).toBe(204);
     expect((await preps())[0]!.discardedAt).toBe(NOW);
     now += 5000;
-    await call("PATCH", "/api/preps/chili001", { discarded: true });
+    expect((await call("PATCH", "/api/preps/chili001", { discarded: true })).status).toBe(204);
     expect((await preps())[0]!.discardedAt).toBe(NOW); // discarding again keeps the first time
     expect((await reserve(0.5, "portion01")).status).toBe(404);
     expect((await call("PATCH", "/api/preps/chili001", { discarded: false })).status).toBe(204);

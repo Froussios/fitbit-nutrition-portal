@@ -1,0 +1,105 @@
+import { describe, expect, it, vi } from "vitest";
+import { canReload } from "../src/core/food";
+import { newEntryId, parseEntryId } from "../src/core/ids";
+import { randomId } from "../src/core/prep";
+import { buildPortionPoint, toLoggedFoods } from "../src/health/mapping";
+import { PrepApi, PrepApiError, PrepApiMissingError } from "../src/prep/api-client";
+
+const BASE = "https://food-index.example/api/";
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+describe("PrepApi", () => {
+  it("sends the ID token, and only that", async () => {
+    const fetchMock = vi.fn(async () => json({ preps: [] }));
+    await new PrepApi(BASE, () => "ID.TOKEN.SIG", fetchMock as typeof fetch).list();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(url.href).toBe(`${BASE}preps`);
+    expect((init.headers as Record<string, string>)["Authorization"]).toBe("Bearer ID.TOKEN.SIG");
+  });
+
+  it("sends a portion to reserve, and returns the API's portion", async () => {
+    const portion = { id: "p1234567", fraction: 0.25, entryId: "e-x-1234-prep-abc", state: "unconfirmed", eatenAt: 1, createdAt: 1 };
+    const fetchMock = vi.fn(async () => json({ portion }, 201));
+    const got = await new PrepApi(BASE, () => "t", fetchMock as typeof fetch).reserve("abcd1234", { id: "p1234567", fraction: null, entryId: "e-x-1234-prep-abc", eatenAt: 1 });
+    expect(got).toEqual(portion);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(url.href).toBe(`${BASE}preps/abcd1234/portions`);
+    expect(JSON.parse(String(init.body))).toEqual({ id: "p1234567", fraction: null, entryId: "e-x-1234-prep-abc", eatenAt: 1 });
+  });
+
+  it("says how much is left when a portion is too big", async () => {
+    const api = new PrepApi(BASE, () => "t", (async () => json({ error: "That is more than is left.", left: 0.25 }, 409)) as typeof fetch);
+    const e = await api.reserve("abcd1234", { id: "p1234567", fraction: 0.5, entryId: "e-x-1234-prep-abc", eatenAt: 1 }).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(PrepApiError);
+    expect((e as PrepApiError).status).toBe(409);
+    expect((e as PrepApiError).left).toBe(0.25);
+  });
+
+  it("tells a site without the API from an API that found nothing", async () => {
+    const missing = new PrepApi(BASE, () => "t", (async () => new Response("<h1>Not found</h1>", { status: 404 })) as typeof fetch);
+    await expect(missing.list()).rejects.toBeInstanceOf(PrepApiMissingError);
+    const notFound = new PrepApi(BASE, () => "t", (async () => json({ error: "No such prep." }, 404)) as typeof fetch);
+    await expect(notFound.setDiscarded("abcd1234", true)).rejects.toBeInstanceOf(PrepApiError);
+  });
+
+  it("marks a request that got no answer", async () => {
+    const api = new PrepApi(BASE, () => "t", (async () => Promise.reject(new TypeError("Failed to fetch"))) as typeof fetch);
+    const e = (await api.list().catch((x: unknown) => x)) as PrepApiError;
+    expect(e.connectionFailed).toBe(true);
+  });
+
+  it("sends nothing when the session has expired", async () => {
+    const fetchMock = vi.fn();
+    const api = new PrepApi(
+      BASE,
+      () => {
+        throw new Error("signed out");
+      },
+      fetchMock as unknown as typeof fetch,
+    );
+    await expect(api.list()).rejects.toThrow("signed out");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("a portion's diary entry", () => {
+  const profile = { energyKcal: 438.04, nutrients: { protein: 20.123456, fat: 10, carbohydrates: 50, sodium: 0.5 } };
+
+  it("is one entry named for its fraction, with no serving", () => {
+    const point = buildPortionPoint({ name: "Chili (1/6)", profile, mealType: "DINNER", time: new Date("2026-11-08T08:00:00Z") }, "e-abc-1234-prep-chili001");
+    expect(point.name).toBe("users/me/dataTypes/nutrition-log/dataPoints/e-abc-1234-prep-chili001");
+    const log = point.nutritionLog!;
+    expect(log.foodDisplayName).toBe("Chili (1/6)");
+    expect(log.mealType).toBe("DINNER");
+    expect(log.energy).toEqual({ kcal: 438, userProvidedUnit: "KILOCALORIE" });
+    expect(log.totalFat).toEqual({ grams: 10 });
+    expect(log.totalCarbohydrate).toEqual({ grams: 50 });
+    expect(log.nutrients).toContainEqual({ nutrient: "PROTEIN", quantity: { grams: 20.1235 } });
+    expect(log.serving).toBeUndefined();
+    expect(log.interval.startTime).toBe("2026-11-08T08:00:00.000Z");
+  });
+
+  it("leaves out the meal when none was chosen", () => {
+    expect(buildPortionPoint({ name: "Chili (1/6)", profile, time: new Date() }, "e-abc-1234-prep-chili001").nutritionLog!.mealType).toBeUndefined();
+  });
+
+  it("records the prep in its ID", () => {
+    const id = newEntryId({ source: "prep", id: "chili001" }, 1_800_000_000_000, "ab12");
+    expect(parseEntryId(id)?.ref).toEqual({ source: "prep", id: "chili001" });
+  });
+
+  it("is not a food that search can boost", () => {
+    const point = { ...buildPortionPoint({ name: "Chili (1/6)", profile, time: new Date() }, newEntryId({ source: "prep", id: "chili001" })), dataSource: { application: { googleWebClientId: "me" } } };
+    expect(toLoggedFoods([point], "me")).toEqual([]);
+    expect(canReload("prep")).toBe(false);
+    expect(canReload("manual")).toBe(false);
+    expect(canReload("afcd")).toBe(true);
+  });
+});
+
+describe("randomId", () => {
+  it("makes IDs the API accepts", () => {
+    for (let i = 0; i < 50; i++) expect(randomId(16)).toMatch(/^[a-z0-9]{16}$/);
+    expect(new Set(Array.from({ length: 50 }, () => randomId(12))).size).toBe(50);
+  });
+});

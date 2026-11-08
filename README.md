@@ -130,7 +130,8 @@ src/
   auth/      Google sign-in: popup, checks on Google's answer
   food/      FoodCatalog interface, the static index engine and catalogue, sample foods
   ai/        the optional on-device model that reads amounts the rules refuse
-  ui/        DOM helpers, log form, food search combobox, diary table
+  ui/        DOM helpers, log form, food search combobox, diary table, meal prep card and builder
+  prep/      the browser's client for the meal prep API
   main.ts    app shell
 pipeline/    food index builder (Open Food Facts export → public/food-index/), generic foods builder
 functions/   Cloudflare Pages Function for /api/* on the food index's site (meal prep, DR-24)

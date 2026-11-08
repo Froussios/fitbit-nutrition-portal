@@ -54,6 +54,11 @@ export interface Prep {
   readonly portions: readonly PrepPortion[];
 }
 
+/** A new ID for a prep or a portion: lowercase letters and digits, as the API and diary entry IDs allow. */
+export function randomId(length: number): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(length)), (b) => (b % 36).toString(36)).join("");
+}
+
 /** What is left of the batch, from 0 to 1. */
 export function leftOf(portions: readonly Pick<PrepPortion, "fraction">[]): number {
   const left = 1 - portions.reduce((sum, p) => sum + p.fraction, 0);

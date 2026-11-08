@@ -26,6 +26,7 @@ const SOURCE_CODES: Record<FoodSource, string> = {
   usda: "usda",
   sample: "smp",
   manual: "man",
+  prep: "prep",
 };
 const SOURCE_BY_CODE = new Map(Object.entries(SOURCE_CODES).map(([s, c]) => [c, s as FoodSource]));
 
