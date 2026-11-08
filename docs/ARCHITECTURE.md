@@ -129,7 +129,7 @@ background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-fo
 
 ### 4.5 Meal prep (planned)
 
-Not built yet ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55), DR-24). The user records a recipe when cooking, then logs fractions of it (`1/6`, `25%`) until it is finished or
+The API is built and its screens are not ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55), DR-24). The user records a recipe when cooking, then logs fractions of it (`1/6`, `25%`) until it is finished or
 discarded. Fractions are of the whole batch. Weights are not offered, because the ingredients do not add up to the cooked weight.
 
 **The database adds to the diary and does not mirror it.** A portion is one ordinary diary entry with summed nutrients,
@@ -169,9 +169,24 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)             
 * **Finished and discarded preps** are hidden and kept for 30 days, so that an undo can bring them back, then deleted the
   next time that user's list loads. An unfinished recipe draft stays on the device until it is saved.
 * **Failures.** If the API is down, eating is blocked and normal logging still works, as with other failures (DR-18).
-* **Deployment.** The Functions live at `/api/*` in the `food-diary-index` Pages project, and `_routes.json` keeps every other
-  request static, so food search does not use the Functions allowance. A Pages deploy replaces the whole site, so API changes
-  ship only through the Food index workflow, which applies D1 migrations first. Its Cloudflare token needs D1 access as well.
+* **API.** `functions/api/[[path]].ts` hands every request to `server/handler.ts`:
+
+  | Request | Does |
+  |---|---|
+  | `GET /api/preps` | The user's preps and their portions, after deleting those ended over 30 days ago |
+  | `PUT /api/preps/:id` | Creates a prep, or replaces its name and ingredients |
+  | `PATCH /api/preps/:id` | `{ discarded }`: discards a prep or brings it back |
+  | `POST /api/preps/:id/portions` | Reserves `{ id, fraction, entryId, eatenAt }`, or the rest when `fraction` is null; 409 with `left` if too much |
+  | `PATCH /api/portions/:id` | `{ entryId }`: the diary entry exists |
+  | `DELETE /api/portions/:id` | Gives a portion back |
+
+  The client chooses prep and portion IDs, so a request whose answer is lost can be sent again: reserving the same portion ID
+  twice returns the first reservation. Only the app's origins get CORS headers, answers are never cached, and errors never
+  echo request data. `src/core/prep.ts` holds the shapes and checks that the browser and API share.
+* **Deployment.** The Functions live at `/api/*` in the `food-diary-index` Pages project, and `_routes.json` (written by the
+  index build) keeps every other request static, so food search does not use the Functions allowance. A Pages deploy replaces
+  the whole site, so API changes ship only through the Food index workflow. It creates the database if needed, applies
+  `migrations/` first, and uses `CLOUDFLARE_D1_TOKEN`; without that secret it leaves the API out (README, Food index).
 
 ## 5. Authentication
 

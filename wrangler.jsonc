@@ -1,0 +1,21 @@
+// Cloudflare Pages config for the food index's site (DR-14), which also serves the meal prep API at /api/* (DR-24).
+// The Food index workflow fills in the project name and the database ID before deploying (.github/workflows/food-index.yml).
+// Locally, `npx wrangler pages dev` uses a local database with the same binding.
+{
+  "name": "food-diary-index",
+  "pages_build_output_dir": "food-index-dist",
+  "compatibility_date": "2026-10-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "food-diary",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // Public values: the app's OAuth client ID, and where the app runs.
+    "GOOGLE_CLIENT_IDS": "805673000340-lb1tc9da7kg10ia3u18pkd6fka9tv8q4.apps.googleusercontent.com",
+    "ALLOWED_ORIGINS": "https://froussios.github.io,http://localhost:5173,http://localhost:4173"
+  }
+}
