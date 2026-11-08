@@ -2,6 +2,7 @@ import { countryName, flagEmoji, foodCountries, shownCountry } from "../core/cou
 import { foodLabel, isGenericSource, SOURCE_TAGS } from "../core/food";
 import type { FoodSummary } from "../core/food-summary";
 import type { TextRun } from "../core/tokens";
+import { formatMeasurementLabel } from "../core/units";
 import type { FoodCatalog, FoodSearchHit } from "../food/catalog";
 import { describeError, logger } from "../debug/log";
 import { INITIAL, fieldText, reduce, type ComboEvent, type ComboState } from "./combobox-state";
@@ -110,7 +111,7 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
         : [el("span", { class: "opt-nobrand" }, isGenericSource(s.ref.source) ? "Generic" : "No brand listed")];
       const sub = [
         ...maker,
-        ...(s.packSize ? [document.createTextNode(` · ${s.packSize}`)] : []),
+        ...(s.packSize ? [document.createTextNode(` · ${formatMeasurementLabel(s.packSize)}`)] : []),
         el("span", { class: "opt-source", title: "Where this food's data comes from" }, SOURCE_TAGS[s.ref.source]),
         countryFlag(s),
       ];
@@ -120,7 +121,7 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
         el("span", { class: "opt-name" }, ...runs(hit.name)),
         el("span", { class: "opt-energy" }, el("strong", {}, fmtEnergy(s.kcalPer100)), ` ${energyLabel()} / ${unitLabel(s)}`),
         el("span", { class: "opt-sub" }, ...sub),
-        s.serving ? el("span", { class: "opt-serving" }, `${fmtEnergy(s.serving.kcal)} ${energyLabel()} / ${s.serving.label}`) : null,
+        s.serving ? el("span", { class: "opt-serving" }, `${fmtEnergy(s.serving.kcal)} ${energyLabel()} / ${formatMeasurementLabel(s.serving.label)}`) : null,
       );
     });
     const custom = hits.length;

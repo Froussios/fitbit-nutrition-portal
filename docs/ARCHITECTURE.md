@@ -83,6 +83,10 @@ A `FoodItem` stores nutrients **per 100 g or per 100 ml** (its `basis`), plus na
 * Amounts are typed as free text (`90 g`, `1 1/2 cups`, `2 × can`) and read by fixed rules in `core/amount-text.ts`. A bare
   number uses the unit already showing, and a unit is never decided after it was typed (DR-25).
   With the AI setting on, an on-device model can read what the rules refuse, such as a mistyped unit (DR-26).
+* Displayed amounts and decimal measurements in serving/pack labels use at most one decimal place
+  (`354.88199999999995mL` → `354.9mL`). Nonzero amounts below 0.1 retain three significant digits.
+  This formatting applies in search, unit options, diary history and meal prep descriptions; original portion keys,
+  calculation values and editable amounts keep their precision. Fractions and food names stay as supplied.
 * `fromOffProduct()` turns an Open Food Facts product record into a `FoodItem`. It handles `_100g` values
   that really mean per 100 ml (legacy liquids), per-serving-only data (typical for restaurant items) and
   kJ-only energy. The fake catalogue is written as Open Food Facts records and runs through this
