@@ -10,7 +10,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 describe("PrepApi", () => {
   it("sends the ID token, and only that", async () => {
-    const fetchMock = vi.fn(async () => json({ preps: [] }));
+    // Like the API: without a token it answers its JSON 401, with one it answers.
+    const fetchMock = vi.fn(async (_url: URL, init?: RequestInit) => ((init?.headers as Record<string, string> | undefined)?.["Authorization"] ? json({ preps: [] }) : json({ error: "Sign in first." }, 401)));
     await new PrepApi(BASE, () => "ID.TOKEN.SIG", fetchMock as typeof fetch).list();
     // The first request only asks whether the API exists, without a token (PrepApi.available).
     const [url, init] = fetchMock.mock.calls.at(-1) as unknown as [URL, RequestInit];
@@ -130,6 +131,15 @@ describe("PrepApi.available", () => {
     const fetchMock = site(true);
     await expect(new PrepApi(BASE, () => "t", fetchMock as unknown as typeof fetch).list()).resolves.toEqual([]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["a 200 page", new Response("<html>app</html>", { status: 200, headers: { "Content-Type": "text/html" } }), false],
+    ["a 404 with no body", new Response("", { status: 404 }), false],
+    ["the API's 404 for a wrong path", json({ error: "No such endpoint." }, 404), true],
+    ["the API's 401", json({ error: "Sign in first." }, 401), true],
+  ])("counts the API present only for its own JSON error: %s", async (_name, answer, present) => {
+    await expect(new PrepApi(BASE, () => "t", (async () => answer) as typeof fetch).available()).resolves.toBe(present);
   });
 
   it("asks once per page", async () => {

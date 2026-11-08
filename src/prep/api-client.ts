@@ -46,8 +46,8 @@ export class PrepApi {
   /**
    * Whether this site serves the API. Asked without a token, so the browser sends it without a CORS preflight:
    * a site without the API refuses preflights, which would hide its 404 behind a network error. The API answers
-   * a request without a token with its own JSON 401; a site without it answers 404. Throws PrepApiError (status 0)
-   * when nothing answers, and asks again next time.
+   * a request without a token with its own JSON error (401). Throws PrepApiError (status 0) when nothing answers,
+   * and asks again next time. Only list() asks; any other call runs once the card is shown.
    */
   available(): Promise<boolean> {
     this.present ??= (async () => {
@@ -59,7 +59,8 @@ export class PrepApi {
         throw new PrepApiError("The meal prep service did not answer. Check your connection and try again.", 0);
       }
       const json = (await res.json().catch(() => undefined)) as { error?: unknown } | undefined;
-      const present = res.status !== 404 || typeof json?.error === "string";
+      // Only the API answers with its own JSON error. Anything else, such as a 404 or an HTML page, is a site without it.
+      const present = typeof json?.error === "string";
       log.info(present ? "This site has the meal prep API" : "This site has no meal prep API", { status: res.status });
       return present;
     })().catch((e: unknown) => {
@@ -127,7 +128,7 @@ export class PrepApi {
       log.debug(`${method} ${path}: HTTP ${res.status}`);
       return json;
     }
-    // A site without the API answers its own 404 page, not the API's JSON.
+    // A backstop: in a browser, available() is the real check, because on a site without the API the preflight fails first.
     if (res.status === 404 && json?.error === undefined) throw new PrepApiMissingError("Meal prep is not available on this site.");
     log.warn(`${method} ${path}: HTTP ${res.status}`, { error: json?.error });
     throw new PrepApiError(json?.error ?? `The meal prep service answered HTTP ${res.status}.`, res.status, json?.left);
