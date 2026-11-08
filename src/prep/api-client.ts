@@ -33,6 +33,9 @@ export class PrepApiMissingError extends Error {
 }
 
 export class PrepApi {
+  /** Whether the site has the API, once asked: it doesn't change while the page is open. */
+  private present?: Promise<boolean>;
+
   constructor(
     /** e.g. https://food-index.froussios.com/api/ */
     private readonly base: string,
@@ -40,7 +43,34 @@ export class PrepApi {
     private readonly fetchImpl: typeof fetch = (...a) => fetch(...a),
   ) {}
 
+  /**
+   * Whether this site serves the API. Asked without a token, so the browser sends it without a CORS preflight:
+   * a site without the API refuses preflights, which would hide its 404 behind a network error. The API answers
+   * a request without a token with its own JSON 401; a site without it answers 404. Throws PrepApiError (status 0)
+   * when nothing answers, and asks again next time.
+   */
+  available(): Promise<boolean> {
+    this.present ??= (async () => {
+      let res: Response;
+      try {
+        res = await this.fetchImpl(new URL("preps", this.base), { method: "GET", signal: AbortSignal.timeout(TIMEOUT_MS) });
+      } catch (e) {
+        log.warn("Checking for the meal prep API: no answer", describeError(e));
+        throw new PrepApiError("The meal prep service did not answer. Check your connection and try again.", 0);
+      }
+      const json = (await res.json().catch(() => undefined)) as { error?: unknown } | undefined;
+      const present = res.status !== 404 || typeof json?.error === "string";
+      log.info(present ? "This site has the meal prep API" : "This site has no meal prep API", { status: res.status });
+      return present;
+    })().catch((e: unknown) => {
+      this.present = undefined;
+      throw e;
+    });
+    return this.present;
+  }
+
   async list(): Promise<Prep[]> {
+    if (!(await this.available())) throw new PrepApiMissingError("Meal prep is not available on this site.");
     const body = (await this.request("GET", "preps")) as { preps?: Prep[] } | undefined;
     return body?.preps ?? [];
   }
