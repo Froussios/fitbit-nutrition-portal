@@ -1,5 +1,6 @@
 import type { FoodItem, FoodSource } from "../core/food";
 import { NUTRIENT_KEYS, type NutrientKey } from "../core/nutrients";
+import { usefulPortions } from "../core/portions";
 import type { BaseUnit, Portion } from "../core/units";
 
 /**
@@ -43,7 +44,8 @@ export function genericToFoodItem(row: GenericRow): FoodItem {
     name,
     basis,
     per100: { energyKcal: kcal, nutrients },
-    portions: portions.map(([n, amount]): Portion => ({ name: n, amount, unit: "g" })),
+    // Files built before DR-28 still list plain weights as portions.
+    portions: usefulPortions(portions.map(([n, amount]): Portion => ({ name: n, amount, unit: "g" }))),
     ...(density ? { densityGPerMl: density } : {}),
   };
 }

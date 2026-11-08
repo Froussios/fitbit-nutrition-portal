@@ -295,3 +295,15 @@ by the time eaten within a meal. Entries with no meal come last. The diary does 
 such as a breakfast logged at 9 pm.
 **Consequence.** Entries still have a time in Google Health, which the log form sets.
 **Reopen if.** The owner wants the time back, for example to see when snacks were eaten.
+
+### DR-28 A portion that is only a weight or volume is not offered
+**Decision.** A portion is dropped when its name is just a weight or volume, perhaps with equivalents in brackets or a
+description after a comma (`100 g`, `1 oz, cooked`, `12 fl oz (355 ml)`), and its size is what that measure says, within 3%.
+Portions named as a serving (`1 pie (150 g)`, `1 serving (300 ml)`) stay, and so do measures whose size differs: `1 cup`
+of flour at 125 g, `1 tablespoon` at 15 ml, `1 fl oz` of milk at 30.5 g, `1 oz, dry, yields` 170 g.
+**Why.** Owner decision (8 November 2026): such options only repeat a unit in another size, which clutters the unit
+list without saving any typing.
+**Consequence.** Applied when food data is read, so the existing food index and generic foods file need no rebuild, and
+in the generic foods builder, so plain weights no longer use up its six portions. An Open Food Facts serving such as
+`30 g` is no longer offered and no longer shown in the search row; it is still used to read per-serving values.
+**Reopen if.** A source names real servings as bare weights often enough to be missed.

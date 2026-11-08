@@ -10,7 +10,7 @@ describe("fromOffProduct", () => {
       code: "9300000000001",
       product_name: "Muesli",
       brands: "Brand A, Brand B",
-      serving_size: "45 g",
+      serving_size: "1 bowl (45 g)",
       serving_quantity: "45",
       serving_quantity_unit: "g",
       nutriments: { "energy-kcal_100g": 400, proteins_100g: 10, fat_100g: "7", sodium_100g: 0.02 },
@@ -19,7 +19,7 @@ describe("fromOffProduct", () => {
     expect(f.brand).toBe("Brand A");
     expect(f.basis).toBe("g");
     expect(f.per100).toEqual({ energyKcal: 400, nutrients: { protein: 10, fat: 7, sodium: 0.02 } });
-    expect(f.portions).toEqual([{ name: "45 g", amount: 45, unit: "g" }]);
+    expect(f.portions).toEqual([{ name: "1 bowl (45 g)", amount: 45, unit: "g" }]);
   });
 
   it("treats legacy _100g values of a liquid product as per 100 ml", () => {
@@ -46,6 +46,19 @@ describe("fromOffProduct", () => {
     });
     expect(f.per100.energyKcal).toBe(250);
     expect(f.per100.nutrients.protein).toBe(10);
+  });
+
+  it("offers no serving that is only a weight, but still reads per-serving values with it", () => {
+    const f = fromOffProduct({
+      code: "4",
+      serving_size: "100g",
+      serving_quantity: 100,
+      serving_quantity_unit: "g",
+      nutrition_data_per: "serving",
+      nutriments: { "energy-kcal_serving": 300 },
+    });
+    expect(f.per100.energyKcal).toBe(300);
+    expect(f.portions).toEqual([]);
   });
 
   it("fails without energy", () => {

@@ -77,6 +77,9 @@ A `FoodItem` stores nutrients **per 100 g or per 100 ml** (its `basis`), plus na
   metric: tsp 5 ml, tbsp 20 ml, cup 250 ml.
 * Mass ↔ volume conversion happens **only** with an explicit density. Otherwise the UI offers no unit of
   the other kind. We never assume 1 ml = 1 g.
+* A source's portion that is only a weight or volume of its stated size (`100 g`, `1 oz`, `1 oz, cooked`) is dropped by
+  `core/portions.ts`, since a unit already offers it. Named servings (`1 pie (150 g)`) and measures of another size
+  (`1 cup` = 125 g, `1 oz, dry, yields` 170 g) stay (DR-28).
 * Amounts are typed as free text (`90 g`, `1 1/2 cups`, `2 × can`) and read by fixed rules in `core/amount-text.ts`. A bare
   number uses the unit already showing, and a unit is never decided after it was typed (DR-25).
   With the AI setting on, an on-device model can read what the rules refuse, such as a mistyped unit (DR-26).

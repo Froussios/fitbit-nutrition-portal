@@ -1,5 +1,6 @@
 import type { FoodItem } from "./food";
 import { kjToKcal, NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "./nutrients";
+import { usefulPortions } from "./portions";
 import type { BaseUnit, Portion } from "./units";
 
 /**
@@ -113,7 +114,7 @@ export function fromOffProduct(p: OffProduct): FoodItem {
     name: p.product_name?.trim() || `Product ${p.code}`,
     basis,
     per100,
-    portions,
+    portions: usefulPortions(portions),
   };
   const brand = p.brands?.split(",")[0]?.trim();
   const packSize = p.quantity?.trim();
