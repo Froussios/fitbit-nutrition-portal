@@ -1,3 +1,4 @@
+import { HOME_COUNTRY } from "../src/core/countries";
 import { summarise } from "../src/core/food-summary";
 import { fromOffProduct, type OffProduct } from "../src/core/off";
 import { compareRank, headWords, indexWords, nameWordCount, popularity, productWordCount, sameNameKey } from "../src/core/tokens";
@@ -28,6 +29,7 @@ import {
   type PrefixGroup,
   type SummaryRow,
 } from "../src/food/index-format";
+import { offCountries } from "./off-countries";
 
 /**
  * Builds the static food index from Open Food Facts product records
@@ -82,7 +84,8 @@ interface Doc {
   /** Filled in once every product has been read. */
   sameNameCount: number;
   readonly nameKey: string;
-  readonly soldInAustralia: boolean;
+  /** Sold in HOME_COUNTRY. */
+  readonly soldHere: boolean;
   readonly popularity: number;
   readonly dedupeKey: string;
   /** Sort key tie-break, for a deterministic order. */
@@ -127,6 +130,8 @@ export class IndexBuilder {
     } catch {
       return this.drop("noEnergy");
     }
+    const countries = offCountries(raw.countries_tags);
+    if (countries.length) food = { ...food, countries };
     const kcal = food.per100.energyKcal;
     if (!(kcal >= 0 && kcal <= MAX_KCAL)) return this.drop("implausibleEnergy");
     const words = indexWords(food.brand ? `${food.name} ${food.brand}` : food.name);
@@ -145,8 +150,8 @@ export class IndexBuilder {
       productWordCount: productWordCount(food.name, food.brand),
       sameNameCount: 0,
       nameKey: sameNameKey(food.name),
-      soldInAustralia: raw.countries_tags?.includes("en:australia") ?? false,
-      popularity: popularity(raw.unique_scans_n, raw.countries_tags?.includes("en:australia") ?? false, raw.completeness),
+      soldHere: countries.includes(HOME_COUNTRY),
+      popularity: popularity(raw.unique_scans_n, countries.includes(HOME_COUNTRY), raw.completeness),
       // Unbranded products with the same name can't be told apart in the dropdown, whatever their energy.
       dedupeKey: food.brand ? `${sortedWords}|${Math.round(kcal)}` : sameNameKey(food.name),
       key: code,
@@ -166,7 +171,7 @@ export class IndexBuilder {
 
     // How common each exact name is, across all brands: an estimate of how popular the food is.
     const sameName = new Map<string, number>();
-    for (const d of this.docs) sameName.set(d.nameKey, (sameName.get(d.nameKey) ?? 0) + (d.soldInAustralia ? AUSTRALIA_WEIGHT : 1));
+    for (const d of this.docs) sameName.set(d.nameKey, (sameName.get(d.nameKey) ?? 0) + (d.soldHere ? AUSTRALIA_WEIGHT : 1));
     for (const d of this.docs) d.sameNameCount = sameName.get(d.nameKey)!;
     sameName.clear();
 

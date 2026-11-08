@@ -88,10 +88,10 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ Weet-Bix Wholegrain Cereal                 358 kcal / 100 g  │
-│ Sanitarium · 575 g                      107 kcal / 30 g serv │
+│ Sanitarium · 575 g [Open Food Facts] 🇦🇺  107 kcal / 30 g sv │
 ├──────────────────────────────────────────────────────────────┤
 │ Weet-Bix Blends Multi-Grain                378 kcal / 100 g  │
-│ Sanitarium · 510 g                                           │
+│ Sanitarium · 510 g [Open Food Facts] 🇦🇺 +1                  │
 ├──────────────────────────────────────────────────────────────┤
 │ + Custom food "weetbix"                                      │
 ├──────────────────────────────────────────────────────────────┤
@@ -104,8 +104,11 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
   food's `basis`), always shown, so rows compare like for like.
 * **Line 2:** brand · pack size (Open Food Facts `quantity`), or **Generic** for a food from an authoritative
   source, or **No brand listed** for an Open Food Facts product with no brand. Then a tag naming the row's source,
-  so a bad value can be traced to its database: `Open Food Facts`, `AFCD` or `FNDDS`. Right: energy per serving when the
-  product has a serving size, e.g. `107 kcal / 30 g serving`.
+  so a bad value can be traced to its database: `Open Food Facts`, `AFCD` or `FNDDS`. Then a small flag for where the
+  food is sold: Australia's if the product lists it, else the first country listed, then `+N` for the others; the
+  tooltip names them all. Generic foods show their database's country (AFCD 🇦🇺, FNDDS 🇺🇸). No flag when Open Food
+  Facts lists no country, which doesn't mean the product isn't sold here (section 5). Flags are emoji, which Windows
+  draws as two letters (`AU`). Right: energy per serving when the product has a serving size, e.g. `107 kcal / 30 g serving`.
 * A row is built from a `FoodSummary` view model computed from the `FoodItem` by a pure function in
   `src/core/`. The index builder runs the same function, so search results arrive as summaries and the full
   food is fetched only when chosen. Later visuals (a thumbnail, a macro bar, Nutri-Score) are new fields on that model and new
@@ -289,7 +292,9 @@ Worker; the index does not change.
 logs, split in two so search fetches only the small part:
 
 * **Summary** (what a dropdown row shows, ~60 bytes): barcode, name, brand, pack size, basis, kcal per 100,
-  serving label and amount. Built by the same `FoodSummary` function the UI uses (section 3.3).
+  serving label and amount, and the countries it is sold in as ISO codes (`"AU NZ"`, left out when none; Open Food
+  Facts tags mapped by `pipeline/off-countries.ts`). Built by the same `FoodSummary` function the UI uses (section 3.3).
+  The countries add about 1% to the gzipped summary files.
 * **Detail** (what logging needs, ~120 bytes): the 14 other nutrients in `NUTRIENTS`, portions, density.
 
 The builder runs `fromOffProduct()` and stores its result, so the normaliser stays the single place that

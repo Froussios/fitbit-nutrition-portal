@@ -50,6 +50,8 @@ export interface FoodItem extends Measurable {
   readonly per100: NutrientProfile;
   readonly portions: readonly Portion[];
   readonly densityGPerMl?: number;
+  /** Where an Open Food Facts product is sold, as ISO 3166-1 alpha-2 codes in the order listed (display only). */
+  readonly countries?: readonly string[];
 }
 
 /** Nutrients for `quantity` of `unit` (a unit key or `portion:<name>`). */

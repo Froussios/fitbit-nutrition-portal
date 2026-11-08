@@ -1,3 +1,4 @@
+import { countryName, flagEmoji, foodCountries, shownCountry } from "../core/countries";
 import { foodLabel, isGenericSource, SOURCE_TAGS } from "../core/food";
 import type { FoodSummary } from "../core/food-summary";
 import type { TextRun } from "../core/tokens";
@@ -40,6 +41,22 @@ function runs(parts: readonly TextRun[]): Node[] {
 }
 
 const unitLabel = (s: FoodSummary) => `100 ${s.basis}`;
+
+/** A small flag for where the food is sold, with every listed country in its tooltip; null when none is known. */
+export function countryFlag(s: FoodSummary): HTMLElement | null {
+  const countries = foodCountries(s);
+  const shown = shownCountry(countries);
+  if (!shown) return null;
+  const others = countries.filter((c) => c !== shown);
+  const verb = isGenericSource(s.ref.source) ? "From" : "Sold in";
+  const label = `${verb} ${[shown, ...others].map(countryName).join(", ")}`;
+  return el(
+    "span",
+    { class: "opt-country", role: "img", title: label, "aria-label": label },
+    el("span", { class: "opt-flag" }, flagEmoji(shown)),
+    others.length ? ` +${others.length}` : null,
+  );
+}
 
 /**
  * Search-as-you-type field with a dropdown of matches (docs/FOOD_SEARCH.md
@@ -93,6 +110,7 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
         ...maker,
         ...(s.packSize ? [document.createTextNode(` · ${s.packSize}`)] : []),
         el("span", { class: "opt-source", title: "Where this food's data comes from" }, SOURCE_TAGS[s.ref.source]),
+        countryFlag(s),
       ];
       return el(
         "li",
