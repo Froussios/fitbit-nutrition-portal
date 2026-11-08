@@ -58,6 +58,8 @@ export class PrepApi {
         log.warn("Checking for the meal prep API: no answer", describeError(e));
         throw new PrepApiError("The meal prep service did not answer. Check your connection and try again.", 0);
       }
+      // A server error is a broken API, not a missing one: show it, and ask again next time.
+      if (res.status >= 500) throw new PrepApiError(`The meal prep service failed (HTTP ${res.status}). Try again later.`, res.status);
       const json = (await res.json().catch(() => undefined)) as { error?: unknown } | undefined;
       // Only the API answers with its own JSON error. Anything else, such as a 404 or an HTML page, is a site without it.
       const present = typeof json?.error === "string";

@@ -142,6 +142,14 @@ describe("PrepApi.available", () => {
     await expect(new PrepApi(BASE, () => "t", (async () => answer) as typeof fetch).available()).resolves.toBe(present);
   });
 
+  it("shows a broken API as an error, and asks again next time", async () => {
+    let broken = true;
+    const api = new PrepApi(BASE, () => "t", (async () => (broken ? new Response("<html>Error 1101</html>", { status: 500 }) : json({ error: "Sign in first." }, 401))) as typeof fetch);
+    await expect(api.available()).rejects.toMatchObject({ status: 500 });
+    broken = false;
+    await expect(api.available()).resolves.toBe(true);
+  });
+
   it("asks once per page", async () => {
     const fetchMock = site(true);
     const api = new PrepApi(BASE, () => "t", fetchMock as unknown as typeof fetch);
