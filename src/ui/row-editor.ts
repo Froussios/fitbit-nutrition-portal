@@ -1,5 +1,5 @@
 import { amountAi } from "../ai/amount-ai";
-import type { FoodItem } from "../core/food";
+import { canReload, type FoodItem } from "../core/food";
 import { convertQuantity, type Measurable } from "../core/units";
 import { describeError, logger } from "../debug/log";
 import type { FoodCatalog } from "../food/catalog";
@@ -192,7 +192,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   showUnits();
 
   // Basic units work straight away. The food only adds to them, so a failed lookup costs its portions and exact values.
-  if (entry.ref && entry.ref.source !== "manual") {
+  if (entry.ref && canReload(entry.ref.source)) {
     lookingUp = true;
     catalog
       .get(entry.ref, { signal: lookup.signal })

@@ -83,6 +83,11 @@ export class GoogleAuth {
     return this.token !== undefined && !this.isSignedIn;
   }
 
+  /** The signed-in account's `sub`, which is not a secret. Kept after the tokens expire, until sign-out. */
+  get subject(): string | undefined {
+    return this.token?.subject;
+  }
+
   get grantedScopes(): string[] {
     return this.token?.scope.split(" ").filter(Boolean) ?? [];
   }

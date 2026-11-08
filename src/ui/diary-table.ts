@@ -118,6 +118,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
                         "↩\uFE0E",
                       )
                     : [
+                        e.ref?.source !== "prep" &&
                         el(
                           "button",
                           { type: "button", class: "icon edit", "data-entry-edit": e.id, title: offline ? "Editing needs a connection" : editing ? "Finish the edit you started first" : "Edit entry", "aria-label": `Edit ${e.displayName}`, disabled: offline || busy.has(e.id) || Boolean(editing), onclick: () => onEdit(e) },

@@ -1,7 +1,7 @@
 import "./styles.css";
 import { GoogleAuth, SignInRequiredError, SignInSupersededError } from "./auth/google-auth";
 import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE, SCOPES, setClientId } from "./config";
-import { foodLabel } from "./core/food";
+import { canReload, foodLabel } from "./core/food";
 import { copiedEntryId, idFromName, newEntryId } from "./core/ids";
 import { civilDate } from "./core/time";
 import type { BaseUnit } from "./core/units";
@@ -13,7 +13,7 @@ import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
 import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, actionRefused, connectionBanner, deleteFailed, editNotConfirmed, oldEntryNotRemoved, undoNotConfirmed, type ConnectionState } from "./health/connection";
 import { LoggedFoodsCatalog } from "./food/logged-catalog";
-import { buildNutritionLogPoint, byTime, copyNutritionLogPoint, editedNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
+import { buildNutritionLogPoint, buildPortionPoint, byTime, copyNutritionLogPoint, NUTRITION_LOG_PARENT, editedNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
@@ -23,6 +23,11 @@ import { amountAi } from "./ai/amount-ai";
 import { createAiSetting } from "./ui/ai-setting";
 import { createRowEditor, type RowEditor } from "./ui/row-editor";
 import { createDebugPanel } from "./ui/debug-panel";
+import { portionName, portionProfile, randomId, type Prep, type PrepPortion } from "./core/prep";
+import type { MealType } from "./health/types";
+import { PrepApi, PrepApiError, PrepApiMissingError } from "./prep/api-client";
+import { createPrepBuilder, type PrepBuilder, type PrepDraft } from "./ui/prep-builder";
+import { createPrepCard, type PrepCard } from "./ui/prep-card";
 import { describeError, installGlobalErrorHandlers, logger } from "./debug/log";
 
 /** Refetch interval while the tab is visible: the client-only stand-in for webhook pushes. */
@@ -82,6 +87,24 @@ class App {
   /** Why connecting to Google Health failed; shown with a Retry button instead of "Connecting…". */
   private connectError = "";
 
+  private readonly prepApi: PrepApi;
+  private readonly prepBuilder: PrepBuilder;
+  private readonly prepCard: PrepCard;
+  /** The user's meal preps (#55), as the API last listed them. */
+  private preps: Prep[] = [];
+  /** False once the site answers that it has no meal prep API: the card then stays hidden. */
+  private prepAvailable = true;
+  private prepLoading = false;
+  private prepError = "";
+  /** Whose preps these are, so that signing in as someone else starts afresh. */
+  private prepUser?: string;
+  /** Preps discarded in this session: shown with an undo until reload. */
+  private readonly prepDiscarded = new Set<string>();
+  private readonly prepBusy = new Set<string>();
+  private readonly prepMessages = new Map<string, { text: string; error: boolean }>();
+  /** Portions given back by deleting their diary entry in this session, by entry ID, so that an undo can take them again. */
+  private readonly givenBack = new Map<string, { prepId: string; fraction: number }>();
+
   private readonly connection: ConnectionMonitor;
   /** Kept across renders, so a change in connection does not disturb what the user is typing. */
   private readonly connectionNotice = el("p", { class: "notice", role: "alert", hidden: true });
@@ -105,6 +128,31 @@ class App {
     private readonly catalog: LoggedFoodsCatalog,
   ) {
     this.form = createLogForm(catalog, (d) => this.log(d));
+    this.prepBuilder = createPrepBuilder({
+      catalog,
+      draftKey: () => (this.auth.subject ? `foodDiary.prepDraft.${this.auth.subject}` : undefined),
+      onSave: (draft) => this.savePrep(draft),
+      onClose: () => this.renderPreps(),
+    });
+    this.prepCard = createPrepCard(
+      {
+        onNew: () => {
+          this.prepBuilder.open();
+          this.renderPreps();
+        },
+        onEdit: (prep) => {
+          this.prepBuilder.open(prep);
+          this.renderPreps();
+        },
+        onEat: (prep, fraction, mealType) => void this.eatPortion(prep, fraction, mealType),
+        onDiscard: (prep) => void this.discardPrep(prep, true),
+        onRestore: (prep) => void this.discardPrep(prep, false),
+        onRemovePortion: (prep, portion) => void this.removePortion(prep, portion),
+      },
+      this.prepBuilder.element,
+    );
+    // The ID token, never the access token: it proves who the user is and can't use the diary (DR-24).
+    this.prepApi = new PrepApi(new URL("api/", FOOD_INDEX_URL).href, () => this.auth.getIdToken());
     // Logging needs the write scope; the read scope (whole diary) is asked for but optional.
     this.auth = new GoogleAuth(clientId, SCOPES, [NUTRITION_WRITE_SCOPE]);
     this.api = new HealthClient((o) => this.auth.getAccessToken(o));
@@ -147,6 +195,8 @@ class App {
     this.connectionNotice.textContent = message ?? "";
     this.connectionNotice.hidden = !message;
     this.form.setOffline(this.connection.state === "offline");
+    this.prepBuilder?.setOffline(this.connection.state === "offline");
+    if (this.prepCard) this.renderPreps();
     this.editor?.setOffline(this.connection.state === "offline");
   }
 
@@ -206,6 +256,9 @@ class App {
     // The gram/ml units only matter for `serving`; find them without holding up the diary.
     void this.loadServingUnits(healthUserId);
     void this.loadLoggedFoods();
+    if (this.prepUser !== this.auth.subject) this.resetPreps();
+    this.prepUser = this.auth.subject;
+    void this.loadPreps();
     await this.loadToday();
   }
 
@@ -288,6 +341,8 @@ class App {
       // An edit's old entry leaves the diary before its delete is answered, and may be one written this session.
       const pending = withoutEntries([...this.pending.values()], this.deletedIds).filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === today);
       this.entries = toDiaryEntries([...points, ...pending], this.diaryContext());
+      const listed = new Set([...points.flatMap((p) => (p.name ? [idFromName(p.name)] : [])), ...this.pending.keys()]);
+      void this.loadPreps().then(() => this.confirmListed(listed));
       // Deleted in another app, or the day has changed: there is no row left to edit.
       if (this.editor && !this.entries.some((e) => e.id === this.editor?.id)) this.stopEditing();
       for (const [id, entry] of this.deleted) {
@@ -325,7 +380,7 @@ class App {
     appLog.info(`Logging ${draft.food.name}`, { id, quantity: draft.quantity, unit: draft.unit, mealType: draft.mealType });
     try {
       const { key } = await this.write(point);
-      if (draft.food.ref.source !== "manual") {
+      if (canReload(draft.food.ref.source)) {
         this.catalog.add({ id: key, ref: draft.food.ref, label: foodLabel(draft.food), at: draft.time.getTime() }, draft.food);
       }
     } catch (e) {
@@ -372,6 +427,7 @@ class App {
       this.entries = this.entries.filter((e) => e.id !== entry.id);
       this.deleted.set(entry.id, entry);
       this.deletedIds.add(entry.id);
+      if (entry.ref?.source === "prep") await this.giveBackDeleted(entry);
     } catch (e) {
       appLog.error("Deleting the entry failed", describeError(e));
       this.handleError(e, false);
@@ -393,8 +449,11 @@ class App {
     // The copy has no name for its unit until the API lists it, but the original did.
     if (log.serving?.foodMeasurementUnitDisplayName) this.unitNames.set(log.serving.foodMeasurementUnit, log.serving.foodMeasurementUnitDisplayName);
     let focusId = hadFocus ? entry.id : undefined;
+    let retaken: string | undefined;
     try {
+      retaken = await this.retakePortion(entry, idFromName(point.name!));
       const { key, created } = await this.write(point);
+      if (retaken) await this.confirmPortion(retaken, key);
       this.deleted.delete(entry.id);
       this.catalog.merge(toLoggedFoods([created], this.clientId));
       const restored = toDiaryEntry(created, this.diaryContext());
@@ -403,6 +462,8 @@ class App {
     } catch (e) {
       appLog.error("Undoing the delete failed", describeError(e));
       this.handleError(e, false);
+      // Google refused the copy, so the portion it would have been goes back too. A lost answer leaves it, unconfirmed.
+      if (retaken && !isConnectionFailure(e) && !(e instanceof PrepApiError)) await this.prepApi.remove(retaken).catch(() => undefined);
       this.showRowFailure(entry, isConnectionFailure(e) ? undoNotConfirmed(entry.displayName) : actionRefused("undo deleting", entry.displayName, refusalReason(e)));
     }
     this.busy.delete(entry.id);
@@ -527,6 +588,220 @@ class App {
     this.rowAlert.hidden = true;
   }
 
+  // Meal prep (#55, DR-24) ------------------------------------------------------------------------
+
+  private resetPreps() {
+    this.preps = [];
+    this.prepError = "";
+    this.prepDiscarded.clear();
+    this.prepBusy.clear();
+    this.prepMessages.clear();
+    this.givenBack.clear();
+  }
+
+  private renderPreps() {
+    if (!this.prepAvailable) return this.prepCard.hide();
+    this.prepCard.update({
+      preps: this.preps,
+      loading: this.prepLoading && this.preps.length === 0,
+      error: this.prepError,
+      offline: this.connection.state === "offline",
+      discarded: this.prepDiscarded,
+      busy: this.prepBusy,
+      messages: this.prepMessages,
+      building: this.prepBuilder.isOpen,
+    });
+  }
+
+  private async loadPreps() {
+    if (!this.prepAvailable || this.prepLoading || !this.auth.isSignedIn) return;
+    const user = this.auth.subject;
+    this.prepLoading = true;
+    this.renderPreps();
+    try {
+      const preps = await this.prepApi.list();
+      if (user !== this.auth.subject) return; // signed in as someone else meanwhile
+      this.preps = preps;
+      this.prepError = "";
+    } catch (e) {
+      if (e instanceof PrepApiMissingError) {
+        appLog.info("This site has no meal prep API; hiding meal prep");
+        this.prepAvailable = false;
+      } else {
+        appLog.warn("Loading the meal preps failed", describeError(e));
+        this.prepError = `Could not load your meal preps: ${refusalReason(e)}`;
+        this.handleError(e, false);
+      }
+    } finally {
+      this.prepLoading = false;
+      this.renderPreps();
+    }
+  }
+
+  /** Confirms the unconfirmed portions whose diary entries a listing showed. */
+  private async confirmListed(listed: ReadonlySet<string>) {
+    for (const prep of this.preps) {
+      for (const portion of prep.portions) {
+        if (portion.state === "unconfirmed" && portion.entryId && listed.has(portion.entryId)) await this.confirmPortion(portion.id, portion.entryId);
+      }
+    }
+  }
+
+  /** Best effort: an unconfirmed portion still counts as eaten, and a later listing confirms it. */
+  private async confirmPortion(portionId: string, entryId: string) {
+    try {
+      await this.prepApi.confirm(portionId, entryId);
+    } catch (e) {
+      appLog.warn("Could not confirm a portion; a later refresh will try again", describeError(e));
+    }
+  }
+
+  private say(prep: Prep, text: string, error = false) {
+    this.prepMessages.set(prep.id, { text, error });
+  }
+
+  private async savePrep(draft: PrepDraft) {
+    const id = draft.id ?? randomId(12);
+    try {
+      await this.prepApi.save(id, draft.name, draft.ingredients);
+    } catch (e) {
+      this.handleError(e, false);
+      throw new Error(`Could not save the prep: ${refusalReason(e)}`, { cause: e });
+    }
+    appLog.info(draft.id ? "Saved changes to a prep" : "Saved a new prep", { ingredients: draft.ingredients.length });
+    this.prepMessages.set(id, { text: draft.id ? "Saved. Portions from now on use the new ingredients." : "Saved.", error: false });
+    await this.loadPreps();
+  }
+
+  /**
+   * Reserves the portion, then logs it, then confirms it (docs/ARCHITECTURE.md section 4.5). Reserving first means two
+   * devices can't eat more than the batch between them. A lost answer leaves the portion unconfirmed, still counting as eaten.
+   */
+  private async eatPortion(prep: Prep, fraction: number | null, mealType: MealType | undefined) {
+    if (this.prepBusy.has(prep.id)) return;
+    this.prepBusy.add(prep.id);
+    this.prepMessages.delete(prep.id);
+    this.renderPreps();
+    const time = new Date();
+    const portionId = randomId(16);
+    const entryId = newEntryId({ source: "prep", id: prep.id });
+    try {
+      let portion: PrepPortion;
+      try {
+        portion = await this.prepApi.reserve(prep.id, { id: portionId, fraction, entryId, eatenAt: time.getTime() });
+      } catch (e) {
+        if (e instanceof PrepApiError && e.status === 409) throw new Error(e.left ? `Only ${Math.round(e.left * 100)}% is left.` : "There is none left.", { cause: e });
+        throw e;
+      }
+      const point = buildPortionPoint({ name: portionName(prep.name, portion.fraction), profile: portionProfile(prep.ingredients, portion.fraction), mealType, time }, entryId);
+      appLog.info(`Logging a portion of ${prep.name}`, { id: entryId, fraction: portion.fraction, mealType });
+      try {
+        const { key } = await this.write(point);
+        await this.confirmPortion(portionId, key);
+        this.say(prep, `Logged ${point.nutritionLog!.foodDisplayName}.`);
+        this.prepCard.clearAmount(prep.id);
+      } catch (e) {
+        if (isConnectionFailure(e)) {
+          this.say(prep, "Google Health did not answer, so this portion may not be in the diary. It counts as eaten until a refresh finds it. If it never appears, give it back from the list below.", true);
+        } else {
+          await this.prepApi.remove(portionId).catch(() => undefined);
+          throw new Error(`Google Health refused the entry, so nothing was eaten: ${refusalReason(e)}`, { cause: e });
+        }
+      }
+    } catch (e) {
+      appLog.error("Eating a portion failed", describeError(e));
+      this.handleError(e, false);
+      this.say(prep, refusalReason(e), true);
+    } finally {
+      this.prepBusy.delete(prep.id);
+      this.renderPreps();
+    }
+    await this.loadToday();
+  }
+
+  private async discardPrep(prep: Prep, discarded: boolean) {
+    if (this.prepBusy.has(prep.id)) return;
+    this.prepBusy.add(prep.id);
+    this.renderPreps();
+    try {
+      await this.prepApi.setDiscarded(prep.id, discarded);
+      if (discarded) this.prepDiscarded.add(prep.id);
+      else this.prepDiscarded.delete(prep.id);
+      this.say(prep, discarded ? "Discarded. Nothing was logged." : "Back again.");
+    } catch (e) {
+      this.handleError(e, false);
+      this.say(prep, `Could not ${discarded ? "discard" : "bring back"} ${prep.name}: ${refusalReason(e)}`, true);
+    } finally {
+      this.prepBusy.delete(prep.id);
+    }
+    await this.loadPreps();
+  }
+
+  /**
+   * Removes a portion from the prep's list: deletes its diary entry, then gives the portion back. An unconfirmed
+   * portion's entry may never have been written, so Google refusing to delete it doesn't stop the give-back.
+   */
+  private async removePortion(prep: Prep, portion: PrepPortion) {
+    if (this.prepBusy.has(prep.id)) return;
+    this.prepBusy.add(prep.id);
+    this.renderPreps();
+    try {
+      if (portion.entryId) {
+        try {
+          const op = await this.api.deleteNutritionLogs([`${NUTRITION_LOG_PARENT}/dataPoints/${portion.entryId}`]);
+          if (op.error && portion.state === "confirmed") throw new Error(op.error.message ?? "Google Health could not delete the entry.");
+        } catch (e) {
+          const gone = e instanceof HealthApiError && e.httpStatus === 404;
+          if (isConnectionFailure(e) || (portion.state === "confirmed" && !gone)) throw e;
+          appLog.info("The portion's entry was not deleted (it may never have been written); giving the portion back anyway", describeError(e));
+        }
+        this.deletedIds.add(portion.entryId);
+        this.entries = this.entries.filter((e) => e.id !== portion.entryId);
+        this.dropPending(portion.entryId);
+      }
+      await this.prepApi.remove(portion.id);
+      this.say(prep, "Removed from the diary, and given back to the prep.");
+    } catch (e) {
+      appLog.error("Removing a portion failed", describeError(e));
+      this.handleError(e, false);
+      this.say(prep, isConnectionFailure(e) ? deleteFailed(portionName(prep.name, portion.fraction)) : `Could not remove that portion: ${refusalReason(e)}`, true);
+    } finally {
+      this.prepBusy.delete(prep.id);
+    }
+    await Promise.all([this.loadPreps(), this.loadToday()]);
+  }
+
+  /** The diary entry of a portion was deleted: give the portion back, and remember it so that an undo can take it again. */
+  private async giveBackDeleted(entry: DiaryEntry) {
+    const found = this.preps.flatMap((prep) => prep.portions.filter((p) => p.entryId === entry.id).map((p) => ({ prep, portion: p })))[0];
+    if (!found) return;
+    this.givenBack.set(entry.id, { prepId: found.prep.id, fraction: found.portion.fraction });
+    try {
+      await this.prepApi.remove(found.portion.id);
+    } catch (e) {
+      appLog.warn("Deleted a portion's entry, but could not give the portion back", describeError(e));
+      this.say(found.prep, `The entry was deleted, but ${found.prep.name} still counts it as eaten. Remove it from the list below.`, true);
+    }
+    void this.loadPreps();
+  }
+
+  /** Before undoing a portion's delete, takes the portion again. Returns its ID, or undefined if this was not a portion. */
+  private async retakePortion(entry: DiaryEntry, copyId: string): Promise<string | undefined> {
+    const back = this.givenBack.get(entry.id);
+    if (entry.ref?.source !== "prep" || !back) return undefined;
+    const portionId = randomId(16);
+    try {
+      await this.prepApi.reserve(back.prepId, { id: portionId, fraction: back.fraction, entryId: copyId, eatenAt: entry.start.getTime() });
+    } catch (e) {
+      if (e instanceof PrepApiError && e.status === 409) throw new Error(`only ${Math.round((e.left ?? 0) * 100)}% of it is left, so it can't be eaten again`, { cause: e });
+      if (e instanceof PrepApiMissingError || (e instanceof PrepApiError && e.status === 404)) return undefined; // the prep is gone; the copy is just an entry
+      throw e;
+    }
+    this.givenBack.delete(entry.id);
+    void this.loadPreps();
+    return portionId;
+  }
+
   private diaryContext(): DiaryContext {
     return { ownClientId: this.clientId, unitNames: this.unitNames };
   }
@@ -546,6 +821,9 @@ class App {
     this.busy.clear();
     this.clearRowFailures();
     this.catalog.clear();
+    this.resetPreps();
+    this.prepUser = undefined;
+    if (this.prepBuilder.isOpen) this.prepBuilder.close();
     this.loggedFoodsRead = undefined;
     this.entries = [];
     this.notice = "";
@@ -616,6 +894,7 @@ class App {
       this.connectionNotice,
       this.notice && el("p", { class: "notice" }, this.notice),
       this.ready ? this.form.element : this.connectError ? this.renderConnectError() : el("p", { class: "status" }, "Connecting to Google Health…"),
+      this.ready && this.prepCard.element,
       this.ready &&
         el(
           "section",
@@ -639,6 +918,7 @@ class App {
       debugPanel,
     );
     this.renderDiary();
+    this.renderPreps();
   }
 
   /** Which unit energy is shown in, everywhere in the app. */
@@ -651,6 +931,8 @@ class App {
           setEnergyUnit(select.value as EnergyUnit);
           this.form.refreshPreview();
           this.editor?.refresh();
+          this.prepBuilder.refreshPreview();
+          this.prepCard.refreshPreview();
           this.renderDiary();
         },
       },
