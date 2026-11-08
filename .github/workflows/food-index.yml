@@ -11,8 +11,10 @@ name: Food index
 #
 # The same site serves the meal prep API at /api/* (DR-24): functions/, with a D1
 # database. Deploying it needs CLOUDFLARE_D1_TOKEN (Account > D1 > Edit and Account >
-# Cloudflare Pages > Edit) in the same environment. Without it, the deploy leaves the
-# API out and the index is published as before.
+# Cloudflare Pages > Edit) in the same environment. Without it, or if it lacks either
+# permission, the deploy leaves the API out with a warning and the index is published as
+# before. If deploying with the API fails anyway, the index is deployed without it and the
+# run is marked failed.
 #
 # Crosstalk guard: a Pages token can edit every Pages project in its account, so
 # this workflow only ever touches PAGES_PROJECT, and refuses to deploy to an
@@ -175,10 +177,13 @@ jobs:
             echo "Deployed with the meal prep API." | tee -a "$GITHUB_STEP_SUMMARY"
           else
             # The index must still go out: deploy it as before, without the API.
-            echo "::warning::Deploying with the meal prep API failed, so the index is deployed without it. CLOUDFLARE_D1_TOKEN needs Account > Cloudflare Pages > Edit as well as D1 > Edit." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::error::Deploying with the meal prep API failed (see the log above; often CLOUDFLARE_D1_TOKEN lacks Account > Cloudflare Pages > Edit). The index is deployed without the API, and the run is marked failed." | tee -a "$GITHUB_STEP_SUMMARY"
             rm -rf functions wrangler.jsonc food-index-dist/_routes.json
             deploy
+            api_failed=true
           fi
           subdomain=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PAGES_PROJECT" | jq -r '.result.subdomain')
           echo "Deployed to Cloudflare Pages project **$PAGES_PROJECT** (https://$subdomain/). The app reads it through the custom domain in the FOOD_INDEX_URL repository variable." | tee -a "$GITHUB_STEP_SUMMARY"
+          # The index is out, but a deploy that dropped the API must not look like a success.
+          if [ "${api_failed:-false}" = true ]; then exit 1; fi
