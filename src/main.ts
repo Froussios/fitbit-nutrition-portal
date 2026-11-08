@@ -130,7 +130,7 @@ class App {
     this.form = createLogForm(catalog, (d) => this.log(d));
     this.prepBuilder = createPrepBuilder({
       catalog,
-      draftKey: () => (this.auth.subject ? `foodDiary.prepDraft.${this.auth.subject}` : undefined),
+      draftKey: (prepId) => (this.auth.subject ? `foodDiary.prepDraft.${this.auth.subject}.${prepId ?? "new"}` : undefined),
       onSave: (draft) => this.savePrep(draft),
       onClose: () => this.renderPreps(),
     });
@@ -453,7 +453,10 @@ class App {
     try {
       retaken = await this.retakePortion(entry, idFromName(point.name!));
       const { key, created } = await this.write(point);
-      if (retaken) await this.confirmPortion(retaken, key);
+      if (retaken) {
+        this.givenBack.delete(entry.id);
+        await this.confirmPortion(retaken, key);
+      }
       this.deleted.delete(entry.id);
       this.catalog.merge(toLoggedFoods([created], this.clientId));
       const restored = toDiaryEntry(created, this.diaryContext());
@@ -691,6 +694,9 @@ class App {
         portion = await this.prepApi.reserve(prep.id, { id: portionId, fraction, entryId, eatenAt: time.getTime() });
       } catch (e) {
         if (e instanceof PrepApiError && e.status === 409) throw new Error(e.left ? `Only ${Math.round(e.left * 100)}% is left.` : "There is none left.", { cause: e });
+        if (e instanceof PrepApiError && e.connectionFailed) {
+          throw new Error("The meal prep service did not answer, so this portion may have been taken. Nothing was logged. Check “Eaten so far” before trying again.", { cause: e });
+        }
         throw e;
       }
       const point = buildPortionPoint({ name: portionName(prep.name, portion.fraction), profile: portionProfile(prep.ingredients, portion.fraction), mealType, time }, entryId);
@@ -704,8 +710,16 @@ class App {
         if (isConnectionFailure(e)) {
           this.say(prep, "Google Health did not answer, so this portion may not be in the diary. It counts as eaten until a refresh finds it. If it never appears, give it back from the list below.", true);
         } else {
-          await this.prepApi.remove(portionId).catch(() => undefined);
-          throw new Error(`Google Health refused the entry, so nothing was eaten: ${refusalReason(e)}`, { cause: e });
+          const givenBack = await this.prepApi.remove(portionId).then(
+            () => true,
+            (removeError: unknown) => (appLog.warn("Could not give back a refused portion", describeError(removeError)), false),
+          );
+          throw new Error(
+            givenBack
+              ? `Google Health refused the entry, so nothing was eaten: ${refusalReason(e)}`
+              : `Google Health refused the entry (${refusalReason(e)}), but the portion still counts as eaten. Give it back from the list below.`,
+            { cause: e },
+          );
         }
       }
     } catch (e) {
@@ -774,7 +788,11 @@ class App {
   /** The diary entry of a portion was deleted: give the portion back, and remember it so that an undo can take it again. */
   private async giveBackDeleted(entry: DiaryEntry) {
     const found = this.preps.flatMap((prep) => prep.portions.filter((p) => p.entryId === entry.id).map((p) => ({ prep, portion: p })))[0];
-    if (!found) return;
+    if (!found) {
+      appLog.warn("Deleted a portion's entry, but its prep is not loaded; nothing was given back", { id: entry.id });
+      this.showRowFailure(entry, `${entry.displayName} was deleted, but its meal prep could not be checked, so it may still count as eaten. If it does, remove it from the prep's list.`);
+      return;
+    }
     this.givenBack.set(entry.id, { prepId: found.prep.id, fraction: found.portion.fraction });
     try {
       await this.prepApi.remove(found.portion.id);
@@ -797,7 +815,7 @@ class App {
       if (e instanceof PrepApiMissingError || (e instanceof PrepApiError && e.status === 404)) return undefined; // the prep is gone; the copy is just an entry
       throw e;
     }
-    this.givenBack.delete(entry.id);
+    // Kept in givenBack until the copy is written: if Google refuses it, the next undo must take the portion again.
     void this.loadPreps();
     return portionId;
   }

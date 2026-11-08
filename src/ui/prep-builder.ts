@@ -31,8 +31,8 @@ export interface PrepBuilder {
 
 export interface PrepBuilderOptions {
   readonly catalog: FoodCatalog;
-  /** Where this user's unsaved draft is kept on this device, so a reload or an expired sign-in loses nothing. */
-  readonly draftKey: () => string | undefined;
+  /** Where this user's unsaved draft of a prep (or of a new one) is kept on this device, so a reload or an expired sign-in loses nothing. */
+  readonly draftKey: (prepId: string | undefined) => string | undefined;
   readonly onSave: (draft: PrepDraft) => Promise<void>;
   readonly onClose: () => void;
 }
@@ -118,7 +118,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
   }
 
   function persist() {
-    const key = opts.draftKey();
+    const key = opts.draftKey(editingId);
     if (!key) return;
     try {
       if (!name.value.trim() && ingredients.length === 0) localStorage.removeItem(key);
@@ -128,8 +128,8 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
     }
   }
 
-  function readDraft(): PrepDraft | undefined {
-    const key = opts.draftKey();
+  function readDraft(prepId: string | undefined): PrepDraft | undefined {
+    const key = opts.draftKey(prepId);
     if (!key) return undefined;
     try {
       const raw = localStorage.getItem(key);
@@ -206,7 +206,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
     setStatus(status, "Saving…");
     try {
       await opts.onSave({ ...(editingId ? { id: editingId } : {}), name: trimmed, ingredients });
-      const key = opts.draftKey();
+      const key = opts.draftKey(editingId);
       try {
         if (key) localStorage.removeItem(key);
       } catch {
@@ -253,10 +253,17 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
     open(prep) {
       open = true;
       element.hidden = false;
-      const draft = readDraft();
-      // A draft belongs to the prep it was started for: a new prep, or the one being edited.
-      const start: PrepDraft = prep ? (draft?.id === prep.id ? draft : prep) : draft && !draft.id ? draft : { name: "", ingredients: [] };
+      // Each prep, and the new one, has its own draft.
+      const start: PrepDraft = readDraft(prep?.id) ?? prep ?? { name: "", ingredients: [] };
       editingId = prep?.id;
+      // Start the ingredient search afresh, so nothing half-chosen last time is carried over.
+      choice++;
+      chosen = undefined;
+      loading = undefined;
+      combobox.input.value = "";
+      combobox.input.dispatchEvent(new Event("input", { bubbles: true }));
+      amount.clear();
+      amount.hideUnits();
       heading.textContent = prep ? `Edit ${prep.name}` : "New prep";
       name.value = start.name;
       ingredients = [...start.ingredients];
