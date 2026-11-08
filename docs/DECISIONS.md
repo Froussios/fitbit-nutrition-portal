@@ -301,8 +301,9 @@ such as a breakfast logged at 9 pm.
 description after a comma (`100 g`, `1 oz, cooked`, `12 fl oz (355 ml)`), and its size is what that measure says, within 3%.
 Portions named as a serving (`1 pie (150 g)`, `1 serving (300 ml)`) stay, and so do measures whose size differs: `1 cup`
 of flour at 125 g, `1 tablespoon` at 15 ml, `1 fl oz` of milk at 30.5 g, `1 oz, dry, yields` 170 g.
-**Why.** Owner decision (8 November 2026): such options only repeat a unit in another size, which clutters the unit
-list without saving any typing.
+**Why.** Owner decision (8 November 2026): such a portion reads as a unit, so it invites wrong entries. Someone who ate
+200 g picks `× 100 g` and types 200, logging 20 kg. Picked correctly, it makes them do the scaling in their head (2 ×
+100 g), and it saves nothing over the `g` unit beside it.
 **Consequence.** Applied by the builders, for every source with portions: the food index (Open Food Facts) and the generic
 foods file (FNDDS; AFCD has none). Data built earlier keeps them until it is rebuilt. In the generic foods file, plain
 weights no longer use up the six portions kept per food. A serving written as a bare weight, such as `30 g`, is no longer

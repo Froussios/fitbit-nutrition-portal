@@ -1,6 +1,7 @@
 /**
  * Which of a source's portions are worth offering (DR-28). Sources often list a plain weight or volume as a portion,
- * such as "100 g" or "1 oz", which only repeats a unit the app already has, in another size. Those are dropped. A
+ * such as "100 g" or "1 oz". It reads as a unit, so 200 typed against "× 100 g" logs 20 kg, and it only repeats a unit
+ * the app already has. Those are dropped. A
  * portion whose name says what it is, such as "1 pie (150 g)" or "1 serving (300 ml)", stays, as does a measure whose
  * size is not what the measure says: "1 cup" of flour weighs 125 g, and "1 oz, dry, yields" 170 g of cooked rice.
  * The index builders apply it to every source, so the app reads data that is already filtered.
