@@ -85,8 +85,12 @@ export type LegacyDictEntry = readonly [word: string, ...ListRef];
 /** For each 2- or 3-letter prefix: how many words start with it, and if more than MAX_EXPANSIONS, its best IDs (base64 varint deltas). */
 export type PrefixGroup = Readonly<Record<string, readonly [expansions: number, ids?: string]>>;
 
-/** [code, name, brand, packSize, basis, kcalPer100, servingLabel, servingAmount, servingUnit] */
-export type SummaryRow = readonly [string, string, string | null, string | null, BaseUnit, number, string | null, number | null, BaseUnit | null];
+/**
+ * [code, name, brand, packSize, basis, kcalPer100, servingLabel, servingAmount, servingUnit, countries]. Countries are
+ * ISO codes separated by spaces ("AU NZ"), left out when none are known, and missing in indexes built before them.
+ */
+export type SummaryRow = readonly [...SummaryFields, countries?: string];
+type SummaryFields = [string, string, string | null, string | null, BaseUnit, number, string | null, number | null, BaseUnit | null];
 
 /** [nutrients in NUTRIENT_KEYS order, portions as [name, amount, unit], density] */
 export type DetailRow = readonly [readonly (number | null)[], readonly (readonly [string, number, BaseUnit])[], number | null];
@@ -177,7 +181,7 @@ export function fromBase64(text: string): Uint8Array {
 const round = (n: number) => Math.round(n * 1000) / 1000;
 
 export function summaryRow(s: FoodSummary): SummaryRow {
-  return [
+  const row: SummaryFields = [
     s.ref.id,
     s.name,
     s.brand ?? null,
@@ -188,10 +192,13 @@ export function summaryRow(s: FoodSummary): SummaryRow {
     s.serving && s.serving.unit === s.basis ? round(s.serving.amount) : null,
     s.serving && s.serving.unit === s.basis ? s.serving.unit : null,
   ];
+  return s.countries?.length ? [...row, s.countries.join(" ")] : row;
 }
 
+const countriesOf = (text: string | undefined) => (text ? { countries: text.split(" ") } : {});
+
 export function fromSummaryRow(r: SummaryRow): FoodSummary {
-  const [code, name, brand, packSize, basis, kcal, servingLabel, servingAmount, servingUnit] = r;
+  const [code, name, brand, packSize, basis, kcal, servingLabel, servingAmount, servingUnit, countries] = r;
   return {
     ref: { source: "off", id: code },
     name,
@@ -203,6 +210,7 @@ export function fromSummaryRow(r: SummaryRow): FoodSummary {
     ...(servingLabel && servingAmount && servingUnit === basis
       ? { serving: { label: servingLabel, amount: servingAmount, unit: servingUnit, kcal: (kcal * servingAmount) / 100 } }
       : {}),
+    ...countriesOf(countries),
   };
 }
 
@@ -217,7 +225,7 @@ export function detailRow(f: FoodItem): DetailRow {
 
 /** Rebuilds the full food from its summary and detail rows. */
 export function toFoodItem(s: SummaryRow, d: DetailRow): FoodItem {
-  const [code, name, brand, packSize, basis, kcal] = s;
+  const [code, name, brand, packSize, basis, kcal, , , , countries] = s;
   const [values, portions, density] = d;
   const nutrients: Partial<Record<NutrientKey, number>> = {};
   NUTRIENT_KEYS.forEach((k, i) => {
@@ -233,6 +241,7 @@ export function toFoodItem(s: SummaryRow, d: DetailRow): FoodItem {
     per100: { energyKcal: kcal, nutrients },
     portions: portions.map(([n, amount, unit]): Portion => ({ name: n, amount, unit })),
     ...(density ? { densityGPerMl: density } : {}),
+    ...countriesOf(countries),
   };
 }
 

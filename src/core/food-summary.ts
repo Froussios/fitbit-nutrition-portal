@@ -15,6 +15,8 @@ export interface FoodSummary {
   readonly basis: BaseUnit;
   readonly kcalPer100: number;
   readonly serving?: { readonly label: string; readonly amount: number; readonly unit: BaseUnit; readonly kcal: number };
+  /** Where the product is sold, as ISO codes (`FoodItem.countries`). */
+  readonly countries?: readonly string[];
 }
 
 /** The serving portion: any named portion other than the whole pack. */
@@ -31,6 +33,7 @@ export function summarise(food: FoodItem): FoodSummary {
   };
   if (food.brand) summary.brand = food.brand;
   if (food.packSize) summary.packSize = food.packSize;
+  if (food.countries?.length) summary.countries = food.countries;
   const serving = servingPortion(food);
   if (serving) {
     try {
