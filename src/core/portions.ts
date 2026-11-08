@@ -3,6 +3,7 @@
  * such as "100 g" or "1 oz", which only repeats a unit the app already has, in another size. Those are dropped. A
  * portion whose name says what it is, such as "1 pie (150 g)" or "1 serving (300 ml)", stays, as does a measure whose
  * size is not what the measure says: "1 cup" of flour weighs 125 g, and "1 oz, dry, yields" 170 g of cooked rice.
+ * The index builders apply it to every source, so the app reads data that is already filtered.
  */
 
 import { comparable } from "./amount-text";

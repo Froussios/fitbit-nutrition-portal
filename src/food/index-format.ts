@@ -1,7 +1,6 @@
 import type { FoodItem } from "../core/food";
 import type { FoodSummary } from "../core/food-summary";
 import { NUTRIENT_KEYS, type NutrientKey } from "../core/nutrients";
-import { isRescaledUnit, usefulPortions } from "../core/portions";
 import type { BaseUnit, Portion } from "../core/units";
 
 /**
@@ -207,9 +206,8 @@ export function fromSummaryRow(r: SummaryRow): FoodSummary {
     ...(packSize ? { packSize } : {}),
     basis,
     kcalPer100: kcal,
-    // The builder only stores servings in the food's own basis (no density in Open Food Facts). Older indexes also
-    // stored servings that are only a weight, such as "100 g" (DR-28).
-    ...(servingLabel && servingAmount && servingUnit === basis && !isRescaledUnit({ name: servingLabel, amount: servingAmount, unit: servingUnit })
+    // The builder only stores servings in the food's own basis (no density in Open Food Facts).
+    ...(servingLabel && servingAmount && servingUnit === basis
       ? { serving: { label: servingLabel, amount: servingAmount, unit: servingUnit, kcal: (kcal * servingAmount) / 100 } }
       : {}),
     ...countriesOf(countries),
@@ -241,8 +239,7 @@ export function toFoodItem(s: SummaryRow, d: DetailRow): FoodItem {
     ...(packSize ? { packSize } : {}),
     basis,
     per100: { energyKcal: kcal, nutrients },
-    // Indexes built before DR-28 still list plain weights as portions.
-    portions: usefulPortions(portions.map(([n, amount, unit]): Portion => ({ name: n, amount, unit }))),
+    portions: portions.map(([n, amount, unit]): Portion => ({ name: n, amount, unit })),
     ...(density ? { densityGPerMl: density } : {}),
     ...countriesOf(countries),
   };

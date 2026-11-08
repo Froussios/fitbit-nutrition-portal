@@ -1,6 +1,7 @@
 import { HOME_COUNTRY } from "../src/core/countries";
 import { summarise } from "../src/core/food-summary";
 import { fromOffProduct, type OffProduct } from "../src/core/off";
+import { usefulPortions } from "../src/core/portions";
 import { compareRank, headWords, indexWords, nameWordCount, popularity, productWordCount, sameNameKey } from "../src/core/tokens";
 import {
   CHUNK_SIZE,
@@ -130,6 +131,8 @@ export class IndexBuilder {
     } catch {
       return this.drop("noEnergy");
     }
+    // A serving that is only a weight, such as "100 g", is neither offered nor shown in the search row (DR-28).
+    food = { ...food, portions: usefulPortions(food.portions) };
     const countries = offCountries(raw.countries_tags);
     if (countries.length) food = { ...food, countries };
     const kcal = food.per100.energyKcal;

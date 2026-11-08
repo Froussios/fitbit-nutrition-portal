@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isRescaledUnit, usefulPortions } from "../src/core/portions";
 import type { BaseUnit } from "../src/core/units";
-import { genericToFoodItem, type GenericRow } from "../src/food/generics-format";
-import { fromSummaryRow, toFoodItem, type DetailRow, type SummaryRow } from "../src/food/index-format";
 
 const portion = (name: string, amount: number, unit: BaseUnit = "g") => ({ name, amount, unit });
 
@@ -59,19 +57,5 @@ describe("isRescaledUnit", () => {
 
   it("keeps the order of what is left", () => {
     expect(usefulPortions([portion("1 slice", 21), portion("1 oz", 28.35), portion("1 cup, diced", 132)]).map((p) => p.name)).toEqual(["1 slice", "1 cup, diced"]);
-  });
-});
-
-describe("data built before the filter", () => {
-  it("drops plain weights from a generic food's portions", () => {
-    const row: GenericRow = ["fndds", "1", "Cheese, Parmesan, hard", "g", 392, [], null, [["1 cubic inch", 10.3], ["1 oz", 28.4], ["5 oz package", 142]]];
-    expect(genericToFoodItem(row).portions.map((p) => p.name)).toEqual(["1 cubic inch", "5 oz package"]);
-  });
-
-  it("drops a plain weight from an indexed product, and from its search row", () => {
-    const summary: SummaryRow = ["1", "Yoghurt", null, null, "g", 100, "100 g", 100, "g"];
-    const detail: DetailRow = [[], [["100 g", 100, "g"], ["pack (1 kg)", 1000, "g"]], null];
-    expect(toFoodItem(summary, detail).portions.map((p) => p.name)).toEqual(["pack (1 kg)"]);
-    expect(fromSummaryRow(summary).serving).toBeUndefined();
   });
 });
