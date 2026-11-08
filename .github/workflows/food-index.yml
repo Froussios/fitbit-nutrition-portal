@@ -11,8 +11,10 @@ name: Food index
 #
 # The same site serves the meal prep API at /api/* (DR-24): functions/, with a D1
 # database. Deploying it needs CLOUDFLARE_D1_TOKEN (Account > D1 > Edit and Account >
-# Cloudflare Pages > Edit) in the same environment. Without it, the deploy leaves the
-# API out and the index is published as before.
+# Cloudflare Pages > Edit) in the same environment. Without it, or if it lacks either
+# permission, the deploy leaves the API out with a warning and the index is published as
+# before. If preparing or deploying the API fails anyway, the index is deployed without it
+# and the run is marked failed.
 #
 # Crosstalk guard: a Pages token can edit every Pages project in its account, so
 # this workflow only ever touches PAGES_PROJECT, and refuses to deploy to an
@@ -79,6 +81,29 @@ jobs:
               ;;
           esac
 
+      # Checked before the long build, so that a token without enough access shows up at once, not after 30 minutes.
+      - name: Check the meal prep API's token
+        id: d1
+        env:
+          D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_TOKEN }}
+          CREATE: ${{ steps.project.outputs.create }}
+        run: |
+          set -euo pipefail
+          if [ -z "$D1_TOKEN" ]; then
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+          # An outage gives 000, so the API is left out with a warning instead of failing the run.
+          d1=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $D1_TOKEN" "$base/d1/database" || true)
+          pages=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $D1_TOKEN" "$base/pages/projects/$PAGES_PROJECT" || true)
+          if [ "$d1" = 200 ] && { [ "$pages" = 200 ] || { [ "$pages" = 404 ] && [ "$CREATE" = true ]; }; }; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::CLOUDFLARE_D1_TOKEN can't reach both D1 (HTTP $d1) and the Pages project (HTTP $pages). It needs Account > D1 > Edit and Account > Cloudflare Pages > Edit. This deploy leaves out the meal prep API." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -106,45 +131,76 @@ jobs:
       - name: Prepare the meal prep API
         id: api
         env:
-          D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_TOKEN }}
+          D1_TOKEN: ${{ steps.d1.outputs.ok == 'true' && secrets.CLOUDFLARE_D1_TOKEN || '' }}
+          HAS_SECRET: ${{ secrets.CLOUDFLARE_D1_TOKEN != '' }}
         run: |
           set -euo pipefail
-          if [ -z "$D1_TOKEN" ]; then
-            echo "::warning::No CLOUDFLARE_D1_TOKEN secret, so this deploy leaves out the meal prep API (README, Food index)."
+          leave_out() {
             rm -rf functions wrangler.jsonc food-index-dist/_routes.json
             echo "included=false" >> "$GITHUB_OUTPUT"
+          }
+          if [ -z "$D1_TOKEN" ]; then
+            # A secret that failed the check has already said why.
+            if [ "$HAS_SECRET" != true ]; then echo "::warning::No CLOUDFLARE_D1_TOKEN secret, so this deploy leaves out the meal prep API (README, Food index)."; fi
+            leave_out
             exit 0
           fi
-          export CLOUDFLARE_API_TOKEN="$D1_TOKEN"
-          find_db() { npx --yes wrangler@4 d1 list --json | jq -r '.[] | select(.name == "food-diary") | (.uuid // .id)'; }
-          id=$(find_db)
-          if [ -z "$id" ]; then
-            echo "Creating the D1 database food-diary."
-            npx --yes wrangler@4 d1 create food-diary
+          # In a subshell, so that a failure leaves the API out and the index still deploys (the run is failed at the end).
+          set +e
+          (
+            set -euo pipefail
+            export CLOUDFLARE_API_TOKEN="$D1_TOKEN"
+            find_db() { npx --yes wrangler@4 d1 list --json | jq -r '.[] | select(.name == "food-diary") | (.uuid // .id)'; }
             id=$(find_db)
+            if [ -z "$id" ]; then
+              echo "Creating the D1 database food-diary."
+              npx --yes wrangler@4 d1 create food-diary
+              id=$(find_db)
+            fi
+            if ! [[ "$id" =~ ^[0-9a-f-]{36}$ ]]; then
+              echo "Could not find the D1 database food-diary."
+              exit 1
+            fi
+            sed -i "s/00000000-0000-0000-0000-000000000000/$id/; s/\"name\": \"food-diary-index\"/\"name\": \"$PAGES_PROJECT\"/" wrangler.jsonc
+            grep -q "\"database_id\": \"$id\"" wrangler.jsonc
+            grep -q "\"name\": \"$PAGES_PROJECT\"" wrangler.jsonc
+            npx --yes wrangler@4 d1 migrations apply DB --remote
+            echo "Meal prep API included, with D1 database \`$id\`." | tee -a "$GITHUB_STEP_SUMMARY"
+          )
+          prepared=$?
+          set -e
+          if [ "$prepared" = 0 ]; then
+            echo "included=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Preparing the meal prep API failed (see the log above; often CLOUDFLARE_D1_TOKEN lacks Account > D1 > Edit). The index is deployed without the API, and the run is marked failed." | tee -a "$GITHUB_STEP_SUMMARY"
+            leave_out
+            echo "failed=true" >> "$GITHUB_OUTPUT"
           fi
-          if ! [[ "$id" =~ ^[0-9a-f-]{36}$ ]]; then
-            echo "::error::Could not find the D1 database food-diary."
-            exit 1
-          fi
-          sed -i "s/00000000-0000-0000-0000-000000000000/$id/; s/\"name\": \"food-diary-index\"/\"name\": \"$PAGES_PROJECT\"/" wrangler.jsonc
-          grep -q "\"database_id\": \"$id\"" wrangler.jsonc
-          grep -q "\"name\": \"$PAGES_PROJECT\"" wrangler.jsonc
-          npx --yes wrangler@4 d1 migrations apply DB --remote
-          echo "included=true" >> "$GITHUB_OUTPUT"
-          echo "Meal prep API included, with D1 database \`$id\`." | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy to Cloudflare Pages
         env:
           # Attaching the database needs a token with D1 access as well as Pages.
           D1_TOKEN: ${{ steps.api.outputs.included == 'true' && secrets.CLOUDFLARE_D1_TOKEN || '' }}
+          PREPARE_FAILED: ${{ steps.api.outputs.failed }}
         run: |
           set -euo pipefail
-          if [ -n "$D1_TOKEN" ]; then export CLOUDFLARE_API_TOKEN="$D1_TOKEN"; fi
           if [ "${{ steps.project.outputs.create }}" = "true" ]; then
             npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch=main
           fi
-          npx --yes wrangler@4 pages deploy food-index-dist --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true
+          deploy() { npx --yes wrangler@4 pages deploy food-index-dist --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true; }
+          if [ -z "$D1_TOKEN" ]; then
+            deploy
+          elif CLOUDFLARE_API_TOKEN="$D1_TOKEN" deploy; then
+            echo "Deployed with the meal prep API." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            # The index must still go out: deploy it as before, without the API.
+            echo "::error::Deploying with the meal prep API failed (see the log above; often CLOUDFLARE_D1_TOKEN lacks Account > Cloudflare Pages > Edit). The index is deployed without the API, and the run is marked failed." | tee -a "$GITHUB_STEP_SUMMARY"
+            rm -rf functions wrangler.jsonc food-index-dist/_routes.json
+            deploy
+            api_failed=true
+          fi
           subdomain=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PAGES_PROJECT" | jq -r '.result.subdomain')
           echo "Deployed to Cloudflare Pages project **$PAGES_PROJECT** (https://$subdomain/). The app reads it through the custom domain in the FOOD_INDEX_URL repository variable." | tee -a "$GITHUB_STEP_SUMMARY"
+          # The index is out, but a deploy that dropped the API must not look like a success.
+          if [ "${api_failed:-false}" = true ] || [ "$PREPARE_FAILED" = true ]; then exit 1; fi
