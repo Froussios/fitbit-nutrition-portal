@@ -203,7 +203,8 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
 * **Deployment.** The Functions live at `/api/*` in the `food-diary-index` Pages project, and `_routes.json` (written by the
   index build) keeps every other request static, so food search does not use the Functions allowance. A Pages deploy replaces
   the whole site, so API changes ship only through the Food index workflow. It creates the database if needed, applies
-  `migrations/` first, and uses `CLOUDFLARE_D1_TOKEN`; without that secret it leaves the API out (README, Food index).
+  `migrations/` first, and uses `CLOUDFLARE_D1_TOKEN`; without that secret, or if the token lacks either permission, it warns and leaves the API out, still publishing the
+  index (README, Food index).
 
 ## 5. Authentication
 

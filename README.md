@@ -115,7 +115,7 @@ One-time setup:
 7. **Meal prep API** (optional, DR-24). The same site serves it at `/api/*`, from `functions/` with a D1 database.
    Create a second Account API token with **Account → D1 → Edit** and **Account → Cloudflare Pages → Edit**, and add it
    to the **food-index** environment as `CLOUDFLARE_D1_TOKEN`. The next Food index run creates the database
-   `food-diary`, applies `migrations/`, and deploys the API with the index. Until the secret exists, deploys leave the
+   `food-diary`, applies `migrations/`, and deploys the API with the index. Until the secret exists, or if it lacks either permission, deploys warn and leave the
    API out. API changes go live only with that workflow, because a Pages deploy replaces the whole site.
 
    To run the API locally: `npx wrangler d1 migrations apply DB --local`, then `npx wrangler pages dev` (it serves
