@@ -26,6 +26,8 @@ export interface FoodCombobox {
   readonly input: HTMLInputElement;
   /** Whether a choice (hit or custom) currently stands in the field. */
   readonly hasChoice: boolean;
+  /** Empties the field and closes the list, for a fresh start. Doesn't call onEdit: the caller already knows. */
+  reset(): void;
 }
 
 /** Shows a "Searching…" hint only when a search takes longer than this. */
@@ -252,6 +254,13 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
     input,
     get hasChoice() {
       return hasChoice;
+    },
+    reset() {
+      hasChoice = false;
+      input.value = "";
+      state = reduce(state, { type: "input", text: "" });
+      controller.setQuery("");
+      dispatch({ type: "close" });
     },
   };
 }

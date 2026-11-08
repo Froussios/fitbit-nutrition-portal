@@ -17,6 +17,8 @@ export interface PrepDraft {
   readonly id?: string;
   readonly name: string;
   readonly ingredients: readonly PrepIngredient[];
+  /** When the draft was last changed, so that a saved prep changed since then wins over it. */
+  readonly savedAt?: number;
 }
 
 export interface PrepBuilder {
@@ -122,7 +124,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
     if (!key) return;
     try {
       if (!name.value.trim() && ingredients.length === 0) localStorage.removeItem(key);
-      else localStorage.setItem(key, JSON.stringify({ ...(editingId ? { id: editingId } : {}), name: name.value, ingredients } satisfies PrepDraft));
+      else localStorage.setItem(key, JSON.stringify({ ...(editingId ? { id: editingId } : {}), name: name.value, ingredients, savedAt: Date.now() } satisfies PrepDraft));
     } catch {
       // Storage blocked: the draft lives only in the page.
     }
@@ -186,8 +188,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
     ingredients = [...ingredients, { ref: chosen.ref, label: foodLabel(chosen), quantity: read.quantity, unit: read.unit, profile: nutrientsForAmount(chosen, read.quantity, read.unit) }];
     setStatus(addStatus, `Added ${chosen.name}.`);
     chosen = undefined;
-    combobox.input.value = "";
-    combobox.input.dispatchEvent(new Event("input", { bubbles: true }));
+    combobox.reset();
     amount.clear();
     amount.hideUnits();
     changed();
@@ -253,21 +254,31 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
     open(prep) {
       open = true;
       element.hidden = false;
-      // Each prep, and the new one, has its own draft.
-      const start: PrepDraft = readDraft(prep?.id) ?? prep ?? { name: "", ingredients: [] };
+      // Each prep, and the new one, has its own draft. A prep saved since its draft (here or on another device) wins.
+      let draft = readDraft(prep?.id);
+      if (draft && prep && (draft.savedAt ?? 0) < prep.updatedAt) {
+        draft = undefined;
+        const key = opts.draftKey(prep.id);
+        try {
+          if (key) localStorage.removeItem(key);
+        } catch {
+          // Nothing was stored.
+        }
+      }
+      const start: PrepDraft = draft ?? prep ?? { name: "", ingredients: [] };
       editingId = prep?.id;
       // Start the ingredient search afresh, so nothing half-chosen last time is carried over.
       choice++;
       chosen = undefined;
       loading = undefined;
-      combobox.input.value = "";
-      combobox.input.dispatchEvent(new Event("input", { bubbles: true }));
+      combobox.reset();
       amount.clear();
       amount.hideUnits();
       heading.textContent = prep ? `Edit ${prep.name}` : "New prep";
       name.value = start.name;
       ingredients = [...start.ingredients];
-      setStatus(status, prep ? "Changes apply to portions eaten from now on." : "");
+      const restored = draft ? "Restored your unsaved changes. " : "";
+      setStatus(status, `${restored}${prep ? "Changes apply to portions eaten from now on." : ""}`.trim());
       setStatus(addStatus, "");
       renderList();
       name.focus();

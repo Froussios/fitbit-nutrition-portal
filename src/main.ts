@@ -467,7 +467,14 @@ class App {
       this.handleError(e, false);
       // Google refused the copy, so the portion it would have been goes back too. A lost answer leaves it, unconfirmed.
       if (retaken && !isConnectionFailure(e) && !(e instanceof PrepApiError)) await this.prepApi.remove(retaken).catch(() => undefined);
-      this.showRowFailure(entry, isConnectionFailure(e) ? undoNotConfirmed(entry.displayName) : actionRefused("undo deleting", entry.displayName, refusalReason(e)));
+      this.showRowFailure(
+        entry,
+        isConnectionFailure(e)
+          ? undoNotConfirmed(entry.displayName)
+          : e instanceof PrepApiError && e.connectionFailed
+            ? `The meal prep service did not answer, so "${entry.displayName}" was not logged again. Its portion may have been taken: check the prep's list before trying again.`
+            : actionRefused("undo deleting", entry.displayName, refusalReason(e)),
+      );
     }
     this.busy.delete(entry.id);
     this.renderDiary(focusId);
