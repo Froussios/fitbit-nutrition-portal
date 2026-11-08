@@ -138,9 +138,27 @@ export function selectableUnits(food: Measurable): UnitDef[] {
 
 /** Human-readable amount, e.g. "40 g", "1.5 × can (375 ml)". */
 export function describeAmount(quantity: number, unit: string): string {
-  const q = formatNumber(quantity);
-  if (unit.startsWith(PORTION_PREFIX)) return `${q} × ${unit.slice(PORTION_PREFIX.length)}`;
+  const q = formatAmount(quantity);
+  if (unit.startsWith(PORTION_PREFIX)) return `${q} × ${formatMeasurementLabel(unit.slice(PORTION_PREFIX.length))}`;
   return `${q} ${unitDef(unit)?.key ?? unit}`;
+}
+
+/** Display only: one decimal place, retaining three significant digits for tiny amounts. */
+export function formatAmount(n: number): string {
+  return n !== 0 && Math.abs(n) < 0.1
+    ? n.toLocaleString("en-AU", { maximumSignificantDigits: 3 })
+    : formatNumber(n);
+}
+
+/** Round decimal measurements in source labels, without changing portion keys or stored values. */
+export function formatMeasurementLabel(label: string): string {
+  // Match whole decimal tokens (including grouped thousands), not fractions, codes or versions.
+  // Attached units are allowed: source labels often say "354.88199999999995mL".
+  // Leave other attached text and punctuation alone rather than guess what it measures.
+  return label.replace(
+    /(?<![\w.,/])(?:\d{1,3}(?:,\d{3})+|\d+)?\.\d+(?=$|[\s)×]|(?:ml|cl|dl|l|mg|kg|g|oz|lbs?)\b)/gi,
+    (value) => formatAmount(Number(value.replace(/,/g, ""))),
+  );
 }
 
 export function formatNumber(n: number, maxFractionDigits = 1): string {

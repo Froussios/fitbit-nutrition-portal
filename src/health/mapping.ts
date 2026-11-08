@@ -3,7 +3,7 @@ import { idFromName, parseEntryId } from "../core/ids";
 import type { LoggedFood } from "../core/logged-foods";
 import { NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "../core/nutrients";
 import { utcOffsetDuration } from "../core/time";
-import { formatNumber, metricAmount, PORTION_PREFIX, toBaseAmount, type BaseUnit, type Measurable } from "../core/units";
+import { formatAmount, formatMeasurementLabel, formatNumber, metricAmount, PORTION_PREFIX, toBaseAmount, type BaseUnit, type Measurable } from "../core/units";
 import type { DataPoint, EnergyQuantity, MealType, NutrientQuantity, NutritionLog, WeightQuantity } from "./types";
 
 export const NUTRITION_LOG_PARENT = "users/me/dataTypes/nutrition-log";
@@ -332,7 +332,7 @@ function servingText(log: NutritionLog, unitNames?: ReadonlyMap<string, string>)
   const s = log.serving;
   if (!s || s.amount === undefined) return undefined;
   const name = (s.foodMeasurementUnitDisplayName ?? nameOfUnit(unitNames, s.foodMeasurementUnit) ?? "").trim();
-  return `${formatNumber(s.amount)} ${UNIT_ABBREVIATIONS[name.toLowerCase()] ?? name}`.trim();
+  return `${formatAmount(s.amount)} ${UNIT_ABBREVIATIONS[name.toLowerCase()] ?? formatMeasurementLabel(name)}`.trim();
 }
 
 export function toDiaryEntry(point: DataPoint, ctx: DiaryContext = {}): DiaryEntry | undefined {
@@ -362,7 +362,7 @@ export function toDiaryEntry(point: DataPoint, ctx: DiaryContext = {}): DiaryEnt
     id,
     start: new Date(log.interval.startTime),
     mealType: log.mealType ?? "MEAL_TYPE_UNSPECIFIED",
-    displayName: log.foodDisplayName ?? "(unnamed food)",
+    displayName: (log.foodDisplayName ?? "(unnamed food)").replace(AMOUNT_IN_NAME, (text) => formatMeasurementLabel(text)),
     ...(amount ? { amount } : {}),
     profile: { energyKcal: log.energy?.kcal ?? 0, nutrients },
     own,

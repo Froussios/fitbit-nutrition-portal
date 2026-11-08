@@ -61,6 +61,20 @@ const noAmount = (p: DataPoint) => {
 };
 
 describe("row editor", () => {
+  it("keeps the exact logged amount when history rounds its display and only the meal changes", () => {
+    const amount = 354.88199999999995;
+    const e = entry((p) => { p.nutritionLog!.serving!.amount = amount; });
+    expect(e.amount).toBe("354.9 g");
+    const { qty, editor, save, onSave } = open(e, catalog(undefined).catalog);
+    expect(qty.value).toBe(String(amount));
+    const meal = editor.meal as HTMLSelectElement;
+    meal.value = "LUNCH";
+    meal.dispatchEvent(new Event("input", { bubbles: true }));
+    save.click();
+    expect(onSave).toHaveBeenCalledWith({ mealType: "LUNCH" });
+    expect(e.point.nutritionLog?.serving?.amount).toBe(amount);
+  });
+
   it("shows Save and Cancel as words, never the delete symbol", () => {
     const { save, cancel, editor } = open(entry(), catalog(oats).catalog);
     expect(save.textContent).toBe("Save");
