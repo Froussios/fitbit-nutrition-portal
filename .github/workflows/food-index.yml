@@ -79,6 +79,28 @@ jobs:
               ;;
           esac
 
+      # Checked before the long build, so that a token without enough access shows up at once, not after 30 minutes.
+      - name: Check the meal prep API's token
+        id: d1
+        env:
+          D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_TOKEN }}
+          CREATE: ${{ steps.project.outputs.create }}
+        run: |
+          set -euo pipefail
+          if [ -z "$D1_TOKEN" ]; then
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+          d1=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $D1_TOKEN" "$base/d1/database")
+          pages=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $D1_TOKEN" "$base/pages/projects/$PAGES_PROJECT")
+          if [ "$d1" = 200 ] && { [ "$pages" = 200 ] || { [ "$pages" = 404 ] && [ "$CREATE" = true ]; }; }; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::CLOUDFLARE_D1_TOKEN can't reach both D1 (HTTP $d1) and the Pages project (HTTP $pages). It needs Account > D1 > Edit and Account > Cloudflare Pages > Edit. This deploy leaves out the meal prep API." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -106,11 +128,11 @@ jobs:
       - name: Prepare the meal prep API
         id: api
         env:
-          D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_TOKEN }}
+          D1_TOKEN: ${{ steps.d1.outputs.ok == 'true' && secrets.CLOUDFLARE_D1_TOKEN || '' }}
         run: |
           set -euo pipefail
           if [ -z "$D1_TOKEN" ]; then
-            echo "::warning::No CLOUDFLARE_D1_TOKEN secret, so this deploy leaves out the meal prep API (README, Food index)."
+            echo "::warning::No usable CLOUDFLARE_D1_TOKEN secret, so this deploy leaves out the meal prep API (README, Food index)."
             rm -rf functions wrangler.jsonc food-index-dist/_routes.json
             echo "included=false" >> "$GITHUB_OUTPUT"
             exit 0
