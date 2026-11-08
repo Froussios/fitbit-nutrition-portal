@@ -12,7 +12,7 @@
  * request can choose another user.
  */
 
-import { ENTRY_ID, MAX_NAME, PORTION_ID, PREP_ID, checkIngredients } from "../src/core/prep";
+import { ENTRY_ID, FRACTION_EPSILON, MAX_NAME, PORTION_ID, PREP_ID, checkIngredients } from "../src/core/prep";
 import { AuthError, GoogleKeys, verifyIdToken, type KeyLookup } from "./auth";
 import type { D1Database } from "./d1";
 import { PrepStore } from "./store";
@@ -132,7 +132,7 @@ export async function handle(request: Request, env: Env, deps: Deps = defaults):
       const prepId = m[1]!;
       const { id, fraction, entryId, eatenAt } = await readBody(request);
       if (!PREP_ID.test(prepId) || typeof id !== "string" || !PORTION_ID.test(id)) throw new HttpError(400, "Bad prep or portion ID.");
-      if (fraction !== null && (typeof fraction !== "number" || !(fraction > 0) || fraction > 1)) throw new HttpError(400, "A portion is more than 0 and at most the whole batch.");
+      if (fraction !== null && (typeof fraction !== "number" || !(fraction > FRACTION_EPSILON) || fraction > 1)) throw new HttpError(400, "A portion is more than 0 and at most the whole batch.");
       if (entryId !== null && (typeof entryId !== "string" || !ENTRY_ID.test(entryId))) throw new HttpError(400, "Bad entry ID.");
       if (!isTime(eatenAt)) throw new HttpError(400, "Bad time.");
       const result = await store.reserve(user, prepId, { id, fraction, entryId, eatenAt }, now);

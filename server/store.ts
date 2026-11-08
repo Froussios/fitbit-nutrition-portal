@@ -81,7 +81,11 @@ export class PrepStore {
 
   /** Discards the prep, or brings it back. False if the user has no such prep. */
   async setDiscarded(userId: string, id: string, discarded: boolean, now: number): Promise<boolean> {
-    const result = await this.db.prepare("UPDATE preps SET discarded_at = ?3 WHERE user_id = ?1 AND id = ?2").bind(userId, id, discarded ? now : null).run();
+    // Discarding twice keeps the first time, so a retry can't restart the 30 days.
+    const result = await this.db
+      .prepare("UPDATE preps SET discarded_at = CASE WHEN ?3 IS NULL THEN NULL ELSE COALESCE(discarded_at, ?3) END WHERE user_id = ?1 AND id = ?2")
+      .bind(userId, id, discarded ? now : null)
+      .run();
     return result.meta.changes > 0;
   }
 
@@ -95,7 +99,7 @@ export class PrepStore {
         `WITH used AS (SELECT COALESCE(SUM(fraction), 0) AS total FROM portions WHERE user_id = ?1 AND prep_id = ?3),
               wanted AS (SELECT COALESCE(?4, 1 - used.total) AS fraction, used.total AS total FROM used)
          INSERT INTO portions (user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at)
-         SELECT ?1, ?2, ?3, MIN(wanted.fraction, 1), ?5, 'unconfirmed', ?6, ?7
+         SELECT ?1, ?2, ?3, wanted.fraction, ?5, 'unconfirmed', ?6, ?7
          FROM preps, wanted
          WHERE preps.user_id = ?1 AND preps.id = ?3 AND preps.discarded_at IS NULL
            AND wanted.fraction > ?8 AND wanted.total + wanted.fraction <= 1 + ?8

@@ -229,6 +229,9 @@ describe("meal prep API", () => {
   it("stops portions of a discarded prep, and brings it back", async () => {
     expect((await call("PATCH", "/api/preps/chili001", { discarded: true })).status).toBe(204);
     expect((await preps())[0]!.discardedAt).toBe(NOW);
+    now += 5000;
+    await call("PATCH", "/api/preps/chili001", { discarded: true });
+    expect((await preps())[0]!.discardedAt).toBe(NOW); // discarding again keeps the first time
     expect((await reserve(0.5, "portion01")).status).toBe(404);
     expect((await call("PATCH", "/api/preps/chili001", { discarded: false })).status).toBe(204);
     expect((await reserve(0.5, "portion01")).status).toBe(201);
@@ -271,6 +274,7 @@ describe("meal prep API", () => {
     ["a bad prep ID", "PUT", "/api/preps/BAD!", { name: "Chili", ingredients }],
     ["a fraction over 1", "POST", "/api/preps/chili001/portions", { id: "portion01", fraction: 1.5, entryId: null, eatenAt: NOW }],
     ["a fraction of 0", "POST", "/api/preps/chili001/portions", { id: "portion01", fraction: 0, entryId: null, eatenAt: NOW }],
+    ["a fraction too small to count", "POST", "/api/preps/chili001/portions", { id: "portion01", fraction: 1e-7, entryId: null, eatenAt: NOW }],
     ["a bad portion ID", "POST", "/api/preps/chili001/portions", { id: "x", fraction: 0.5, entryId: null, eatenAt: NOW }],
     ["no time", "POST", "/api/preps/chili001/portions", { id: "portion01", fraction: 0.5, entryId: null }],
     ["a body that is not JSON", "PATCH", "/api/preps/chili001", "{"],
