@@ -84,7 +84,16 @@ export class GoogleKeys {
     const stale = this.now() >= this.expiresAt;
     // An unknown key may be a new one after Google rotates them, but don't let a bad token make us fetch on every request.
     const unknown = !this.keys.has(kid) && this.now() - this.fetchedAt >= MIN_REFETCH_MS;
-    if (stale || unknown) await this.refresh();
+    if (stale || unknown) {
+      try {
+        await this.refresh();
+      } catch (e) {
+        // Google's keys rotate slowly: keep using the ones we have, and wait before asking again.
+        this.fetchedAt = this.now();
+        this.expiresAt = this.now() + MIN_REFETCH_MS;
+        if (!this.keys.has(kid)) throw e;
+      }
+    }
     return this.keys.get(kid);
   };
 

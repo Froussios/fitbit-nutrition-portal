@@ -194,7 +194,8 @@ describe("meal prep API", () => {
     expect((await reserve(null, "portion03")).status).toBe(409);
   });
 
-  it("can't be overrun by requests sent at once", async () => {
+  // node:sqlite runs these one after another, so this checks the cap. That D1 can't interleave them rests on reserving being one statement.
+  it("never takes more than the batch, however many requests are sent", async () => {
     const results = await Promise.all(Array.from({ length: 8 }, (_, i) => reserve(0.25, `portion0${i}`)));
     expect(results.filter((r) => r.status === 201)).toHaveLength(4);
     expect((await preps())[0]!.portions.reduce((s, p) => s + p.fraction, 0)).toBeCloseTo(1);
@@ -281,5 +282,28 @@ describe("meal prep API", () => {
   it("answers 404 for anything else", async () => {
     expect((await call("GET", "/api/users")).status).toBe(404);
     expect((await call("DELETE", "/api/preps/chili001")).status).toBe(404);
+  });
+});
+
+describe("GoogleKeys when Google's keys can't be fetched", () => {
+  it("keeps using the keys it has, and waits before trying again", async () => {
+    let now = NOW;
+    let calls = 0;
+    let up = true;
+    const fetchKeys = (async () => {
+      calls++;
+      if (!up) throw new TypeError("network down");
+      return new Response(JSON.stringify({ keys: [jwk] }), { headers: { "Cache-Control": "max-age=60" } });
+    }) as typeof fetch;
+    const g = new GoogleKeys(fetchKeys, () => now);
+    expect(await g.lookup("k1")).toBeDefined();
+    up = false;
+    now += 120_000;
+    expect(await g.lookup("k1")).toBeDefined();
+    expect(await g.lookup("k1")).toBeDefined();
+    expect(calls).toBe(2);
+    await expect(g.lookup("k2")).resolves.toBeUndefined();
+    now += 61_000;
+    await expect(g.lookup("k2")).rejects.toThrow("network down");
   });
 });

@@ -60,7 +60,7 @@ export function leftOf(portions: readonly Pick<PrepPortion, "fraction">[]): numb
   return left < FRACTION_EPSILON ? 0 : left;
 }
 
-export function isFinished(prep: Pick<Prep, "portions">): boolean {
+export function isFinished(prep: { readonly portions: readonly Pick<PrepPortion, "fraction">[] }): boolean {
   return leftOf(prep.portions) === 0;
 }
 

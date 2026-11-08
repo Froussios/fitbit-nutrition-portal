@@ -131,8 +131,12 @@ src/
   food/      FoodCatalog interface, the static index engine and catalogue, sample foods
   ai/        the optional on-device model that reads amounts the rules refuse
   ui/        DOM helpers, log form, food search combobox, diary table
+  prep/      the browser's client for the meal prep API
 pipeline/    food index builder (Open Food Facts export → public/food-index/), generic foods builder
   main.ts    app shell
+functions/   Cloudflare Pages Function for /api/* on the food index's site (meal prep, DR-24)
+server/      the meal prep API: requests, ID token checks, D1 storage
+migrations/  the meal prep database's schema (D1)
 tests/       Vitest unit tests
 docs/        architecture and decisions
 ```

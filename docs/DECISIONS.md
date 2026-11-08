@@ -240,7 +240,7 @@ that is Google's requirement, not ours.
 in the existing `food-diary-index` project and `food-index.froussios.com` domain. Every row belongs to one user: there are
 no shared recipes. The database adds to the Google Health API and does not mirror it: the diary stays in Google Health,
 and a logged portion is one ordinary entry there. The database keeps only the portion's fraction, entry ID, state and
-time, never its nutrients ([design](ARCHITECTURE.md#45-meal-prep-planned)).
+time, never its nutrients ([design](ARCHITECTURE.md#45-meal-prep)).
 **Why.** Owner decisions (7 November 2026). Recipes must sync across devices, and Google Health has nowhere to hold them
 (V7). Browser storage stays on one device and can be cleared. Google Drive's app-data folder was considered and rejected.
 Reusing the project and domain avoids new hosting, and the domain avoids the firewall that intercepts `*.pages.dev`

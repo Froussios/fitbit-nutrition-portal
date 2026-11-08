@@ -127,7 +127,7 @@ app falls back to its own entries and says so.
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
 background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-foods-logged-before)).
 
-### 4.5 Meal prep (planned)
+### 4.5 Meal prep
 
 The API is built and its screens are not ([#55](https://github.com/Froussios/fitbit-nutrition-portal/issues/55), DR-24). The user records a recipe when cooking, then logs fractions of it (`1/6`, `25%`) until it is finished or
 discarded. Fractions are of the whole batch. Weights are not offered, because the ingredients do not add up to the cooked weight.
@@ -136,8 +136,8 @@ discarded. Fractions are of the whole batch. Weights are not offered, because th
 named `Chili (1/6)`, with the ID `e-<time>-<rand>-prep-<prepId>`. Google Health stays the only record of what was eaten.
 
 ```sql
-preps(user_id, id, name, ingredients_json, created_at, updated_at, discarded_at)  -- PRIMARY KEY (user_id, id)
-portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at)               -- PRIMARY KEY (user_id, id)
+preps(user_id, id, name, ingredients, created_at, updated_at, discarded_at)        -- PRIMARY KEY (user_id, id); ingredients is JSON
+portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at)    -- PRIMARY KEY (user_id, id); migrations/0001_meal_prep.sql
 ```
 
 * **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
