@@ -88,7 +88,8 @@ export class GoogleKeys {
       try {
         await this.refresh();
       } catch (e) {
-        // Google's keys rotate slowly: keep using the ones we have, and wait before asking again.
+        // Google's keys rotate over days: keep using the ones we have, even past Google's TTL, but only while
+        // fetching fails, and wait a minute before asking again.
         this.fetchedAt = this.now();
         this.expiresAt = this.now() + MIN_REFETCH_MS;
         if (!this.keys.has(kid)) throw e;
