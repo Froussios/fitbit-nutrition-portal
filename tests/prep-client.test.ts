@@ -10,9 +10,11 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 describe("PrepApi", () => {
   it("sends the ID token, and only that", async () => {
-    const fetchMock = vi.fn(async () => json({ preps: [] }));
+    // Like the API: without a token it answers its JSON 401, with one it answers.
+    const fetchMock = vi.fn(async (_url: URL, init?: RequestInit) => ((init?.headers as Record<string, string> | undefined)?.["Authorization"] ? json({ preps: [] }) : json({ error: "Sign in first." }, 401)));
     await new PrepApi(BASE, () => "ID.TOKEN.SIG", fetchMock as typeof fetch).list();
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    // The first request only asks whether the API exists, without a token (PrepApi.available).
+    const [url, init] = fetchMock.mock.calls.at(-1) as unknown as [URL, RequestInit];
     expect(url.href).toBe(`${BASE}preps`);
     expect((init.headers as Record<string, string>)["Authorization"]).toBe("Bearer ID.TOKEN.SIG");
   });
@@ -48,8 +50,8 @@ describe("PrepApi", () => {
     expect(e.connectionFailed).toBe(true);
   });
 
-  it("sends nothing when the session has expired", async () => {
-    const fetchMock = vi.fn();
+  it("sends no request with a token when the session has expired", async () => {
+    const fetchMock = vi.fn(async () => json({ error: "Sign in first." }, 401));
     const api = new PrepApi(
       BASE,
       () => {
@@ -58,7 +60,8 @@ describe("PrepApi", () => {
       fetchMock as unknown as typeof fetch,
     );
     await expect(api.list()).rejects.toThrow("signed out");
-    expect(fetchMock).not.toHaveBeenCalled();
+    const withToken = fetchMock.mock.calls.filter((c) => ((c as unknown as [URL, RequestInit])[1]?.headers as Record<string, string> | undefined)?.["Authorization"]);
+    expect(withToken).toHaveLength(0);
   });
 });
 
@@ -101,5 +104,70 @@ describe("randomId", () => {
   it("makes IDs the API accepts", () => {
     for (let i = 0; i < 50; i++) expect(randomId(16)).toMatch(/^[a-z0-9]{16}$/);
     expect(new Set(Array.from({ length: 50 }, () => randomId(12))).size).toBe(50);
+  });
+});
+
+describe("PrepApi.available", () => {
+  /** A browser: a request with an Authorization header needs a CORS preflight, which a site without the API refuses. */
+  const site = (hasApi: boolean) =>
+    vi.fn(async (_url: URL, init?: RequestInit) => {
+      const authorised = Boolean((init?.headers as Record<string, string> | undefined)?.["Authorization"]);
+      if (!hasApi) {
+        if (authorised) throw new TypeError("Failed to fetch"); // preflight refused (405)
+        return new Response("", { status: 404 });
+      }
+      return authorised ? json({ preps: [] }) : json({ error: "Sign in first." }, 401);
+    });
+
+  it("finds a site without the API, although its preflights fail", async () => {
+    const fetchMock = site(false);
+    const api = new PrepApi(BASE, () => "t", fetchMock as unknown as typeof fetch);
+    await expect(api.list()).rejects.toBeInstanceOf(PrepApiMissingError);
+    // It asked without a token, so no preflight was needed.
+    expect((fetchMock.mock.calls[0]![1]?.headers as Record<string, string> | undefined)?.["Authorization"]).toBeUndefined();
+  });
+
+  it("finds the API, and then lists with the token", async () => {
+    const fetchMock = site(true);
+    await expect(new PrepApi(BASE, () => "t", fetchMock as unknown as typeof fetch).list()).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["a 200 page", new Response("<html>app</html>", { status: 200, headers: { "Content-Type": "text/html" } }), false],
+    ["a 404 with no body", new Response("", { status: 404 }), false],
+    ["the API's 404 for a wrong path", json({ error: "No such endpoint." }, 404), true],
+    ["the API's 401", json({ error: "Sign in first." }, 401), true],
+  ])("counts the API present only for its own JSON error: %s", async (_name, answer, present) => {
+    await expect(new PrepApi(BASE, () => "t", (async () => answer) as typeof fetch).available()).resolves.toBe(present);
+  });
+
+  it("shows a broken API as an error, and asks again next time", async () => {
+    let broken = true;
+    const api = new PrepApi(BASE, () => "t", (async () => (broken ? new Response("<html>Error 1101</html>", { status: 500 }) : json({ error: "Sign in first." }, 401))) as typeof fetch);
+    await expect(api.available()).rejects.toMatchObject({ status: 500 });
+    broken = false;
+    await expect(api.available()).resolves.toBe(true);
+  });
+
+  it("asks once per page", async () => {
+    const fetchMock = site(true);
+    const api = new PrepApi(BASE, () => "t", fetchMock as unknown as typeof fetch);
+    await api.list();
+    await api.list();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("asks again after no answer", async () => {
+    let up = false;
+    const fetchMock = vi.fn(async (_url: URL, init?: RequestInit) => {
+      if (!up) throw new TypeError("Failed to fetch");
+      return (init?.headers as Record<string, string> | undefined)?.["Authorization"] ? json({ preps: [] }) : json({ error: "Sign in first." }, 401);
+    });
+    const api = new PrepApi(BASE, () => "t", fetchMock as unknown as typeof fetch);
+    const e = (await api.list().catch((x: unknown) => x)) as PrepApiError;
+    expect(e.connectionFailed).toBe(true);
+    up = true;
+    await expect(api.list()).resolves.toEqual([]);
   });
 });

@@ -33,6 +33,9 @@ export class PrepApiMissingError extends Error {
 }
 
 export class PrepApi {
+  /** Whether the site has the API, once asked: it doesn't change while the page is open. */
+  private present?: Promise<boolean>;
+
   constructor(
     /** e.g. https://food-index.froussios.com/api/ */
     private readonly base: string,
@@ -40,7 +43,37 @@ export class PrepApi {
     private readonly fetchImpl: typeof fetch = (...a) => fetch(...a),
   ) {}
 
+  /**
+   * Whether this site serves the API. Asked without a token, so the browser sends it without a CORS preflight:
+   * a site without the API refuses preflights, which would hide its 404 behind a network error. The API answers
+   * a request without a token with its own JSON error (401). Throws PrepApiError (status 0) when nothing answers,
+   * and asks again next time. Only list() asks; any other call runs once the card is shown.
+   */
+  available(): Promise<boolean> {
+    this.present ??= (async () => {
+      let res: Response;
+      try {
+        res = await this.fetchImpl(new URL("preps", this.base), { method: "GET", signal: AbortSignal.timeout(TIMEOUT_MS) });
+      } catch (e) {
+        log.warn("Checking for the meal prep API: no answer", describeError(e));
+        throw new PrepApiError("The meal prep service did not answer. Check your connection and try again.", 0);
+      }
+      // A server error is a broken API, not a missing one: show it, and ask again next time.
+      if (res.status >= 500) throw new PrepApiError(`The meal prep service failed (HTTP ${res.status}). Try again later.`, res.status);
+      const json = (await res.json().catch(() => undefined)) as { error?: unknown } | undefined;
+      // Only the API answers with its own JSON error. Anything else, such as a 404 or an HTML page, is a site without it.
+      const present = typeof json?.error === "string";
+      log.info(present ? "This site has the meal prep API" : "This site has no meal prep API", { status: res.status });
+      return present;
+    })().catch((e: unknown) => {
+      this.present = undefined;
+      throw e;
+    });
+    return this.present;
+  }
+
   async list(): Promise<Prep[]> {
+    if (!(await this.available())) throw new PrepApiMissingError("Meal prep is not available on this site.");
     const body = (await this.request("GET", "preps")) as { preps?: Prep[] } | undefined;
     return body?.preps ?? [];
   }
@@ -97,7 +130,7 @@ export class PrepApi {
       log.debug(`${method} ${path}: HTTP ${res.status}`);
       return json;
     }
-    // A site without the API answers its own 404 page, not the API's JSON.
+    // A backstop: in a browser, available() is the real check, because on a site without the API the preflight fails first.
     if (res.status === 404 && json?.error === undefined) throw new PrepApiMissingError("Meal prep is not available on this site.");
     log.warn(`${method} ${path}: HTTP ${res.status}`, { error: json?.error });
     throw new PrepApiError(json?.error ?? `The meal prep service answered HTTP ${res.status}.`, res.status, json?.left);
