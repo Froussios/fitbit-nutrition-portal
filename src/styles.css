@@ -278,6 +278,8 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .opt-sub { overflow-wrap: anywhere; }
 .opt-nobrand { font-style: italic; }
 .opt-source { display: inline-block; margin-left: 8px; padding: 0 5px; border: 1px solid currentColor; border-radius: 3px; font-size: 0.7rem; opacity: 0.75; white-space: nowrap; }
+.opt-country { margin-left: 6px; font-size: 0.7rem; opacity: 0.75; white-space: nowrap; }
+.opt-flag { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-size: 0.95rem; vertical-align: -1px; }
 .opt-serving { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .opt mark { background: none; color: inherit; font-weight: 700; }
 .opt-custom { display: block; color: var(--accent); }
