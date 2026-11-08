@@ -1,4 +1,5 @@
 import { KJ_PER_KCAL, NUTRIENT_KEYS, type NutrientKey } from "../src/core/nutrients";
+import { isRescaledUnit } from "../src/core/portions";
 import type { BaseUnit } from "../src/core/units";
 import type { GenericRow } from "../src/food/generics-format";
 
@@ -143,6 +144,8 @@ export function fromFndds(foods: readonly TableRow[], nutrients: readonly TableR
     const name = r["portion_description"]?.trim();
     const grams = num(r["gram_weight"]);
     if (!id || !name || !grams || grams <= 0 || /quantity not specified|guideline|school/i.test(name)) continue;
+    // A plain weight such as "1 oz" would take a place among the few portions kept (DR-28).
+    if (isRescaledUnit({ name, amount: grams, unit: "g" })) continue;
     let list = servings.get(id);
     if (!list) servings.set(id, (list = []));
     if (list.length < MAX_PORTIONS) list.push([name.slice(0, 60), round(grams, 1)]);

@@ -88,7 +88,7 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ Weet-Bix Wholegrain Cereal                 358 kcal / 100 g  │
-│ Sanitarium · 575 g [Open Food Facts] 🇦🇺  107 kcal / 30 g sv │
+│ Sanitarium · 575 g [Open Food Facts] 🇦🇺 107 kcal / 2 biscui… │
 ├──────────────────────────────────────────────────────────────┤
 │ Weet-Bix Blends Multi-Grain                378 kcal / 100 g  │
 │ Sanitarium · 510 g [Open Food Facts] 🇦🇺 +1                  │
@@ -108,7 +108,9 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
   food is sold: Australia's if the product lists it, else the first country listed, then `+N` for the others; the
   tooltip names them all. Generic foods show their database's country (AFCD 🇦🇺, FNDDS 🇺🇸). No flag when Open Food
   Facts lists no country, which doesn't mean the product isn't sold here (section 5). Flags are emoji, which Windows
-  draws as two letters (`AU`). Right: energy per serving when the product has a serving size, e.g. `107 kcal / 30 g serving`.
+  draws as two letters (`AU`). Right: energy per serving when the product has a serving size, e.g. `107 kcal / 2 biscuits (30 g)`.
+  A serving that is only a weight or volume, such as `30 g`, is not shown, since it repeats the per-100 figure in another
+  size (DR-28).
 * A row is built from a `FoodSummary` view model computed from the `FoodItem` by a pure function in
   `src/core/`. The index builder runs the same function, so search results arrive as summaries and the full
   food is fetched only when chosen. Later visuals (a thumbnail, a macro bar, Nutri-Score) are new fields on that model and new

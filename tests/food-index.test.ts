@@ -289,6 +289,22 @@ describe("food index", () => {
     expect(await index.findBarcode("4242")).toBeUndefined();
   });
 
+  it("keeps no portion that is only a weight, in the food or its search row", async () => {
+    const yoghurt = product("1009", "Plain yoghurt", { quantity: "1 kg", product_quantity: 1000, product_quantity_unit: "g", serving_size: "100g", serving_quantity: 100, serving_quantity_unit: "g" });
+    const index = await FoodIndex.open(build([yoghurt]).reader);
+    const id = await index.findBarcode("1009");
+    expect((await index.food(id!)).portions).toEqual([{ name: "pack (1 kg)", amount: 1000, unit: "g" }]);
+    expect(fromSummaryRow((await index.summaries([id!]))[0]!).serving).toBeUndefined();
+  });
+
+  it("still reads per-serving values with a serving that is only a weight", async () => {
+    const meal = product("1010", "Takeaway curry", { serving_size: "350 g", serving_quantity: 350, serving_quantity_unit: "g", nutrition_data_per: "serving", nutriments: { "energy-kcal_serving": 700, proteins_serving: 35 } });
+    const index = await FoodIndex.open(build([meal]).reader);
+    const food = await index.food((await index.findBarcode("1010"))!);
+    expect(food.per100).toEqual({ energyKcal: 200, nutrients: { protein: 10 } });
+    expect(food.portions).toEqual([]);
+  });
+
   it("walks long lists chunk by chunk and stops early", async () => {
     const { reader, read } = build([...FIXTURE, ...MANY]);
     const index = await FoodIndex.open(reader);

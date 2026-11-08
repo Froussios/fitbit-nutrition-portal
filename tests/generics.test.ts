@@ -61,6 +61,7 @@ describe("generic foods builder", () => {
       { fdc_id: "1", seq_num: "1", portion_description: "1 cup", gram_weight: "150" },
       { fdc_id: "1", seq_num: "3", portion_description: "Quantity not specified", gram_weight: "118" },
       { fdc_id: "1", seq_num: "4", portion_description: "Guideline amount per cup of hot cereal", gram_weight: "60" },
+      { fdc_id: "1", seq_num: "5", portion_description: "1 oz", gram_weight: "28.35" },
     ];
     const [row] = fromFndds(foods, nutrients, portions);
     const food = genericToFoodItem(row!);
