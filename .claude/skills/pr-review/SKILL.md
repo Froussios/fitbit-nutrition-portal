@@ -35,7 +35,9 @@ DR-nn) for what the owner has decided and why. The decisions are the project's r
   generic foods file.
 - `tests/`: Vitest unit tests. `npm test`, `npm run typecheck` and `npm run build` are the checks;
   CI (`.github/workflows/ci.yml`) runs the tests and build, then deploys `dist/` to GitHub Pages
-  from `main`.
+  from `main`. The build type-checks only `tsconfig.json`, so CI never type-checks the pipeline's
+  Node entry scripts (`pipeline/build-*.ts`, covered by `tsconfig.pipeline.json`): read changes
+  to them more closely.
 - `.github/workflows/food-index.yml` builds the index and deploys it to Cloudflare Pages
   (`food-diary-index`, `food-index.froussios.com`) with a token restricted to `main`.
 - Planned: meal prep, with Pages Functions and a D1 database in that Cloudflare project
@@ -78,7 +80,12 @@ An issue **blocks** merging when it is one of these:
     (`docs/ARCHITECTURE.md` 4.3);
   - an edit, delete or undo that can lose an entry or leave two, or that offers to change an entry
     this app didn't write (DR-04, DR-20, DR-22);
-  - a failure shown as success, or a request that is retried or queued offline (DR-18).
+  - a failure shown as success, or a request that is retried or queued offline (DR-18);
+  - in meal prep (`docs/ARCHITECTURE.md` 4.5): portions able to pass 100% (the reservation must
+    stay one atomic `INSERT … SELECT … WHERE`), `portions.entry_id` not following an edit's new
+    entry ID, the delete inside an edit giving the portion back, the amount editable on `prep`
+    entries, a portion's nutrients stored in the database (DR-24), or an API change that ships
+    outside `food-index.yml` or before its D1 migration.
 - **A security or privacy problem.** The app holds Google OAuth tokens and personal health data:
   - the access token sent anywhere but Google (`health.googleapis.com`, the revoke endpoint), the
     ID token sent anywhere but Google and our own API, or either one put in a URL, `localStorage`
