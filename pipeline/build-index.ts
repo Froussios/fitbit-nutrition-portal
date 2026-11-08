@@ -104,7 +104,9 @@ async function main(): Promise<void> {
   writeFileSync(join(outRoot, "_headers"), "/:version/*\n  Cache-Control: public, max-age=31536000, immutable\n");
   // Ownership marker: the deploy workflow refuses to overwrite a Pages project that does not serve this file.
   writeFileSync(join(outRoot, "food-index-owner.json"), JSON.stringify({ repository: opts.get("owner") ?? "local", purpose: "Food Diary food search index" }));
-  files += 4;
+  // Only the meal prep API runs the Pages Function; every index file stays static, and outside its daily request allowance (DR-24).
+  writeFileSync(join(outRoot, "_routes.json"), JSON.stringify({ version: 1, include: ["/api/*"], exclude: [] }));
+  files += 5;
 
   const mb = (b: number) => `${(b / 1e6).toFixed(1)} MB`;
   const report = [

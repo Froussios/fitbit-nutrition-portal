@@ -391,6 +391,7 @@ flowchart LR
 
 ```
 _headers                     caches <version>/* for a year as immutable (Cloudflare Pages)
+_routes.json                 runs the meal prep API's Function for /api/* only, so index files stay static (DR-24)
 food-index-owner.json        ownership marker checked before each deploy
 current.json                 { "version": "20261104T085100Z-<run id>-<attempt>" }  (the only file whose content changes between builds)
 <version>/

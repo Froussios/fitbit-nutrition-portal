@@ -9,6 +9,11 @@ name: Food index
 # repository). Restrict that environment to the main branch so only reviewed code
 # can use the token.
 #
+# The same site serves the meal prep API at /api/* (DR-24): functions/, with a D1
+# database. Deploying it needs CLOUDFLARE_D1_TOKEN (Account > D1 > Edit and Account >
+# Cloudflare Pages > Edit) in the same environment. Without it, the deploy leaves the
+# API out and the index is published as before.
+#
 # Crosstalk guard: a Pages token can edit every Pages project in its account, so
 # this workflow only ever touches PAGES_PROJECT, and refuses to deploy to an
 # existing project unless its live site serves food-index-owner.json naming this
@@ -98,9 +103,44 @@ jobs:
                 --source-url "$EXPORT_URL" --last-modified "$LAST_MODIFIED" \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Deploy to Cloudflare Pages
+      - name: Prepare the meal prep API
+        id: api
+        env:
+          D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -z "$D1_TOKEN" ]; then
+            echo "::warning::No CLOUDFLARE_D1_TOKEN secret, so this deploy leaves out the meal prep API (README, Food index)."
+            rm -rf functions wrangler.jsonc food-index-dist/_routes.json
+            echo "included=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          export CLOUDFLARE_API_TOKEN="$D1_TOKEN"
+          find_db() { npx --yes wrangler@4 d1 list --json | jq -r '.[] | select(.name == "food-diary") | (.uuid // .id)'; }
+          id=$(find_db)
+          if [ -z "$id" ]; then
+            echo "Creating the D1 database food-diary."
+            npx --yes wrangler@4 d1 create food-diary
+            id=$(find_db)
+          fi
+          if ! [[ "$id" =~ ^[0-9a-f-]{36}$ ]]; then
+            echo "::error::Could not find the D1 database food-diary."
+            exit 1
+          fi
+          sed -i "s/00000000-0000-0000-0000-000000000000/$id/; s/\"name\": \"food-diary-index\"/\"name\": \"$PAGES_PROJECT\"/" wrangler.jsonc
+          grep -q "\"database_id\": \"$id\"" wrangler.jsonc
+          grep -q "\"name\": \"$PAGES_PROJECT\"" wrangler.jsonc
+          npx --yes wrangler@4 d1 migrations apply DB --remote
+          echo "included=true" >> "$GITHUB_OUTPUT"
+          echo "Meal prep API included, with D1 database \`$id\`." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          # Attaching the database needs a token with D1 access as well as Pages.
+          D1_TOKEN: ${{ steps.api.outputs.included == 'true' && secrets.CLOUDFLARE_D1_TOKEN || '' }}
+        run: |
+          set -euo pipefail
+          if [ -n "$D1_TOKEN" ]; then export CLOUDFLARE_API_TOKEN="$D1_TOKEN"; fi
           if [ "${{ steps.project.outputs.create }}" = "true" ]; then
             npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch=main
           fi

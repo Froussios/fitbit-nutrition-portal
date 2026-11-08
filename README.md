@@ -112,6 +112,14 @@ One-time setup:
    Sydney's firewall does), and a domain of your own avoids that.
 6. Set the **repository variable** (not a secret or an environment variable) `FOOD_INDEX_URL` to
    `https://food-index.froussios.com/`, so the CI build points the app at it. Re-run CI after changing it.
+7. **Meal prep API** (optional, DR-24). The same site serves it at `/api/*`, from `functions/` with a D1 database.
+   Create a second Account API token with **Account → D1 → Edit** and **Account → Cloudflare Pages → Edit**, and add it
+   to the **food-index** environment as `CLOUDFLARE_D1_TOKEN`. The next Food index run creates the database
+   `food-diary`, applies `migrations/`, and deploys the API with the index. Until the secret exists, deploys leave the
+   API out. API changes go live only with that workflow, because a Pages deploy replaces the whole site.
+
+   To run the API locally: `npx wrangler d1 migrations apply DB --local`, then `npx wrangler pages dev` (it serves
+   `food-index-dist/` and `/api/*`).
 
 ## Project layout
 
@@ -123,8 +131,11 @@ src/
   food/      FoodCatalog interface, the static index engine and catalogue, sample foods
   ai/        the optional on-device model that reads amounts the rules refuse
   ui/        DOM helpers, log form, food search combobox, diary table
-pipeline/    food index builder (Open Food Facts export → public/food-index/), generic foods builder
   main.ts    app shell
+pipeline/    food index builder (Open Food Facts export → public/food-index/), generic foods builder
+functions/   Cloudflare Pages Function for /api/* on the food index's site (meal prep, DR-24)
+server/      the meal prep API: requests, ID token checks, D1 storage
+migrations/  the meal prep database's schema (D1)
 tests/       Vitest unit tests
 docs/        architecture and decisions
 ```

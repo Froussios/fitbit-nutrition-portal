@@ -6,3 +6,5 @@ dist/
 # Generated food index: never committed (it would stay in the git history). See docs/FOOD_SEARCH.md.
 public/food-index/
 food-index-dist/
+# Wrangler's local state, including the local meal prep database.
+.wrangler/

@@ -322,7 +322,7 @@ export class IndexBuilder {
 
     // Summary and detail files, in ID order, as small as the file budget allows (details are only
     // fetched when a row is chosen, so they get twice as many products per file).
-    const budget = maxFiles - files - 5; // meta.json, LICENSE.txt, current.json, _headers, food-index-owner.json
+    const budget = maxFiles - files - 6; // meta.json, LICENSE.txt, current.json, _headers, _routes.json, food-index-owner.json
     let sumPerFile = MIN_SUMMARIES_PER_FILE;
     const fileCount = (per: number) => Math.ceil(docs.length / per) + Math.ceil(docs.length / (2 * per));
     while (fileCount(sumPerFile) > budget) {
