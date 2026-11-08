@@ -297,6 +297,14 @@ describe("food index", () => {
     expect(fromSummaryRow((await index.summaries([id!]))[0]!).serving).toBeUndefined();
   });
 
+  it("still reads per-serving values with a serving that is only a weight", async () => {
+    const meal = product("1010", "Takeaway curry", { serving_size: "350 g", serving_quantity: 350, serving_quantity_unit: "g", nutrition_data_per: "serving", nutriments: { "energy-kcal_serving": 700, proteins_serving: 35 } });
+    const index = await FoodIndex.open(build([meal]).reader);
+    const food = await index.food((await index.findBarcode("1010"))!);
+    expect(food.per100).toEqual({ energyKcal: 200, nutrients: { protein: 10 } });
+    expect(food.portions).toEqual([]);
+  });
+
   it("walks long lists chunk by chunk and stops early", async () => {
     const { reader, read } = build([...FIXTURE, ...MANY]);
     const index = await FoodIndex.open(reader);
