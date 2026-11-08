@@ -17,8 +17,8 @@ export interface PrepDraft {
   readonly id?: string;
   readonly name: string;
   readonly ingredients: readonly PrepIngredient[];
-  /** When the draft was last changed, so that a saved prep changed since then wins over it. */
-  readonly savedAt?: number;
+  /** The saved prep's `updatedAt` when this draft of it began: if the prep has been saved since, the saved prep wins. Server time, so device clocks don't matter. */
+  readonly baseUpdatedAt?: number;
 }
 
 export interface PrepBuilder {
@@ -46,6 +46,8 @@ export interface PrepBuilderOptions {
 export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
   let open = false;
   let editingId: string | undefined;
+  /** The saved version the draft started from, when editing. */
+  let baseUpdatedAt: number | undefined;
   let ingredients: PrepIngredient[] = [];
   let chosen: FoodItem | undefined;
   let loading: string | undefined;
@@ -124,7 +126,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
     if (!key) return;
     try {
       if (!name.value.trim() && ingredients.length === 0) localStorage.removeItem(key);
-      else localStorage.setItem(key, JSON.stringify({ ...(editingId ? { id: editingId } : {}), name: name.value, ingredients, savedAt: Date.now() } satisfies PrepDraft));
+      else localStorage.setItem(key, JSON.stringify({ ...(editingId ? { id: editingId, baseUpdatedAt } : {}), name: name.value, ingredients } satisfies PrepDraft));
     } catch {
       // Storage blocked: the draft lives only in the page.
     }
@@ -256,7 +258,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
       element.hidden = false;
       // Each prep, and the new one, has its own draft. A prep saved since its draft (here or on another device) wins.
       let draft = readDraft(prep?.id);
-      if (draft && prep && (draft.savedAt ?? 0) < prep.updatedAt) {
+      if (draft && prep && draft.baseUpdatedAt !== prep.updatedAt) {
         draft = undefined;
         const key = opts.draftKey(prep.id);
         try {
@@ -267,6 +269,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
       }
       const start: PrepDraft = draft ?? prep ?? { name: "", ingredients: [] };
       editingId = prep?.id;
+      baseUpdatedAt = prep?.updatedAt;
       // Start the ingredient search afresh, so nothing half-chosen last time is carried over.
       choice++;
       chosen = undefined;
