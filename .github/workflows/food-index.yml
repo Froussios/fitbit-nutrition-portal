@@ -10,9 +10,9 @@ name: Food index
 # can use the token.
 #
 # The same site serves the meal prep API at /api/* (DR-24): functions/, with a D1
-# database. Deploying it needs CLOUDFLARE_D1_TOKEN (Account > D1 > Edit and Account >
-# Cloudflare Pages > Edit) in the same environment. Without it, or if it lacks either
-# permission, the deploy leaves the API out with a warning and the index is published as
+# database. It needs CLOUDFLARE_D1_TOKEN (Account > D1 > Edit) in the same environment, to
+# create and migrate the database. The deploy itself uses CLOUDFLARE_API_TOKEN: attaching a
+# database needs no D1 permission. Without the D1 token, or if it can't reach D1, the deploy leaves the API out with a warning and the index is published as
 # before. If preparing or deploying the API fails anyway, the index is deployed without it
 # and the run is marked failed.
 #
@@ -86,7 +86,6 @@ jobs:
         id: d1
         env:
           D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_TOKEN }}
-          CREATE: ${{ steps.project.outputs.create }}
         run: |
           set -euo pipefail
           if [ -z "$D1_TOKEN" ]; then
@@ -96,11 +95,10 @@ jobs:
           base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
           # An outage gives 000, so the API is left out with a warning instead of failing the run.
           d1=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $D1_TOKEN" "$base/d1/database" || true)
-          pages=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $D1_TOKEN" "$base/pages/projects/$PAGES_PROJECT" || true)
-          if [ "$d1" = 200 ] && { [ "$pages" = 200 ] || { [ "$pages" = 404 ] && [ "$CREATE" = true ]; }; }; then
+          if [ "$d1" = 200 ]; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::CLOUDFLARE_D1_TOKEN can't reach both D1 (HTTP $d1) and the Pages project (HTTP $pages). It needs Account > D1 > Edit and Account > Cloudflare Pages > Edit. This deploy leaves out the meal prep API." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::warning::CLOUDFLARE_D1_TOKEN can't reach D1 (HTTP $d1). It needs Account > D1 > Edit. This deploy leaves out the meal prep API." | tee -a "$GITHUB_STEP_SUMMARY"
             echo "ok=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -179,8 +177,8 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         env:
-          # Attaching the database needs a token with D1 access as well as Pages.
-          D1_TOKEN: ${{ steps.api.outputs.included == 'true' && secrets.CLOUDFLARE_D1_TOKEN || '' }}
+          # The Pages token deploys either way: attaching a database needs no D1 permission.
+          INCLUDED: ${{ steps.api.outputs.included }}
           PREPARE_FAILED: ${{ steps.api.outputs.failed }}
         run: |
           set -euo pipefail
@@ -188,13 +186,13 @@ jobs:
             npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch=main
           fi
           deploy() { npx --yes wrangler@4 pages deploy food-index-dist --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true; }
-          if [ -z "$D1_TOKEN" ]; then
+          if [ "$INCLUDED" != true ]; then
             deploy
-          elif CLOUDFLARE_API_TOKEN="$D1_TOKEN" deploy; then
+          elif deploy; then
             echo "Deployed with the meal prep API." | tee -a "$GITHUB_STEP_SUMMARY"
           else
             # The index must still go out: deploy it as before, without the API.
-            echo "::error::Deploying with the meal prep API failed (see the log above; often CLOUDFLARE_D1_TOKEN lacks Account > Cloudflare Pages > Edit). The index is deployed without the API, and the run is marked failed." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::error::Deploying with the meal prep API failed (see the log above). The index is deployed without the API, and the run is marked failed." | tee -a "$GITHUB_STEP_SUMMARY"
             rm -rf functions wrangler.jsonc food-index-dist/_routes.json
             deploy
             api_failed=true
