@@ -113,12 +113,12 @@ One-time setup:
 6. Set the **repository variable** (not a secret or an environment variable) `FOOD_INDEX_URL` to
    `https://food-index.froussios.com/`, so the CI build points the app at it. Re-run CI after changing it.
 7. **Meal prep API** (optional, DR-24). The same site serves it at `/api/*`, from `functions/` with a D1 database.
-   Create a second Account API token with **Account → D1 → Edit** and **Account → Cloudflare Pages → Edit**, and add it
-   to the **food-index** environment as `CLOUDFLARE_D1_TOKEN`. The next Food index run creates the database
-   `food-diary`, applies `migrations/`, and deploys the API with the index. Until the secret exists, or if it lacks
-   either permission, deploys warn and leave the API out. If preparing or deploying the API fails anyway, the run
-   publishes the index without it and is marked failed. API changes go live only with that workflow, because a Pages
-   deploy replaces the whole site.
+   Create a second Account API token with **Account → D1 → Edit**, and add it to the **food-index** environment as
+   `CLOUDFLARE_D1_TOKEN`. The next Food index run uses it to create the database `food-diary` and apply `migrations/`,
+   then deploys the API with the index using `CLOUDFLARE_API_TOKEN` (attaching a database needs no D1 permission).
+   Until the secret exists, or if it can't reach D1, deploys warn and leave the API out. If preparing or deploying the
+   API fails anyway, the run publishes the index without it and is marked failed. API changes go live only with that
+   workflow, because a Pages deploy replaces the whole site.
 
    To run the API locally: `npx wrangler d1 migrations apply DB --local`, then `npx wrangler pages dev` (it serves
    `food-index-dist/` and `/api/*`).
