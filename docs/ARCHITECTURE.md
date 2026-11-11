@@ -156,12 +156,15 @@ preps(user_id, id, name, ingredients, created_at, updated_at, discarded_at)     
 portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at)    -- PRIMARY KEY (user_id, id); migrations/0001_meal_prep.sql
 ```
 
-* **Screens.** A Meal prep card sits under the log form (`src/ui/prep-card.ts`). Each prep shows what is left, how long
-  ago it was made, and the energy of the fraction typed. It has Eat, Eat the rest, Edit and Discard, and a list of what
+* **Screens.** The card above the diary has two tabs (`src/ui/entry-card.ts`). In **Log food**, the food search also
+  finds meal preps, and the preps on hand are offered under the empty search (FOOD_SEARCH.md section 3.1). A chosen
+  prep shows what is left of the batch and asks for a share of it, with the meal and time as for any food, and has
+  Eat the rest and Discard batch. The **Meal prep** tab (`src/ui/prep-card.ts`) lists each prep on one line with what
+  is left. Its Log a portion opens Log food with the prep chosen. It also has Edit, Discard, New prep, and a list of what
   was eaten, where a portion can be removed. A portion's row in the diary can be deleted and undone, but not edited, because
   its fraction lives in the prep. The builder (`src/ui/prep-builder.ts`) finds each ingredient in the food catalogue;
-  custom foods can't be ingredients yet. Eat logs the portion now, with the meal chosen. The card is hidden on a site
-  without the API. The app checks for the API with a request that carries no token: a request with one needs a CORS
+  custom foods can't be ingredients yet. The tab is hidden on a site without the API, and the search then finds
+  foods only. The app checks for the API with a request that carries no token: a request with one needs a CORS
   preflight, which a site without the API refuses, so its 404 would look like a network failure.
 * **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
   index can change. Editing them affects later portions only: a portion already in the diary keeps its nutrients.
@@ -179,8 +182,8 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
 * **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
   so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
   rejects the entry, the portion is removed. If the answer is lost or the browser closes first, the portion counts as eaten
-  and stays unconfirmed. A portion is logged at the moment it is eaten, whichever day the diary shows, so each refresh of today's diary confirms the
-  unconfirmed portions its listing shows. An unconfirmed portion is never released automatically, because its entry may exist; the prep shows
+  and stays unconfirmed. A portion is logged at the time chosen in the form, which is on the day the diary shows, as for any
+  food. Each refresh of a day's diary confirms the unconfirmed portions its listing shows. An unconfirmed portion is never released automatically, because its entry may exist; the prep shows
   it, and the user can give it back.
 * **Removing a portion.** Deleting one in the diary gives it back, and Undo is refused if it would pass 100%. The app finds
   the portion by its entry ID, or else by its name and the time it was eaten, to within a second, because Google may store an entry under

@@ -98,11 +98,14 @@ async function startApp(ids: Ids) {
 
 const button = (label: RegExp) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => label.test(b.getAttribute("aria-label") ?? b.textContent ?? ""));
 
+/** Picks the prep in the Meal prep tab, which opens the log form with it chosen, and logs `amount` of it. */
 async function eat(amount: string) {
-  const input = document.querySelector<HTMLInputElement>('input[aria-label="How much of Chili"]');
+  button(/^Log a portion$/)!.click();
+  const input = document.querySelector<HTMLInputElement>("#portion");
   expect(input).toBeTruthy();
   input!.value = amount;
-  button(/^Eat$/)!.click();
+  input!.dispatchEvent(new Event("input"));
+  button(/^Log portion$/)!.click();
   await settle();
 }
 

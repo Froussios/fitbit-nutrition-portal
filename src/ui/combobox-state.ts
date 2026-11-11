@@ -3,8 +3,8 @@
  * as a pure reducer so every rule is unit-testable without a DOM.
  *
  * Rows are the search hits (0 .. hits-1) followed by the "Custom food" row
- * (index `hits`). `active` is -1 when no row is active: the field then shows
- * what the user typed (`query`); otherwise it shows the active hit's label.
+ * (index `hits`), when there is one. `active` is -1 when no row is active: the
+ * field then shows what the user typed (`query`); otherwise the active hit's label.
  */
 
 export interface ComboState {
@@ -15,11 +15,13 @@ export interface ComboState {
   readonly active: number;
   /** Number of search hits shown (the custom-food row comes after them). */
   readonly hits: number;
+  /** Whether the custom-food row follows the hits. */
+  readonly custom: boolean;
 }
 
 export type ComboEvent =
   | { readonly type: "input"; readonly text: string }
-  | { readonly type: "results"; readonly hits: number }
+  | { readonly type: "results"; readonly hits: number; readonly custom?: boolean }
   | { readonly type: "down" }
   | { readonly type: "up" }
   | { readonly type: "escape" }
@@ -28,7 +30,7 @@ export type ComboEvent =
   /** A row was chosen; the field now shows `text`. */
   | { readonly type: "chosen"; readonly text: string };
 
-export const INITIAL: ComboState = { query: "", open: false, active: -1, hits: 0 };
+export const INITIAL: ComboState = { query: "", open: false, active: -1, hits: 0, custom: true };
 
 /** Searches start at this many characters. */
 export const MIN_QUERY = 2;
@@ -36,12 +38,14 @@ export const MIN_QUERY = 2;
 const searchable = (q: string) => q.trim().length >= MIN_QUERY;
 
 export function reduce(s: ComboState, e: ComboEvent): ComboState {
-  const rows = s.hits + 1;
+  const rows = s.hits + (s.custom ? 1 : 0);
   switch (e.type) {
     case "input":
       return { ...s, query: e.text, active: -1, open: searchable(e.text) };
-    case "results":
-      return { ...s, hits: e.hits, active: s.active > e.hits ? -1 : s.active };
+    case "results": {
+      const custom = e.custom ?? true;
+      return { ...s, hits: e.hits, custom, active: s.active >= e.hits + (custom ? 1 : 0) ? -1 : s.active };
+    }
     case "focus":
       return searchable(s.query) ? { ...s, open: true } : s;
     case "down":

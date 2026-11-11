@@ -44,6 +44,13 @@ describe("combobox keyboard model", () => {
     expect(s.active).toBe(-1);
   });
 
+  it("skips the custom row when there is none", () => {
+    let s = run({ type: "input", text: "choc" }, { type: "results", hits: 2, custom: false });
+    const seen: number[] = [];
+    for (let i = 0; i < 3; i++) seen.push((s = reduce(s, { type: "down" })).active);
+    expect(seen).toEqual([0, 1, -1]);
+  });
+
   it("drops an active row that no longer exists when results shrink", () => {
     const s = reduce(reduce(reduce(typed("choc", 3), { type: "down" }), { type: "down" }), { type: "down" });
     expect(reduce(s, { type: "results", hits: 1 }).active).toBe(-1);
