@@ -322,3 +322,8 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .day-nav h2 { margin: 0; min-width: 7em; text-align: center; }
 button.day-step { padding: 4px 10px; line-height: 1; }
 button.day-today { padding: 4px 10px; }
+/* The calendar opens the browser's date picker from a field kept out of sight under it. */
+.day-pick-wrap { position: relative; display: inline-flex; }
+button.day-pick { display: flex; align-items: center; padding: 6px 10px; }
+button.day-pick svg { display: block; width: 1em; height: 1em; }
+.day-pick-field { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; border: 0; padding: 0; }
