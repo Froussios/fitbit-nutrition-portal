@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { copiedEntryId, ID_PATTERN, idFromName, newEntryId, parseEntryId } from "../src/core/ids";
-import { addCivilDays, civilDate, dayLabel, nextCivilDate, nutritionDayFilter, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../src/core/time";
+import { addCivilDays, civilDate, dayLabel, formatCivilDate, nextCivilDate, nutritionDayFilter, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../src/core/time";
 
 describe("entry ids", () => {
   const now = Date.UTC(2026, 10, 1, 8, 30);
@@ -90,10 +90,14 @@ describe("time helpers", () => {
     expect(dayLabel("2026-11-11", "2026-11-11")).toBe("Today");
     expect(dayLabel("2026-11-10", "2026-11-11")).toBe("Yesterday");
     expect(dayLabel("2026-01-01", "2026-01-02")).toBe("Yesterday");
-    // Compared with the runtime's own formatting, so the test does not depend on its ICU data.
-    expect(dayLabel("2026-11-09", "2026-11-11", "en-AU")).toBe(new Date(2026, 10, 9).toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" }));
-    expect(dayLabel("2025-12-30", "2026-01-02", "en-AU")).toBe(new Date(2025, 11, 30).toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
-    expect(dayLabel("2025-12-30", "2026-01-02")).toContain("2025");
+    expect(dayLabel("2026-11-09", "2026-11-11")).toBe("Monday, 9 Nov 2026");
+    expect(dayLabel("2025-12-30", "2026-01-02")).toBe("Tuesday, 30 Dec 2025");
+  });
+
+  it("writes a date as weekday, day, short month and year", () => {
+    expect(formatCivilDate("2026-11-12")).toBe("Thursday, 12 Nov 2026");
+    expect(formatCivilDate("2024-02-29")).toBe("Thursday, 29 Feb 2024");
+    expect(formatCivilDate("2027-01-03")).toBe("Sunday, 3 Jan 2027");
   });
 
   it("builds the day filter on civil start time", () => {
