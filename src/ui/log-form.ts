@@ -26,8 +26,10 @@ const MAX_PREP_HITS = 2;
 export interface PrepOutcome {
   readonly text: string;
   readonly error: boolean;
+  /** The portion counts as eaten, even if something went wrong: the form is cleared, so that trying again can't eat it twice. */
+  readonly eaten?: boolean;
   /** Offered after a discard, to bring the prep back. */
-  readonly undo?: () => void;
+  readonly undo?: () => Promise<PrepOutcome>;
 }
 
 export interface LogFormPrepActions {
@@ -308,9 +310,19 @@ export function createLogForm(
   /** A new choice makes an earlier load error or "Logged" message stale. */
   const clearStatus = () => say("", false);
 
-  function say(text: string, error: boolean, undo?: () => void) {
-    replaceChildren(status, text, undo && " ", undo && el("button", { type: "button", class: "link", onclick: () => (clearStatus(), undo()) }, "Undo"));
+  function say(text: string, error: boolean, undo?: () => Promise<PrepOutcome>) {
+    replaceChildren(status, text, undo && " ", undo && el("button", { type: "button", class: "link", onclick: () => void runUndo(undo) }, "Undo"));
     status.classList.toggle("error", error);
+  }
+
+  async function runUndo(undo: () => Promise<PrepOutcome>) {
+    say("Bringing it back…", false);
+    try {
+      const outcome = await undo();
+      say(outcome.text, outcome.error);
+    } catch (e) {
+      say(errorMessage(e), true);
+    }
   }
 
   const refreshAll = () => {
@@ -453,12 +465,14 @@ export function createLogForm(
     try {
       const outcome = await prepActions.eat(p, fraction, (mealSelect.value || undefined) as MealType | undefined, when);
       say(outcome.text, outcome.error);
-      if (!outcome.error) {
+      if (outcome.eaten) {
         portion.value = "";
         timeTouched = false;
         time.value = toDateTimeLocalValue(defaultTime());
         mealSelect.value = "";
       }
+    } catch (e) {
+      say(errorMessage(e), true);
     } finally {
       saving = false;
       syncSubmit();
@@ -475,6 +489,8 @@ export function createLogForm(
       const outcome = await prepActions.discard(p);
       if (!outcome.error) clearChoice();
       say(outcome.text, outcome.error, outcome.undo);
+    } catch (e) {
+      say(errorMessage(e), true);
     } finally {
       saving = false;
       syncSubmit();

@@ -163,7 +163,8 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
   is left. Its Log a portion opens Log food with the prep chosen. It also has Edit, Discard, New prep, and a list of what
   was eaten, where a portion can be removed. A portion's row in the diary can be deleted and undone, but not edited, because
   its fraction lives in the prep. The builder (`src/ui/prep-builder.ts`) finds each ingredient in the food catalogue;
-  custom foods can't be ingredients yet. The tab is hidden on a site without the API, and the search then finds foods only. The app checks for the API with a request that carries no token: a request with one needs a CORS
+  custom foods can't be ingredients yet. The tab is hidden on a site without the API, and the search then finds
+  foods only. The app checks for the API with a request that carries no token: a request with one needs a CORS
   preflight, which a site without the API refuses, so its 404 would look like a network failure.
 * **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
   index can change. Editing them affects later portions only: a portion already in the diary keeps its nutrients.

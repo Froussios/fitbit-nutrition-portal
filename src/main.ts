@@ -793,25 +793,28 @@ class App {
       try {
         const { key } = await this.write(point);
         await this.confirmPortion(portionId, key);
-        outcome = { text: `Logged ${point.nutritionLog!.foodDisplayName}.`, error: false };
+        outcome = { text: `Logged ${point.nutritionLog!.foodDisplayName}.`, error: false, eaten: true };
       } catch (e) {
         if (isConnectionFailure(e)) {
-          // It counts as eaten, so the form is cleared as for a portion logged: trying again would eat it twice.
           outcome = {
             text: "Google Health did not answer, so this portion may not be in the diary. It counts as eaten until a refresh finds it. If it never appears, give it back from “Eaten so far” in the Meal prep tab.",
-            error: false,
+            error: true,
+            eaten: true,
           };
         } else {
           const givenBack = await this.prepApi.remove(portionId).then(
             () => true,
             (removeError: unknown) => (appLog.warn("Could not give back a refused portion", describeError(removeError)), false),
           );
-          throw new Error(
-            givenBack
-              ? `Google Health refused the entry, so nothing was eaten: ${refusalReason(e)}`
-              : `Google Health refused the entry (${refusalReason(e)}), but the portion still counts as eaten. Give it back from “Eaten so far” in the Meal prep tab.`,
-            { cause: e },
-          );
+          appLog.error("Google Health refused a portion's entry", describeError(e));
+          this.handleError(e, false);
+          outcome = givenBack
+            ? { text: `Google Health refused the entry, so nothing was eaten: ${refusalReason(e)}`, error: true }
+            : {
+                text: `Google Health refused the entry (${refusalReason(e)}), but the portion still counts as eaten. Give it back from “Eaten so far” in the Meal prep tab.`,
+                error: true,
+                eaten: true,
+              };
         }
       }
     } catch (e) {
@@ -822,9 +825,8 @@ class App {
       this.prepBusy.delete(prep.id);
       this.renderPreps();
     }
+    // Loading the day also reloads the preps, which shows what is left now.
     void this.loadDay();
-    // Only the prep list knows what is left now.
-    void this.loadPreps();
     return outcome;
   }
 
@@ -834,7 +836,15 @@ class App {
     this.prepMessages.delete(prep.id);
     return error
       ? { text: error, error: true }
-      : { text: `Discarded ${prep.name}. Nothing was logged.`, error: false, undo: () => void this.discardPrep(prep, false) };
+      : {
+          text: `Discarded ${prep.name}. Nothing was logged.`,
+          error: false,
+          undo: async () => {
+            const failure = await this.discardPrep(prep, false);
+            this.prepMessages.delete(prep.id);
+            return failure ? { text: failure, error: true } : { text: `${prep.name} is back.`, error: false };
+          },
+        };
   }
 
   /** Returns why it failed, if it did. */

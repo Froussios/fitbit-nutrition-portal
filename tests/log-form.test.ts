@@ -21,7 +21,7 @@ const PREPS = [prep("chili", "Chili con carne", 0.4), prep("chick", "Chicken cur
 
 function setUp(preps: readonly Prep[] | null = PREPS) {
   const actions: LogFormPrepActions = {
-    eat: vi.fn(async () => ({ text: "Logged.", error: false })),
+    eat: vi.fn(async () => ({ text: "Logged.", error: false, eaten: true })),
     discard: vi.fn(async () => ({ text: "Discarded.", error: false })),
   };
   const form = createLogForm(catalog(), vi.fn(async () => {}), () => new Date(2026, 10, 11, 19, 5), actions);
@@ -121,6 +121,46 @@ describe("log form", () => {
     [...form.element.querySelectorAll("button")].find((b) => b.textContent === "Eat the rest")!.click();
     await vi.advanceTimersByTimeAsync(0);
     expect(actions.eat).toHaveBeenCalledWith(PREPS[1], null, undefined, expect.any(Date));
+  });
+
+  it("clears the portion when it counts as eaten despite an error, so it can't be eaten twice", async () => {
+    const { form, $, actions } = setUp();
+    form.choosePrep(PREPS[0]!);
+    const portion = $<HTMLInputElement>("#portion");
+    const submit = async () => {
+      form.element.dispatchEvent(new Event("submit", { cancelable: true }));
+      await vi.advanceTimersByTimeAsync(0);
+    };
+    vi.mocked(actions.eat).mockResolvedValueOnce({ text: "Google Health did not answer.", error: true, eaten: true });
+    portion.value = "1/6";
+    await submit();
+    expect(portion.value).toBe("");
+    expect($("p.status[role=status]").classList.contains("error")).toBe(true);
+    vi.mocked(actions.eat).mockResolvedValueOnce({ text: "Refused.", error: true });
+    portion.value = "1/6";
+    await submit();
+    expect(portion.value).toBe("1/6"); // nothing was eaten: try again
+    vi.mocked(actions.eat).mockRejectedValueOnce(new Error("Broken."));
+    await submit();
+    expect($("p.status[role=status]").textContent).toBe("Broken.");
+  });
+
+  it("discards the chosen prep, and says whether Undo worked", async () => {
+    const { form, $, actions, visible } = setUp();
+    const undo = vi.fn(async () => ({ text: "Could not bring back Chili con carne.", error: true }));
+    vi.mocked(actions.discard).mockResolvedValueOnce({ text: "Discarded Chili con carne.", error: false, undo });
+    form.choosePrep(PREPS[0]!);
+    [...form.element.querySelectorAll("button")].find((b) => b.textContent === "Discard batch")!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(actions.discard).toHaveBeenCalledWith(PREPS[0]);
+    expect(visible("#portion")).toBe(false);
+    const status = $("p.status[role=status]");
+    expect(status.textContent).toBe("Discarded Chili con carne. Undo");
+    status.querySelector("button")!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(undo).toHaveBeenCalled();
+    expect(status.textContent).toBe("Could not bring back Chili con carne.");
+    expect(status.classList.contains("error")).toBe(true);
   });
 
   it("goes back to the search when the chosen prep is finished", () => {
