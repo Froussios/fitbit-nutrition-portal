@@ -108,6 +108,9 @@ export function portionName(prepName: string, fraction: number): string {
   return `${prepName} (${formatFraction(fraction)})`;
 }
 
+/** How a portion's entry name ends, e.g. ` (1/6)`, ` (25%)` or ` (all)`. */
+export const PORTION_SUFFIX = / \((all|\d+\/\d+|\d+(\.\d+)?%)\)$/;
+
 /** A diary entry, as far as finding its portion needs. */
 export interface PortionEntry {
   readonly id: string;
@@ -117,8 +120,8 @@ export interface PortionEntry {
 }
 
 /**
- * The portion a diary entry was logged for. First by the entry's ID. Failing that, by its name and the second it was
- * eaten, among portions whose own entry is not in `listed`: that covers an entry Google stored under its own ID, which
+ * The portion a diary entry was logged for. First by the entry's ID. Failing that, by its name and a time within a second
+ * of when it was eaten (Google may drop or round the milliseconds), among portions whose own entry is not in `listed`: that covers an entry Google stored under its own ID, which
  * the portion never learnt. Undefined when the entry is not a portion, or the prep has been renamed since.
  */
 export function portionOfEntry(
@@ -130,10 +133,9 @@ export function portionOfEntry(
   const byId = all.find(({ portion }) => portion.entryId === entry.id);
   if (byId) return byId;
   const name = entry.foodDisplayName?.trim();
-  const second = Math.floor(entry.start / 1000);
   return all.find(
     ({ prep, portion }) =>
-      portionName(prep.name, portion.fraction) === name && Math.floor(portion.eatenAt / 1000) === second && !(portion.entryId && listed.has(portion.entryId)),
+      portionName(prep.name.trim(), portion.fraction) === name && Math.abs(portion.eatenAt - entry.start) <= 1000 && !(portion.entryId && listed.has(portion.entryId)),
   );
 }
 

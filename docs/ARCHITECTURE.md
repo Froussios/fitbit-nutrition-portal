@@ -179,7 +179,7 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
   unconfirmed portions its listing shows. An unconfirmed portion is never released automatically, because its entry may exist; the prep shows
   it, and the user can give it back.
 * **Removing a portion.** Deleting one in the diary gives it back, and Undo is refused if it would pass 100%. The app finds
-  the portion by its entry ID, or else by its name and the second it was eaten, because Google may store an entry under
+  the portion by its entry ID, or else by its name and the time it was eaten, to within a second, because Google may store an entry under
   its own ID and not say so. It does not rely on the ID's `prep` source. The diary shows
   one day at a time, so the prep also lists its portions, each with a remove button. Deletes made in the Google Health app
   are not detected; removing the portion from the prep corrects the amount left.

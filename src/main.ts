@@ -23,7 +23,7 @@ import { amountAi } from "./ai/amount-ai";
 import { createAiSetting } from "./ui/ai-setting";
 import { createRowEditor, type RowEditor } from "./ui/row-editor";
 import { createDebugPanel } from "./ui/debug-panel";
-import { portionName, portionOfEntry, portionProfile, randomId, type PortionEntry, type Prep, type PrepPortion } from "./core/prep";
+import { PORTION_SUFFIX, portionName, portionOfEntry, portionProfile, randomId, type PortionEntry, type Prep, type PrepPortion } from "./core/prep";
 import type { MealType } from "./health/types";
 import { PrepApi, PrepApiError, PrepApiMissingError } from "./prep/api-client";
 import { createPrepBuilder, type PrepBuilder, type PrepDraft } from "./ui/prep-builder";
@@ -841,23 +841,28 @@ class App {
    */
   private async giveBackDeleted(entry: DiaryEntry) {
     const byId = entry.ref?.source === "prep";
-    const looksLikePortion = byId || this.preps.some((prep) => entry.point.nutritionLog?.foodDisplayName?.startsWith(`${prep.name} (`));
+    const name = entry.point.nutritionLog?.foodDisplayName?.trim() ?? "";
+    // Before the preps have loaded, any name shaped like a portion's is worth a look.
+    const looksLikePortion = byId || (this.preps.length ? this.preps.some((prep) => name.startsWith(`${prep.name.trim()} (`)) : this.prepAvailable && PORTION_SUFFIX.test(name));
     if (!looksLikePortion) return;
-    const traced: PortionEntry = { id: entry.id, foodDisplayName: entry.point.nutritionLog?.foodDisplayName, start: entry.start.getTime() };
+    const traced: PortionEntry = { id: entry.id, foodDisplayName: name, start: entry.start.getTime() };
     const listed = new Set(this.entries.map((e) => e.id));
     let found = portionOfEntry(this.preps, traced, listed);
+    let unchecked = false;
     if (!found) {
       try {
         const preps = await this.prepApi.list();
         if (this.prepUser === this.auth.subject) this.preps = preps;
         found = portionOfEntry(preps, traced, listed);
       } catch (e) {
+        if (e instanceof PrepApiMissingError) return;
         appLog.warn("Deleted an entry that may be a portion, but could not read the preps", describeError(e));
+        unchecked = true;
       }
     }
     if (!found) {
-      if (!byId) return; // named like a prep, but not one of its portions
-      appLog.warn("Deleted a portion's entry, but found no portion for it; nothing was given back", { id: entry.id });
+      if (!byId && !unchecked) return; // named like a portion, but not one
+      appLog.warn("Deleted an entry that may be a portion, but found no portion for it; nothing was given back", { id: entry.id });
       this.showRowFailure(entry, `${entry.displayName} was deleted, but its meal prep could not be checked, so it may still count as eaten. If it does, remove it from the prep's list.`);
       return;
     }
