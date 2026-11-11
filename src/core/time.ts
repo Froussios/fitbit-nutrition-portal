@@ -20,11 +20,31 @@ export function civilDate(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** The civil date `days` after `date` (YYYY-MM-DD; negative for before), independent of the local time zone. */
+export function addCivilDays(date: string, days: number): string {
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+  const next = new Date(Date.UTC(y, m - 1, d + days));
+  return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-${pad(next.getUTCDate())}`;
+}
+
 /** The civil date after `date` (YYYY-MM-DD), independent of the local time zone. */
 export function nextCivilDate(date: string): string {
+  return addCivilDays(date, 1);
+}
+
+/** The moment on civil date `date` with the clock time of `now`: where an entry logged for a past day goes by default. */
+export function onCivilDate(date: string, now: Date): Date {
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  const next = new Date(Date.UTC(y, m - 1, d + 1));
-  return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-${pad(next.getUTCDate())}`;
+  return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+}
+
+/** A heading for civil date `date` seen on `today`: "Today", "Yesterday", or the date written out in `locale`. */
+export function dayLabel(date: string, today: string, locale?: string): string {
+  if (date === today) return "Today";
+  if (date === addCivilDays(today, -1)) return "Yesterday";
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+  const sameYear = date.slice(0, 4) === today.slice(0, 4);
+  return new Date(y, m - 1, d).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", ...(sameYear ? {} : { year: "numeric" }) });
 }
 
 /** List filter for nutrition logs whose civil (local) start falls on `date`. */

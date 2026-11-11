@@ -10,8 +10,8 @@ This is the MVP, a proof of concept (milestone M0):
 2. Log an entry from a small catalogue of local fake foods (written as Open Food Facts records) or from a
    custom food, in g, ml, household measures or portions. Amounts can be typed with their unit, such as `90 g` or `1 cup`. A setting in the header lets Chrome's on-device model
    read what the app's rules refuse, such as a mistyped unit, and you check the result before it is logged.
-3. See today's whole Google Health nutrition diary, whichever app logged each entry, with amounts and
-   totals. Entries made by this app can be edited (amount and meal) and deleted. Deleting asks for no confirmation: a
+3. See a day's whole Google Health nutrition diary, whichever app logged each entry, with amounts and
+   totals. Arrows beside the day step back to earlier days, and new entries go on the day shown. Entries made by this app can be edited (amount and meal) and deleted. Deleting asks for no confirmation: a
    deleted entry stays crossed out with an undo button until the page is reloaded.
 
 * Design and verified API facts: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

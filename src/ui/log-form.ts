@@ -22,13 +22,15 @@ export interface LogForm {
   setOffline(offline: boolean): void;
   /** Shows the preview again, after the energy unit changes. */
   refreshPreview(): void;
+  /** Moves an untouched time to the default again, after the viewed day changes. */
+  refreshTime(): void;
 }
 
 /**
  * Form for one diary entry. The food is found by searching the catalogue as
  * you type (docs/FOOD_SEARCH.md), or entered as a custom food per 100 g / 100 ml.
  */
-export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) => Promise<void>): LogForm {
+export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) => Promise<void>, defaultTime: () => Date = () => new Date()): LogForm {
   /** The chosen catalogue food, once its full nutrients have loaded. */
   let chosen: FoodItem | undefined;
   /** The custom-food row was chosen. */
@@ -57,14 +59,13 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
   );
 
   const amount = createAmountField({ id: "qty", unitId: "unit", placeholder: "e.g. 90 g", onChange: () => refreshPreview(), interpreter: amountAi });
-  const now = new Date();
   const mealSelect = el(
     "select",
     { id: "meal" },
     el("option", { value: "" }, "No meal"),
     ...MEAL_TYPES.map((m) => el("option", { value: m.value }, m.label)),
   );
-  const time = el("input", { id: "time", type: "datetime-local", value: toDateTimeLocalValue(now), required: true });
+  const time = el("input", { id: "time", type: "datetime-local", value: toDateTimeLocalValue(defaultTime()), required: true });
   const preview = el("p", { class: "preview", "aria-live": "polite" });
   const submit = el("button", { type: "submit", class: "primary" }, "Log entry");
   const status = el("p", { class: "status", role: "status" });
@@ -124,7 +125,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     }
   };
 
-  // The time follows the clock until the user picks one, so a page left open logs at "now".
+  // The time follows the clock (on the viewed day) until the user picks one, so a page left open logs at "now".
   let timeTouched = false;
   time.addEventListener("input", () => (timeTouched = true));
 
@@ -221,7 +222,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
     // Enter leaves the focus in the field, so the typed unit has not moved yet.
     amount.settle();
     const food = currentFood();
-    const when = timeTouched ? new Date(time.value) : new Date();
+    const when = timeTouched ? new Date(time.value) : defaultTime();
     const invalid = validationError() ?? (Number.isNaN(when.getTime()) ? "Enter a valid time." : undefined);
     const read = amount.read();
     if (food && !invalid && read.state === "typing") {
@@ -244,7 +245,7 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       status.textContent = `Logged ${food.name}.`;
       amount.forgetTyping();
       timeTouched = false;
-      time.value = toDateTimeLocalValue(new Date());
+      time.value = toDateTimeLocalValue(defaultTime());
       mealSelect.value = "";
     } catch (e) {
       status.textContent = errorMessage(e);
@@ -265,6 +266,9 @@ export function createLogForm(catalog: FoodCatalog, onSubmit: (draft: LogDraft) 
       syncSubmit();
     },
     refreshPreview,
+    refreshTime: () => {
+      if (!timeTouched) time.value = toDateTimeLocalValue(defaultTime());
+    },
   };
 }
 

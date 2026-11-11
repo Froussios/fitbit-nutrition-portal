@@ -19,6 +19,8 @@ export interface DiaryTableOptions {
   readonly onEdit: (entry: DiaryEntry) => void;
   readonly onDelete: (entry: DiaryEntry) => void;
   readonly onUndo: (entry: DiaryEntry) => void;
+  /** What an empty day says. */
+  readonly emptyText?: string;
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -67,9 +69,9 @@ function rowTag(id: string, deleted: ReadonlySet<string>, busy: ReadonlyMap<stri
   return text ? el("span", { class: "tag" }, text) : undefined;
 }
 
-export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo }: DiaryTableOptions): HTMLElement {
+export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo, emptyText = "Nothing logged today yet." }: DiaryTableOptions): HTMLElement {
   if (entries.length === 0 && deleted.length === 0) {
-    return el("p", { class: "empty" }, "Nothing logged today yet.");
+    return el("p", { class: "empty" }, emptyText);
   }
 
   const total = sumProfiles(entries.map((e) => e.profile));

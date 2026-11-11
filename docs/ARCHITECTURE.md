@@ -124,14 +124,16 @@ and its portions, and the copy that replaces the entry keeps the same source and
 
 ### 4.4 Reading the diary
 
-The "Today" list reads **all sources** (with `nutrition.readonly`), so its totals match the Google Health
+The diary list reads **all sources** (with `nutrition.readonly`), so its totals match the Google Health
 app. Each row shows its amount (from `serving`). Edit and delete buttons appear only on this app's entries, because
 the write scope covers only data the app added. Other apps' entries show a lock instead, with a note naming
 the app that logged them (the Google Health app or another app's package name), or saying another app did if the
 writer is unknown. Deleting asks nothing: the row stays crossed out and out of the totals, with an
 Undo that logs an equivalent entry under a new ID (DR-20). If a delete or undo fails, the row is enabled again and
 an alert says so until it is dismissed or the action is tried again. Editing changes an entry's amount and meal in its
-own row, which replaces the entry with a corrected copy under a new ID (DR-22). If the user unticks the read permission on Google's consent screen, the
+own row, which replaces the entry with a corrected copy under a new ID (DR-22). It shows one day, today unless the
+arrows beside its heading step to another (#19); there is no step past today. The form logs on the day shown, at the
+current clock time unless a time is picked, and polling refreshes that day. If the user unticks the read permission on Google's consent screen, the
 app falls back to its own entries and says so.
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
@@ -173,11 +175,11 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
 * **Eating a portion.** An atomic `INSERT … SELECT … WHERE` reserves the portion only if the total stays at or under 100%,
   so two devices cannot overrun it. The app then writes the diary entry, then marks the portion confirmed. If Google
   rejects the entry, the portion is removed. If the answer is lost or the browser closes first, the portion counts as eaten
-  and stays unconfirmed. A portion is logged at the moment it is eaten, so each refresh of today's diary confirms the
+  and stays unconfirmed. A portion is logged at the moment it is eaten, whichever day the diary shows, so each refresh of today's diary confirms the
   unconfirmed portions its listing shows. An unconfirmed portion is never released automatically, because its entry may exist; the prep shows
   it, and the user can give it back.
 * **Removing a portion.** Deleting one in the diary gives it back, and Undo is refused if it would pass 100%. The diary shows
-  only today, so the prep also lists its portions, each with a remove button. Deletes made in the Google Health app
+  one day at a time, so the prep also lists its portions, each with a remove button. Deletes made in the Google Health app
   are not detected; removing the portion from the prep corrects the amount left.
 * **Editing a portion in the diary.** Only its meal may change, because a new fraction would have to go through the
   reservation above. Today the editor offers any entry's amount, as "× this entry" when it has no g or ml and its food is
