@@ -24,6 +24,7 @@ import { amountAi } from "./ai/amount-ai";
 import { createAiSetting } from "./ui/ai-setting";
 import { createRowEditor, type RowEditor } from "./ui/row-editor";
 import { createDebugPanel } from "./ui/debug-panel";
+import { createDayPicker } from "./ui/day-picker";
 import { PORTION_SUFFIX, portionName, portionOfEntry, portionProfile, randomId, type PortionEntry, type Prep, type PrepPortion } from "./core/prep";
 import type { MealType } from "./health/types";
 import { PrepApi, PrepApiError, PrepApiMissingError } from "./prep/api-client";
@@ -125,6 +126,10 @@ class App {
   private readonly previousDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Previous day", title: "Previous day", onclick: () => this.stepDay(-1) }, "←");
   private readonly nextDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Next day", title: "Next day", onclick: () => this.stepDay(1) }, "→");
   private readonly todayButton = el("button", { type: "button", class: "day-today", onclick: () => this.showDay(undefined) }, "Today");
+  private readonly dayPicker = createDayPicker(
+    () => ({ day: this.day(), today: civilDate(new Date()) }),
+    (day) => this.showDay(day),
+  );
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
   private readonly rowFailureList = el("div");
   /** Kept across renders, and messages come and go one at a time, so that screen readers announce only what is new. */
@@ -1013,7 +1018,7 @@ class App {
           el(
             "div",
             { class: "card-head" },
-            el("div", { class: "day-nav" }, this.previousDayButton, this.dayHeading, this.nextDayButton, this.todayButton),
+            el("div", { class: "day-nav" }, this.previousDayButton, this.dayHeading, this.nextDayButton, this.dayPicker.element, this.todayButton),
             el("button", { type: "button", onclick: () => void this.loadDay() }, "Refresh"),
           ),
           this.diaryStatus,
