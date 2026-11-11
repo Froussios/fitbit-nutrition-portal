@@ -126,7 +126,10 @@ class App {
   private readonly previousDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Previous day", title: "Previous day", onclick: () => this.stepDay(-1) }, "←");
   private readonly nextDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Next day", title: "Next day", onclick: () => this.stepDay(1) }, "→");
   private readonly todayButton = el("button", { type: "button", class: "day-today", onclick: () => this.showDay(undefined) }, "Today");
-  private readonly dayPicker = createDayPicker((day) => this.showDay(day));
+  private readonly dayPicker = createDayPicker(
+    () => ({ day: this.day(), today: civilDate(new Date()) }),
+    (day) => this.showDay(day),
+  );
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
   private readonly rowFailureList = el("div");
   /** Kept across renders, and messages come and go one at a time, so that screen readers announce only what is new. */
@@ -1086,7 +1089,6 @@ class App {
     this.dayHeading.textContent = dayLabel(day, today);
     this.nextDayButton.disabled = day >= today;
     this.todayButton.hidden = day >= today;
-    this.dayPicker.update(day, today);
     this.diaryStatus.textContent = this.loading ? "Loading…" : this.listError;
     this.diaryStatus.classList.toggle("error", !this.loading && Boolean(this.listError));
     const deleted = [...this.deleted.values()].filter((e) => civilDate(e.start) === day);

@@ -7,8 +7,12 @@ const log = logger("day-picker");
 export interface DayPicker {
   /** The calendar button, with the hidden date field the browser's picker opens from. */
   readonly element: HTMLElement;
-  /** Updates the day the picker opens on, and the last day it offers (YYYY-MM-DD). */
-  update(day: string, today: string): void;
+}
+
+/** The day the picker opens on, and the last day it offers (YYYY-MM-DD). Read each time it opens, so a tab left open past midnight offers the new today. */
+export interface DayPickerDays {
+  readonly day: string;
+  readonly today: string;
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -29,8 +33,9 @@ function calendarIcon(): SVGElement {
  * An icon button that opens the browser's own date picker (#19), to jump to any day up to today.
  * The date field stays out of sight and out of the tab order: the button is the only control.
  */
-export function createDayPicker(onPick: (day: string) => void): DayPicker {
+export function createDayPicker(days: () => DayPickerDays, onPick: (day: string) => void): DayPicker {
   const input = el("input", { type: "date", class: "day-pick-field", tabindex: "-1", "aria-hidden": "true" });
+  // Picking the day already shown changes nothing, so the browser fires no change for it.
   input.addEventListener("change", () => {
     if (isCivilDate(input.value) && (!input.max || input.value <= input.max)) onPick(input.value);
   });
@@ -42,6 +47,9 @@ export function createDayPicker(onPick: (day: string) => void): DayPicker {
       "aria-label": "Choose a day",
       title: "Choose a day",
       onclick: () => {
+        const { day, today } = days();
+        input.max = today;
+        input.value = day;
         try {
           input.showPicker();
         } catch (e) {
@@ -54,9 +62,5 @@ export function createDayPicker(onPick: (day: string) => void): DayPicker {
   );
   return {
     element: el("span", { class: "day-pick-wrap" }, button, input),
-    update: (day, today) => {
-      input.max = today;
-      input.value = day;
-    },
   };
 }
