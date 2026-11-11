@@ -316,3 +316,8 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .prep-ingredients li { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
 .prep-ingredient-name { flex: 1; }
 .prep-ingredient-amount { color: var(--muted); }
+
+/* The diary's day, between the arrows that step to the day before and after (#19). */
+.day-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.day-nav h2 { margin: 0; min-width: 7em; text-align: center; }
+button.day-step { padding: 4px 10px; line-height: 1; }

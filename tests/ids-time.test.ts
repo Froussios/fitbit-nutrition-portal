@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { copiedEntryId, ID_PATTERN, idFromName, newEntryId, parseEntryId } from "../src/core/ids";
-import { nextCivilDate, nutritionDayFilter, parseDurationSeconds, utcOffsetDuration } from "../src/core/time";
+import { addCivilDays, civilDate, dayLabel, nextCivilDate, nutritionDayFilter, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../src/core/time";
 
 describe("entry ids", () => {
   const now = Date.UTC(2026, 10, 1, 8, 30);
@@ -71,6 +71,29 @@ describe("time helpers", () => {
   it("rolls civil dates over month and year ends", () => {
     expect(nextCivilDate("2026-02-28")).toBe("2026-03-01");
     expect(nextCivilDate("2026-12-31")).toBe("2027-01-01");
+  });
+
+  it("steps civil dates back and forth over month and year ends", () => {
+    expect(addCivilDays("2026-03-01", -1)).toBe("2026-02-28");
+    expect(addCivilDays("2027-01-01", -1)).toBe("2026-12-31");
+    expect(addCivilDays("2026-11-11", 0)).toBe("2026-11-11");
+    expect(addCivilDays("2026-11-11", -11)).toBe("2026-10-31");
+  });
+
+  it("puts an entry for another day at the current clock time on that day", () => {
+    const at = onCivilDate("2026-11-09", new Date(2026, 10, 11, 13, 45, 20));
+    expect(civilDate(at)).toBe("2026-11-09");
+    expect([at.getHours(), at.getMinutes(), at.getSeconds()]).toEqual([13, 45, 20]);
+  });
+
+  it("names today and yesterday, and writes out other days", () => {
+    expect(dayLabel("2026-11-11", "2026-11-11")).toBe("Today");
+    expect(dayLabel("2026-11-10", "2026-11-11")).toBe("Yesterday");
+    expect(dayLabel("2026-01-01", "2026-01-02")).toBe("Yesterday");
+    // Compared with the runtime's own formatting, so the test does not depend on its ICU data.
+    expect(dayLabel("2026-11-09", "2026-11-11", "en-AU")).toBe(new Date(2026, 10, 9).toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" }));
+    expect(dayLabel("2025-12-30", "2026-01-02", "en-AU")).toBe(new Date(2025, 11, 30).toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
+    expect(dayLabel("2025-12-30", "2026-01-02")).toContain("2025");
   });
 
   it("builds the day filter on civil start time", () => {
