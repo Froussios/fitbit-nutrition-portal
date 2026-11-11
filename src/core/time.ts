@@ -38,13 +38,21 @@ export function onCivilDate(date: string, now: Date): Date {
   return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
 }
 
-/** A heading for civil date `date` seen on `today`: "Today", "Yesterday", or the date written out in `locale`. */
-export function dayLabel(date: string, today: string, locale?: string): string {
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Civil date `date` (YYYY-MM-DD) written out as "Monday, 12 Nov 2026", the owner's preferred form, whatever the locale. */
+export function formatCivilDate(date: string): string {
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return `${WEEKDAYS[weekday]}, ${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/** A heading for civil date `date` seen on `today`: "Today", "Yesterday", or the date written out (`formatCivilDate`). */
+export function dayLabel(date: string, today: string): string {
   if (date === today) return "Today";
   if (date === addCivilDays(today, -1)) return "Yesterday";
-  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  const sameYear = date.slice(0, 4) === today.slice(0, 4);
-  return new Date(y, m - 1, d).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", ...(sameYear ? {} : { year: "numeric" }) });
+  return formatCivilDate(date);
 }
 
 /** List filter for nutrition logs whose civil (local) start falls on `date`. */
