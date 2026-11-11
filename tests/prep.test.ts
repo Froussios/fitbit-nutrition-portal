@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { batchProfile, checkIngredients, formatFraction, isFinished, leftOf, parseFraction, portionName, portionProfile } from "../src/core/prep";
+import { PORTION_SUFFIX, batchProfile, checkIngredients, formatFraction, isFinished, leftOf, parseFraction, portionName, portionOfEntry, portionProfile, type Prep } from "../src/core/prep";
 
 describe("parseFraction", () => {
   it.each([
@@ -82,3 +82,29 @@ describe("checkIngredients", () => {
     expect(() => checkIngredients([{ ...good, ref: { source: "prep", id: "chili001" } }])).toThrow("unknown food");
   });
 });
+
+describe("portionOfEntry", () => {
+  const at = Date.UTC(2026, 10, 11, 12, 30, 15, 250);
+  const portion = (id: string, fraction: number, entryId: string | null, eatenAt = at) => ({ id, fraction, entryId, state: "confirmed" as const, eatenAt, createdAt: eatenAt });
+  const preps: Prep[] = [
+    { id: "chiliprep01", name: "Chili", ingredients: [], createdAt: 0, updatedAt: 0, discardedAt: null, portions: [portion("p1", 1 / 4, "e-ours-1"), portion("p2", 1 / 6, "e-ours-2", at + 60_000)] },
+  ];
+
+  it("finds a portion by its entry's ID", () => {
+    expect(portionOfEntry(preps, { id: "e-ours-2", foodDisplayName: "Something else", start: 0 })?.portion.id).toBe("p2");
+  });
+
+  it("finds one Google stored under its own ID by name and second", () => {
+    expect(portionOfEntry(preps, { id: "1234", foodDisplayName: "Chili (1/4)", start: at - 250 })?.portion.id).toBe("p1");
+    expect(portionOfEntry(preps, { id: "1234", foodDisplayName: "Chili (1/4)", start: at + 750 })?.portion.id).toBe("p1");
+  });
+
+  it("does not match more than a second away, another name, or a portion whose own entry is still listed", () => {
+    expect(portionOfEntry(preps, { id: "1234", foodDisplayName: "Chili (1/4)", start: at + 1251 })).toBeUndefined();
+    expect(portionOfEntry(preps, { id: "1234", foodDisplayName: "Chili (1/6)", start: at })).toBeUndefined();
+    expect(portionOfEntry(preps, { id: "1234", foodDisplayName: "Chili (1/4)", start: at }, new Set(["e-ours-1"]))).toBeUndefined();
+  });
+});
+
+it.each(["Chili (1/6)", "Chili (25%)", "Chili (12.5%)", "Chili (all)"])("PORTION_SUFFIX matches %s", (name) => expect(PORTION_SUFFIX.test(name)).toBe(true));
+it.each(["Chili", "Oats (40 g)", "Chili (one)"])("PORTION_SUFFIX skips %s", (name) => expect(PORTION_SUFFIX.test(name)).toBe(false));
