@@ -25,6 +25,7 @@ describe("the day in the URL", () => {
     expect(isCivilDate("2026-02-29")).toBe(false);
     expect(isCivilDate("2026-13-01")).toBe(false);
     expect(isCivilDate("2026-11-00")).toBe(false);
+    expect(isCivilDate("0050-01-01")).toBe(true);
   });
 
   it("sets and removes the day, keeping the rest of the URL", () => {
