@@ -148,6 +148,7 @@ button.not-owned:not(:disabled):hover { color: var(--text); }
 }
 
 .actions { display: flex; gap: 8px; }
+.actions[hidden] { display: none; }
 
 fieldset.custom {
   border: 1px dashed var(--border);
@@ -295,21 +296,59 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
   white-space: nowrap;
 }
 
-/* Meal prep (#55) */
-.prep-card .prep-list { display: grid; gap: 16px; }
-.prep { border-top: 1px solid var(--border); padding-top: 12px; }
-.prep:first-child { border-top: none; padding-top: 0; }
-.prep-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
-.prep-head h3 { margin: 0; font-size: 1.05rem; }
-.prep-left { font-weight: 600; }
+/* The card above the diary: the log form, and the Meal prep tab (#55). */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.tabs[hidden] { display: none; }
+.tabs [role="tab"] { display: flex; align-items: center; gap: 6px; padding: 4px 12px 8px; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); font-size: 1.05rem; }
+.tabs [role="tab"][aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.count { padding: 0 7px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: var(--row-alt); border: 1px solid var(--border); }
+
+/* Where the search looks: one chip per source, any of them on. */
+.sources { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 0.85rem; color: var(--muted); }
+.sources[hidden] { display: none; }
+button.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 11px 2px 9px; border-radius: 999px; font-size: 0.85rem; color: var(--muted); }
+button.chip::before { content: ""; width: 0.9em; text-align: center; }
+button.chip[aria-pressed="true"] { color: var(--text); border-color: var(--accent); background: var(--row-alt); }
+button.chip[aria-pressed="true"]::before { content: "✓"; color: var(--accent); font-weight: 700; }
+/* The only source on can't be turned off; it is still on, so it doesn't fade. */
+button.chip:disabled { opacity: 1; cursor: default; }
+
+/* Meal preps on hand, offered under an empty search. */
+.on-hand { margin: -4px 0 12px; }
+.on-hand[hidden] { display: none; }
+.on-hand-head { margin: 0 0 4px; font-size: 0.8rem; color: var(--muted); }
+.on-hand ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+button.on-hand-item { display: flex; align-items: baseline; gap: 8px; padding: 4px 12px; border-radius: 999px; background: var(--row-alt); }
+.on-hand-detail { font-size: 0.8rem; color: var(--muted); }
+.entry-fields[hidden], .prep-fields[hidden] { display: none; }
+.opt-kind { font-size: 0.75rem; font-weight: 600; color: var(--accent); }
+
+/* A prep chosen in the log form: what is left of the batch, then the share to eat. */
+.batch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 12px; }
+.batch > span:first-child { font-size: 0.85rem; color: var(--muted); }
+.batch meter { flex: 1 1 160px; height: 0.6rem; }
+.portion-field { flex: 0 1 12rem; }
+.prep-left { font-weight: 600; font-variant-numeric: tabular-nums; }
 .prep-age { color: var(--muted); font-size: 0.85rem; }
-.prep meter { width: 100%; height: 0.6rem; margin: 8px 0; }
+
+/* The Meal prep tab: one line per batch. */
+.prep-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.prep-card-head .hint { margin: 0; }
+.prep-card .prep-list { display: grid; margin-top: 12px; }
+.prep { border-top: 1px solid var(--border); padding: 8px 0; }
+.prep:first-child { border-top: none; }
+.prep-line { display: grid; grid-template-columns: minmax(0, 1fr) 8rem 5rem auto; align-items: center; gap: 4px 12px; }
+.prep-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-width: 0; }
+.prep-line meter { width: 100%; height: 0.6rem; }
+.prep-line .prep-left { text-align: right; }
+.prep-line .actions button { padding: 4px 10px; font-size: 0.9rem; }
 .prep.discarded { color: var(--muted); }
-.prep-eat .field { flex: 0 1 auto; }
-.prep-portions { margin-top: 8px; }
+.prep .status { margin-top: 4px; }
+.prep-portions { margin: 4px 0 0; }
+.prep-portions summary { margin-bottom: 0; font-size: 0.85rem; }
 .prep-portions ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
 .prep-portions li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
-.prep-builder { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.prep-builder { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 12px 0; }
 .prep-builder[hidden] { display: none; }
 .prep-builder h3 { margin: 0 0 8px; }
 .prep-ingredients { list-style: none; padding: 0; margin: 8px 0; }
@@ -327,3 +366,5 @@ button.day-today { padding: 4px 10px; }
 button.day-pick { display: flex; align-items: center; padding: 6px 10px; }
 button.day-pick svg { display: block; width: 1em; height: 1em; }
 .day-pick-field { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; border: 0; padding: 0; }
+.prep-card-head button { white-space: nowrap; }
+.prep-card > .status:empty { display: none; }

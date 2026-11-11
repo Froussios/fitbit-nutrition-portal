@@ -5,7 +5,7 @@ import type { TextRun } from "../core/tokens";
 import { formatMeasurementLabel } from "../core/units";
 import type { FoodCatalog, FoodSearchHit } from "../food/catalog";
 import { describeError, logger } from "../debug/log";
-import { INITIAL, fieldText, reduce, type ComboEvent, type ComboState } from "./combobox-state";
+import { INITIAL, MIN_QUERY, fieldText, reduce, type ComboEvent, type ComboState } from "./combobox-state";
 import { el, replaceChildren } from "./dom";
 import { energyLabel, fmtEnergy } from "./format";
 import { SearchController, type SearchUpdate } from "./search-controller";
@@ -20,6 +20,22 @@ export interface FoodComboboxOptions {
   onCustom(query: string): void;
   /** The user changed the text, so any earlier choice no longer applies. */
   onEdit(): void;
+  /** Rows offered above the food search hits for what the user typed, such as meal preps. */
+  readonly extras?: (query: string) => readonly ComboExtra[];
+  /** Whether to search the food catalogue and offer a custom food. Always, unless this says otherwise. */
+  readonly searchFoods?: () => boolean;
+}
+
+/** A row that is not a food search hit, such as a meal prep. */
+export interface ComboExtra {
+  readonly name: string;
+  /** On the right, e.g. "60% left". */
+  readonly detail: string;
+  /** Under the name, after `tag`. */
+  readonly sub: string;
+  /** What kind of row this is, e.g. "Meal prep". */
+  readonly tag: string;
+  choose(): void;
 }
 
 export interface FoodCombobox {
@@ -29,6 +45,10 @@ export interface FoodCombobox {
   readonly hasChoice: boolean;
   /** Empties the field and closes the list, for a fresh start. Doesn't call onEdit: the caller already knows. */
   reset(): void;
+  /** Shows `text` in the field as the choice, for a choice made outside the list. Doesn't call any callback. */
+  showChoice(text: string): void;
+  /** Searches again, after what `extras` or `searchFoods` would answer has changed. */
+  refresh(): void;
 }
 
 /** Shows a "Searching…" hint only when a search takes longer than this. */
@@ -86,6 +106,9 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
 
   let state: ComboState = INITIAL;
   let hits: readonly FoodSearchHit[] = [];
+  let extras: readonly ComboExtra[] = [];
+  const foods = () => opts.searchFoods?.() ?? true;
+  const searchable = (text: string) => text.trim().length >= MIN_QUERY;
   let status: SearchUpdate["status"] = "idle";
   let slowTimer: ReturnType<typeof setTimeout> | undefined;
   let hasChoice = false;
@@ -95,16 +118,27 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
 
   const render = () => {
     // Assign only on change, so the caret stays where the user is typing.
-    const text = fieldText(state, (row) => hitLabel(hits[row]!));
+    const text = fieldText(state, (row) => (row < extras.length ? extras[row]!.name : hitLabel(hits[row - extras.length]!)));
     if (input.value !== text) input.value = text;
-    const show = state.open && status !== "idle";
+    const searchingFoods = foods();
+    const show = state.open && (searchingFoods ? status !== "idle" : searchable(state.query));
     list.hidden = !show;
     input.setAttribute("aria-expanded", String(show));
     if (show && state.active >= 0) input.setAttribute("aria-activedescendant", optionId(state.active));
     else input.removeAttribute("aria-activedescendant");
     if (!show) return;
 
-    const rows: HTMLElement[] = hits.map((hit, i) => {
+    const extraRows = extras.map((x, i) =>
+      el(
+        "li",
+        { id: optionId(i), role: "option", class: "opt opt-extra", "aria-selected": String(i === state.active) },
+        el("span", { class: "opt-name" }, x.name),
+        el("span", { class: "opt-energy" }, x.detail),
+        el("span", { class: "opt-sub" }, el("span", { class: "opt-kind" }, x.tag), x.sub ? ` · ${x.sub}` : null),
+      ),
+    );
+    const rows: HTMLElement[] = hits.map((hit, j) => {
+      const i = j + extras.length;
       const s = hit.summary;
       const maker = s.brand
         ? runs(hit.brand ?? [{ text: s.brand, match: false }])
@@ -124,25 +158,31 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
         s.serving ? el("span", { class: "opt-serving" }, `${fmtEnergy(s.serving.kcal)} ${energyLabel()} / ${formatMeasurementLabel(s.serving.label)}`) : null,
       );
     });
-    const custom = hits.length;
-    const message =
-      status === "error"
+    const custom = extras.length + hits.length;
+    const message = !searchingFoods
+      ? extras.length === 0
+        ? el("li", { class: "opt-note", role: "presentation" }, `No match for "${state.query.trim()}".`)
+        : null
+      : status === "error"
         ? el("li", { class: "opt-note error", role: "presentation" }, "Food search is unavailable right now.")
         : status === "searching" && hits.length === 0
           ? el("li", { class: "opt-note slow", role: "presentation" }, "Searching…")
-          : status === "done" && hits.length === 0
+          : status === "done" && hits.length === 0 && extras.length === 0
             ? el("li", { class: "opt-note", role: "presentation" }, `No match for "${state.query.trim()}".`)
             : null;
     replaceChildren(
       list,
       message,
+      ...extraRows,
       ...rows,
-      el(
-        "li",
-        { id: optionId(custom), role: "option", class: "opt opt-custom", "aria-selected": String(state.active === custom) },
-        `+ Custom food "${state.query.trim()}"`,
-      ),
-      catalog.attributions?.length
+      searchingFoods &&
+        el(
+          "li",
+          { id: optionId(custom), role: "option", class: "opt opt-custom", "aria-selected": String(state.active === custom) },
+          `+ Custom food "${state.query.trim()}"`,
+        ),
+      searchingFoods &&
+        catalog.attributions?.length
         ? el(
             "li",
             { class: "opt-note attribution", role: "presentation" },
@@ -170,18 +210,29 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
       hits = [];
     }
     if (u.status === "error") log.warn("Food search failed", { query: u.query, error: describeError(u.error) });
-    dispatch({ type: "results", hits: hits.length });
+    dispatch({ type: "results", hits: extras.length + hits.length, custom: foods() });
   });
+
+  /** Finds the extra rows for `text`, then searches the catalogue for it, which reports synchronously and so renders. */
+  const search = (text: string) => {
+    extras = searchable(text) ? (opts.extras?.(text) ?? []) : [];
+    controller.setQuery(foods() ? text : "");
+  };
   // Rows must not move under a row the user has already picked with the arrow keys: the next keystroke updates them.
   catalog.onChange?.(() => controller.invalidate(state.open && state.active < 0));
 
   const choose = (row: number) => {
-    if (row < hits.length) {
-      const hit = hits[row]!;
+    if (row < extras.length) {
+      const extra = extras[row]!;
+      hasChoice = true;
+      dispatch({ type: "chosen", text: extra.name });
+      extra.choose();
+    } else if (row < extras.length + hits.length) {
+      const hit = hits[row - extras.length]!;
       hasChoice = true;
       dispatch({ type: "chosen", text: hitLabel(hit) });
       opts.onChoose(hit);
-    } else {
+    } else if (foods()) {
       const query = state.query.trim();
       hasChoice = true;
       dispatch({ type: "chosen", text: state.query });
@@ -202,7 +253,7 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
     }
     const text = input.value;
     state = reduce(state, { type: "input", text });
-    controller.setQuery(text); // reports synchronously (idle, cached or searching), which renders
+    search(text);
   });
   input.addEventListener("focus", () => dispatch({ type: "focus" }));
   input.addEventListener("blur", () => dispatch({ type: "close" }));
@@ -211,7 +262,7 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
     switch (ev.key) {
       case "ArrowDown":
         ev.preventDefault();
-        if (!state.open && hits.length === 0 && status === "idle") controller.setQuery(state.query);
+        if (!state.open && hits.length === 0 && extras.length === 0 && status === "idle") search(state.query);
         dispatch({ type: "down" });
         break;
       case "ArrowUp":
@@ -237,7 +288,7 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
           opts.onEdit();
         }
         dispatch({ type: "escape" });
-        if (!state.open && !state.query) controller.setQuery("");
+        if (!state.open && !state.query) search("");
         break;
     }
   });
@@ -260,8 +311,15 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
       hasChoice = false;
       input.value = "";
       state = reduce(state, { type: "input", text: "" });
-      controller.setQuery("");
+      search("");
       dispatch({ type: "close" });
+    },
+    showChoice(text) {
+      hasChoice = true;
+      dispatch({ type: "chosen", text });
+    },
+    refresh() {
+      if (!hasChoice) search(state.query);
     },
   };
 }

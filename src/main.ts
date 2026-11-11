@@ -19,13 +19,14 @@ import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
 import { getEnergyUnit, setEnergyUnit, type EnergyUnit } from "./ui/energy-unit";
-import { createLogForm, type LogForm } from "./ui/log-form";
+import { createLogForm, type LogForm, type PrepOutcome } from "./ui/log-form";
+import { createEntryCard, type EntryCard } from "./ui/entry-card";
 import { amountAi } from "./ai/amount-ai";
 import { createAiSetting } from "./ui/ai-setting";
 import { createRowEditor, type RowEditor } from "./ui/row-editor";
 import { createDebugPanel } from "./ui/debug-panel";
 import { createDayPicker } from "./ui/day-picker";
-import { PORTION_SUFFIX, portionName, portionOfEntry, portionProfile, randomId, type PortionEntry, type Prep, type PrepPortion } from "./core/prep";
+import { isFinished, PORTION_SUFFIX, portionName, portionOfEntry, portionProfile, randomId, type PortionEntry, type Prep, type PrepPortion } from "./core/prep";
 import type { MealType } from "./health/types";
 import { PrepApi, PrepApiError, PrepApiMissingError } from "./prep/api-client";
 import { createPrepBuilder, type PrepBuilder, type PrepDraft } from "./ui/prep-builder";
@@ -99,6 +100,8 @@ class App {
   private readonly prepApi: PrepApi;
   private readonly prepBuilder: PrepBuilder;
   private readonly prepCard: PrepCard;
+  /** The log form and the Meal prep tab. */
+  private readonly entryCard: EntryCard;
   /** The user's meal preps (#55), as the API last listed them. */
   private preps: Prep[] = [];
   /** False once the site answers that it has no meal prep API: the card then stays hidden. */
@@ -148,6 +151,10 @@ class App {
       catalog,
       (d) => this.log(d),
       () => (this.viewedDay ? onCivilDate(this.viewedDay, new Date()) : new Date()),
+      {
+        eat: (prep, fraction, mealType, time) => this.eatPortion(prep, fraction, mealType, time),
+        discard: (prep) => this.discardFromForm(prep),
+      },
     );
     this.prepBuilder = createPrepBuilder({
       catalog,
@@ -165,13 +172,17 @@ class App {
           this.prepBuilder.open(prep);
           this.renderPreps();
         },
-        onEat: (prep, fraction, mealType) => void this.eatPortion(prep, fraction, mealType),
+        onLog: (prep) => {
+          this.entryCard.show("log");
+          this.form.choosePrep(prep);
+        },
         onDiscard: (prep) => void this.discardPrep(prep, true),
         onRestore: (prep) => void this.discardPrep(prep, false),
         onRemovePortion: (prep, portion) => void this.removePortion(prep, portion),
       },
       this.prepBuilder.element,
     );
+    this.entryCard = createEntryCard(this.form.element, this.prepCard.element);
     // The ID token, never the access token: it proves who the user is and can't use the diary (DR-24).
     this.prepApi = new PrepApi(new URL("api/", FOOD_INDEX_URL).href, () => this.auth.getIdToken());
     // Logging needs the write scope; the read scope (whole diary) is asked for but optional.
@@ -219,7 +230,7 @@ class App {
     this.connectionNotice.hidden = !message;
     this.form.setOffline(this.connection.state === "offline");
     this.prepBuilder?.setOffline(this.connection.state === "offline");
-    if (this.prepCard) this.renderPreps();
+    if (this.entryCard) this.renderPreps();
     this.editor?.setOffline(this.connection.state === "offline");
   }
 
@@ -674,7 +685,14 @@ class App {
   }
 
   private renderPreps() {
-    if (!this.prepAvailable) return this.prepCard.hide();
+    if (!this.prepAvailable) {
+      this.form.setPreps({ available: false, preps: [], busy: this.prepBusy });
+      this.entryCard.setPrep(false, 0);
+      return;
+    }
+    const onHand = this.preps.filter((p) => p.discardedAt === null && !isFinished(p));
+    this.form.setPreps({ available: true, preps: onHand, busy: this.prepBusy });
+    this.entryCard.setPrep(true, onHand.length);
     this.prepCard.update({
       preps: this.preps,
       loading: this.prepLoading && this.preps.length === 0,
@@ -751,14 +769,14 @@ class App {
    * Reserves the portion, then logs it, then confirms it (docs/ARCHITECTURE.md section 4.5). Reserving first means two
    * devices can't eat more than the batch between them. A lost answer leaves the portion unconfirmed, still counting as eaten.
    */
-  private async eatPortion(prep: Prep, fraction: number | null, mealType: MealType | undefined) {
-    if (this.prepBusy.has(prep.id)) return;
+  private async eatPortion(prep: Prep, fraction: number | null, mealType: MealType | undefined, time: Date): Promise<PrepOutcome> {
+    if (this.prepBusy.has(prep.id)) return { text: `${prep.name} is busy. Try again in a moment.`, error: true };
     this.prepBusy.add(prep.id);
     this.prepMessages.delete(prep.id);
     this.renderPreps();
-    const time = new Date();
     const portionId = randomId(16);
     const entryId = newEntryId({ source: "prep", id: prep.id });
+    let outcome: PrepOutcome;
     try {
       let portion: PrepPortion;
       try {
@@ -766,7 +784,7 @@ class App {
       } catch (e) {
         if (e instanceof PrepApiError && e.status === 409) throw new Error(e.left ? `Only ${Math.round(e.left * 100)}% is left.` : "There is none left.", { cause: e });
         if (e instanceof PrepApiError && e.connectionFailed) {
-          throw new Error("The meal prep service did not answer, so this portion may have been taken. Nothing was logged. Check “Eaten so far” before trying again.", { cause: e });
+          throw new Error("The meal prep service did not answer, so this portion may have been taken. Nothing was logged. Check “Eaten so far” in the Meal prep tab before trying again.", { cause: e });
         }
         throw e;
       }
@@ -775,12 +793,14 @@ class App {
       try {
         const { key } = await this.write(point);
         await this.confirmPortion(portionId, key);
-        // A portion is logged when it is eaten, whichever day the diary shows (docs/ARCHITECTURE.md section 4.5).
-        this.say(prep, `Logged ${point.nutritionLog!.foodDisplayName}${this.viewedDay ? " for today" : ""}.`);
-        this.prepCard.clearAmount(prep.id);
+        outcome = { text: `Logged ${point.nutritionLog!.foodDisplayName}.`, error: false };
       } catch (e) {
         if (isConnectionFailure(e)) {
-          this.say(prep, "Google Health did not answer, so this portion may not be in the diary. It counts as eaten until a refresh finds it. If it never appears, give it back from the list below.", true);
+          // It counts as eaten, so the form is cleared as for a portion logged: trying again would eat it twice.
+          outcome = {
+            text: "Google Health did not answer, so this portion may not be in the diary. It counts as eaten until a refresh finds it. If it never appears, give it back from “Eaten so far” in the Meal prep tab.",
+            error: false,
+          };
         } else {
           const givenBack = await this.prepApi.remove(portionId).then(
             () => true,
@@ -789,7 +809,7 @@ class App {
           throw new Error(
             givenBack
               ? `Google Health refused the entry, so nothing was eaten: ${refusalReason(e)}`
-              : `Google Health refused the entry (${refusalReason(e)}), but the portion still counts as eaten. Give it back from the list below.`,
+              : `Google Health refused the entry (${refusalReason(e)}), but the portion still counts as eaten. Give it back from “Eaten so far” in the Meal prep tab.`,
             { cause: e },
           );
         }
@@ -797,18 +817,32 @@ class App {
     } catch (e) {
       appLog.error("Eating a portion failed", describeError(e));
       this.handleError(e, false);
-      this.say(prep, refusalReason(e), true);
+      outcome = { text: refusalReason(e), error: true };
     } finally {
       this.prepBusy.delete(prep.id);
       this.renderPreps();
     }
-    await this.loadDay();
+    void this.loadDay();
+    // Only the prep list knows what is left now.
+    void this.loadPreps();
+    return outcome;
   }
 
-  private async discardPrep(prep: Prep, discarded: boolean) {
-    if (this.prepBusy.has(prep.id)) return;
+  /** Discards a prep from the log form, which says what happened and offers an undo. */
+  private async discardFromForm(prep: Prep): Promise<PrepOutcome> {
+    const error = await this.discardPrep(prep, true);
+    this.prepMessages.delete(prep.id);
+    return error
+      ? { text: error, error: true }
+      : { text: `Discarded ${prep.name}. Nothing was logged.`, error: false, undo: () => void this.discardPrep(prep, false) };
+  }
+
+  /** Returns why it failed, if it did. */
+  private async discardPrep(prep: Prep, discarded: boolean): Promise<string | undefined> {
+    if (this.prepBusy.has(prep.id)) return `${prep.name} is busy. Try again in a moment.`;
     this.prepBusy.add(prep.id);
     this.renderPreps();
+    let failure: string | undefined;
     try {
       await this.prepApi.setDiscarded(prep.id, discarded);
       if (discarded) this.prepDiscarded.add(prep.id);
@@ -816,11 +850,13 @@ class App {
       this.say(prep, discarded ? "Discarded. Nothing was logged." : "Back again.");
     } catch (e) {
       this.handleError(e, false);
-      this.say(prep, `Could not ${discarded ? "discard" : "bring back"} ${prep.name}: ${refusalReason(e)}`, true);
+      failure = `Could not ${discarded ? "discard" : "bring back"} ${prep.name}: ${refusalReason(e)}`;
+      this.say(prep, failure, true);
     } finally {
       this.prepBusy.delete(prep.id);
     }
     await this.loadPreps();
+    return failure;
   }
 
   /**
@@ -1009,8 +1045,7 @@ class App {
       header,
       this.connectionNotice,
       this.notice && el("p", { class: "notice" }, this.notice),
-      this.ready ? this.form.element : this.connectError ? this.renderConnectError() : el("p", { class: "status" }, "Connecting to Google Health…"),
-      this.ready && this.prepCard.element,
+      this.ready ? this.entryCard.element : this.connectError ? this.renderConnectError() : el("p", { class: "status" }, "Connecting to Google Health…"),
       this.ready &&
         el(
           "section",
@@ -1048,7 +1083,6 @@ class App {
           this.form.refreshPreview();
           this.editor?.refresh();
           this.prepBuilder.refreshPreview();
-          this.prepCard.refreshPreview();
           this.renderDiary();
         },
       },

@@ -2,7 +2,7 @@
 
 A food diary that runs entirely in the browser and stores every entry in the user's own
 **Google Health** account (the successor of the Fitbit Web API). There is no backend and no database.
-Planned meal prep will add a small database for recipes, and will not copy the diary into it (DR-24).
+Meal prep adds a small database for recipes, and does not copy the diary into it (DR-24).
 
 This is the MVP, a proof of concept (milestone M0):
 
@@ -133,7 +133,7 @@ src/
   auth/      Google sign-in: popup, checks on Google's answer
   food/      FoodCatalog interface, the static index engine and catalogue, sample foods
   ai/        the optional on-device model that reads amounts the rules refuse
-  ui/        DOM helpers, log form, food search combobox, diary table, meal prep card and builder
+  ui/        DOM helpers, log form, food search combobox, diary table, meal prep tab and builder
   prep/      the browser's client for the meal prep API
   main.ts    app shell
 pipeline/    food index builder (Open Food Facts export → public/food-index/), generic foods builder

@@ -51,6 +51,11 @@ The **Food** field in the log form becomes a text input with a dropdown under it
    refresh as they do now (after one small fetch of the product's full nutrients).
 4. If the user edits the text after choosing, the choice is cleared and the form cannot be submitted until
    a food is chosen again. This stops an entry being logged against a food the field no longer names.
+5. Where the site has meal prep (#55), chips above the field choose what it searches: **Foods**, **Meal
+   prep**, or both. At most 2 meal preps with some left come before the food matches, so the foods keep most
+   of the list. With Foods off, there are no food matches and no custom-food row. Under an empty field,
+   the meal preps on hand are offered as buttons. The log form's other fields stay hidden until something is
+   chosen; a meal prep then asks for a share of the batch instead of an amount and unit.
 
 | State | Shown |
 |---|---|
