@@ -340,6 +340,7 @@ class App {
     this.viewedDay = day < today ? day : undefined;
     this.stopEditing();
     this.entries = [];
+    this.loadedDay = undefined;
     this.listError = "";
     this.form.refreshTime();
     const hadFocus = document.activeElement === this.nextDayButton;
@@ -363,7 +364,8 @@ class App {
       if (day !== this.day()) return;
       const matched = reconcilePending(this.pending, points, this.clientId);
       for (const key of [...matched.listedById, ...matched.listedByContent]) this.dropPending(key);
-      // Only this day's listing can show an entry, so ones written for another day wait until it is viewed.
+      // Only this day's listing can show an entry, so ones written for another day wait until it is viewed
+      // (if it never is, they stay pending for the session, which only costs memory).
       const onDay = (key: string) => {
         const start = this.pending.get(key)?.nutritionLog?.interval.startTime;
         return start !== undefined && civilDate(new Date(start)) === day;

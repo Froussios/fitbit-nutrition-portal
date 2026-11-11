@@ -90,8 +90,10 @@ describe("time helpers", () => {
     expect(dayLabel("2026-11-11", "2026-11-11")).toBe("Today");
     expect(dayLabel("2026-11-10", "2026-11-11")).toBe("Yesterday");
     expect(dayLabel("2026-01-01", "2026-01-02")).toBe("Yesterday");
-    expect(dayLabel("2026-11-09", "2026-11-11", "en-AU")).toBe("Monday 9 November");
-    expect(dayLabel("2025-12-30", "2026-01-02", "en-AU")).toBe("Tuesday 30 December 2025");
+    // Compared with the runtime's own formatting, so the test does not depend on its ICU data.
+    expect(dayLabel("2026-11-09", "2026-11-11", "en-AU")).toBe(new Date(2026, 10, 9).toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" }));
+    expect(dayLabel("2025-12-30", "2026-01-02", "en-AU")).toBe(new Date(2025, 11, 30).toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
+    expect(dayLabel("2025-12-30", "2026-01-02")).toContain("2025");
   });
 
   it("builds the day filter on civil start time", () => {
