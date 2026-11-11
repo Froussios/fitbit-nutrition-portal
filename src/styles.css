@@ -321,3 +321,4 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .day-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .day-nav h2 { margin: 0; min-width: 7em; text-align: center; }
 button.day-step { padding: 4px 10px; line-height: 1; }
+button.day-today { padding: 4px 10px; }

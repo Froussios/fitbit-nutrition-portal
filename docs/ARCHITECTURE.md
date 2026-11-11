@@ -132,7 +132,10 @@ writer is unknown. Deleting asks nothing: the row stays crossed out and out of t
 Undo that logs an equivalent entry under a new ID (DR-20). If a delete or undo fails, the row is enabled again and
 an alert says so until it is dismissed or the action is tried again. Editing changes an entry's amount and meal in its
 own row, which replaces the entry with a corrected copy under a new ID (DR-22). It shows one day, today unless the
-arrows beside its heading step to another (#19); there is no step past today. The form logs on the day shown, at the
+arrows beside its heading step to another (#19); there is no step past today, and a Today button jumps back. The day is
+in the page URL as `?day=YYYY-MM-DD`, a query parameter because GitHub Pages has no fallback for unknown paths. The URL is
+replaced, not pushed, so stepping adds no browser history. Today, a later day or a non-date in it shows today, and it is
+taken out. The form logs on the day shown, at the
 current clock time unless a time is picked, and polling refreshes that day. If the user unticks the read permission on Google's consent screen, the
 app falls back to its own entries and says so.
 

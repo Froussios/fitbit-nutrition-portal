@@ -4,6 +4,7 @@ import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_S
 import { canReload, foodLabel } from "./core/food";
 import { copiedEntryId, idFromName, newEntryId } from "./core/ids";
 import { addCivilDays, civilDate, dayLabel, onCivilDate } from "./core/time";
+import { dayFromUrl, urlWithDay } from "./core/day-url";
 import type { BaseUnit } from "./core/units";
 import { LocalFoodCatalog, type FoodCatalog } from "./food/catalog";
 import { SAMPLE_FOODS } from "./food/sample-foods";
@@ -67,8 +68,11 @@ class App {
   /** When each pending point was written; ones the API never lists are dropped after PENDING_TTL_MS. */
   private readonly pendingSince = new Map<string, number>();
   private entries: DiaryEntry[] = [];
-  /** The day the diary shows (#19), as YYYY-MM-DD. Unset for today, which then follows the clock past midnight. */
-  private viewedDay?: string;
+  /**
+   * The day the diary shows (#19), as YYYY-MM-DD, from `?day=` in the page URL. Unset for today, which then follows the
+   * clock past midnight. It survives signing in and out, so that a link to a day still shows that day after sign-in.
+   */
+  private viewedDay = dayFromUrl(location.href, civilDate(new Date()));
   /** The day `entries` were listed for. Until it is the viewed day, the table is not shown. */
   private loadedDay?: string;
   /** Entries deleted in this session, of any day, by ID: shown crossed out so the delete can be undone. Not stored (DR-20). */
@@ -120,6 +124,7 @@ class App {
   private readonly dayHeading = el("h2", { "aria-live": "polite" });
   private readonly previousDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Previous day", title: "Previous day", onclick: () => this.stepDay(-1) }, "←");
   private readonly nextDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Next day", title: "Next day", onclick: () => this.stepDay(1) }, "→");
+  private readonly todayButton = el("button", { type: "button", class: "day-today", onclick: () => this.showDay(undefined) }, "Today");
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
   private readonly rowFailureList = el("div");
   /** Kept across renders, and messages come and go one at a time, so that screen readers announce only what is new. */
@@ -185,6 +190,8 @@ class App {
       if (this.shouldRefresh()) void this.loadDay();
     }, POLL_MS);
 
+    // A link to today, a later day or no date at all shows today, and the URL says so.
+    this.syncUrl();
     this.showConnection();
     this.render();
     if (this.auth.isSignedIn) void this.afterSignIn();
@@ -335,20 +342,31 @@ class App {
 
   /** Moves the diary `days` days back or forth. There is nothing to show after today, so it goes no further. */
   private stepDay(days: number) {
+    this.showDay(addCivilDays(this.day(), days));
+  }
+
+  /** Shows `day` (YYYY-MM-DD), or today when it is undefined or not in the past, and puts it in the URL. */
+  private showDay(day: string | undefined) {
     const today = civilDate(new Date());
-    const day = addCivilDays(this.day(), days);
-    this.viewedDay = day < today ? day : undefined;
+    this.viewedDay = day !== undefined && day < today ? day : undefined;
+    this.syncUrl();
     this.stopEditing();
     this.entries = [];
     this.loadedDay = undefined;
     this.listError = "";
     this.form.refreshTime();
-    const hadFocus = document.activeElement === this.nextDayButton;
+    const hadFocus = document.activeElement === this.nextDayButton || document.activeElement === this.todayButton;
     this.renderDiary();
-    // The button is disabled on reaching today, which takes keyboard focus from it.
-    if (hadFocus && this.nextDayButton.disabled) this.previousDayButton.focus();
+    // On reaching today, Next is disabled and Today hidden, which takes keyboard focus from them.
+    if (hadFocus && this.viewedDay === undefined) this.previousDayButton.focus();
     if (this.loading) this.reloadAfterLoad = true;
     else void this.loadDay();
+  }
+
+  /** Puts the viewed day in the page URL, or takes it out for today. Replaced, not pushed: stepping through days adds no history. */
+  private syncUrl() {
+    const url = urlWithDay(location.href, this.viewedDay);
+    if (url !== location.href) history.replaceState(history.state, "", url);
   }
 
   private async loadDay() {
@@ -894,8 +912,6 @@ class App {
     this.loggedFoodsRead = undefined;
     this.entries = [];
     this.loadedDay = undefined;
-    this.viewedDay = undefined;
-    this.form.refreshTime();
     this.notice = "";
     this.connectError = "";
     this.listError = "";
@@ -972,7 +988,7 @@ class App {
           el(
             "div",
             { class: "card-head" },
-            el("div", { class: "day-nav" }, this.previousDayButton, this.dayHeading, this.nextDayButton),
+            el("div", { class: "day-nav" }, this.previousDayButton, this.dayHeading, this.nextDayButton, this.todayButton),
             el("button", { type: "button", onclick: () => void this.loadDay() }, "Refresh"),
           ),
           this.diaryStatus,
@@ -1042,6 +1058,7 @@ class App {
     const today = civilDate(new Date());
     this.dayHeading.textContent = dayLabel(day, today);
     this.nextDayButton.disabled = day >= today;
+    this.todayButton.hidden = day >= today;
     this.diaryStatus.textContent = this.loading ? "Loading…" : this.listError;
     this.diaryStatus.classList.toggle("error", !this.loading && Boolean(this.listError));
     const deleted = [...this.deleted.values()].filter((e) => civilDate(e.start) === day);
