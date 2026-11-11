@@ -23,7 +23,7 @@ import { amountAi } from "./ai/amount-ai";
 import { createAiSetting } from "./ui/ai-setting";
 import { createRowEditor, type RowEditor } from "./ui/row-editor";
 import { createDebugPanel } from "./ui/debug-panel";
-import { portionName, portionProfile, randomId, type Prep, type PrepPortion } from "./core/prep";
+import { portionName, portionOfEntry, portionProfile, randomId, type PortionEntry, type Prep, type PrepPortion } from "./core/prep";
 import type { MealType } from "./health/types";
 import { PrepApi, PrepApiError, PrepApiMissingError } from "./prep/api-client";
 import { createPrepBuilder, type PrepBuilder, type PrepDraft } from "./ui/prep-builder";
@@ -468,7 +468,7 @@ class App {
       this.entries = this.entries.filter((e) => e.id !== entry.id);
       this.deleted.set(entry.id, entry);
       this.deletedIds.add(entry.id);
-      if (entry.ref?.source === "prep") await this.giveBackDeleted(entry);
+      await this.giveBackDeleted(entry);
     } catch (e) {
       appLog.error("Deleting the entry failed", describeError(e));
       this.handleError(e, false);
@@ -834,14 +834,34 @@ class App {
     await Promise.all([this.loadPreps(), this.loadDay()]);
   }
 
-  /** The diary entry of a portion was deleted: give the portion back, and remember it so that an undo can take it again. */
+  /**
+   * A diary entry was deleted: if it was a portion, give the portion back, and remember it so that an undo can take it
+   * again. The entry is traced by its portion's records, not by its ID's format, because Google may store an entry
+   * under its own ID. The prep list may also predate the portion, so it is read again before giving up.
+   */
   private async giveBackDeleted(entry: DiaryEntry) {
-    const found = this.preps.flatMap((prep) => prep.portions.filter((p) => p.entryId === entry.id).map((p) => ({ prep, portion: p })))[0];
+    const byId = entry.ref?.source === "prep";
+    const looksLikePortion = byId || this.preps.some((prep) => entry.point.nutritionLog?.foodDisplayName?.startsWith(`${prep.name} (`));
+    if (!looksLikePortion) return;
+    const traced: PortionEntry = { id: entry.id, foodDisplayName: entry.point.nutritionLog?.foodDisplayName, start: entry.start.getTime() };
+    const listed = new Set(this.entries.map((e) => e.id));
+    let found = portionOfEntry(this.preps, traced, listed);
     if (!found) {
-      appLog.warn("Deleted a portion's entry, but its prep is not loaded; nothing was given back", { id: entry.id });
+      try {
+        const preps = await this.prepApi.list();
+        if (this.prepUser === this.auth.subject) this.preps = preps;
+        found = portionOfEntry(preps, traced, listed);
+      } catch (e) {
+        appLog.warn("Deleted an entry that may be a portion, but could not read the preps", describeError(e));
+      }
+    }
+    if (!found) {
+      if (!byId) return; // named like a prep, but not one of its portions
+      appLog.warn("Deleted a portion's entry, but found no portion for it; nothing was given back", { id: entry.id });
       this.showRowFailure(entry, `${entry.displayName} was deleted, but its meal prep could not be checked, so it may still count as eaten. If it does, remove it from the prep's list.`);
       return;
     }
+    if (found.portion.entryId !== entry.id) appLog.info("Traced a deleted entry to its portion by name and time", { entry: entry.id, portionEntry: found.portion.entryId });
     this.givenBack.set(entry.id, { prepId: found.prep.id, fraction: found.portion.fraction });
     try {
       await this.prepApi.remove(found.portion.id);
@@ -855,7 +875,7 @@ class App {
   /** Before undoing a portion's delete, takes the portion again. Returns its ID, or undefined if this was not a portion. */
   private async retakePortion(entry: DiaryEntry, copyId: string): Promise<string | undefined> {
     const back = this.givenBack.get(entry.id);
-    if (entry.ref?.source !== "prep" || !back) return undefined;
+    if (!back) return undefined;
     const portionId = randomId(16);
     try {
       await this.prepApi.reserve(back.prepId, { id: portionId, fraction: back.fraction, entryId: copyId, eatenAt: entry.start.getTime() });

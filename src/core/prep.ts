@@ -108,6 +108,35 @@ export function portionName(prepName: string, fraction: number): string {
   return `${prepName} (${formatFraction(fraction)})`;
 }
 
+/** A diary entry, as far as finding its portion needs. */
+export interface PortionEntry {
+  readonly id: string;
+  /** The entry's name as Google stores it, e.g. `Chili (1/6)`. */
+  readonly foodDisplayName: string | undefined;
+  readonly start: number;
+}
+
+/**
+ * The portion a diary entry was logged for. First by the entry's ID. Failing that, by its name and the second it was
+ * eaten, among portions whose own entry is not in `listed`: that covers an entry Google stored under its own ID, which
+ * the portion never learnt. Undefined when the entry is not a portion, or the prep has been renamed since.
+ */
+export function portionOfEntry(
+  preps: readonly Prep[],
+  entry: PortionEntry,
+  listed: ReadonlySet<string> = new Set(),
+): { prep: Prep; portion: PrepPortion } | undefined {
+  const all = preps.flatMap((prep) => prep.portions.map((portion) => ({ prep, portion })));
+  const byId = all.find(({ portion }) => portion.entryId === entry.id);
+  if (byId) return byId;
+  const name = entry.foodDisplayName?.trim();
+  const second = Math.floor(entry.start / 1000);
+  return all.find(
+    ({ prep, portion }) =>
+      portionName(prep.name, portion.fraction) === name && Math.floor(portion.eatenAt / 1000) === second && !(portion.entryId && listed.has(portion.entryId)),
+  );
+}
+
 const SOURCES: ReadonlySet<FoodSource> = new Set<FoodSource>(["off", "afcd", "ausnut", "fndds", "usda", "sample", "manual"]);
 const NUTRIENT_SET: ReadonlySet<string> = new Set(NUTRIENT_KEYS);
 
