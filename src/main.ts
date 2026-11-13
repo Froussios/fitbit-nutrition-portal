@@ -65,6 +65,8 @@ class App {
   private readonly api: HealthClient;
   private servingUnits: Partial<Record<BaseUnit, string>> = {};
   private unitNames = new Map<string, string>();
+  /** The last lookup of the gram and millilitre units got no usable answer, so coming back online tries again. */
+  private servingUnitsFailed = false;
   /** Points written this session that a list call has not returned yet (the API may lag). */
   private readonly pending = new Map<string, DataPoint>();
   /** When each pending point was written; ones the API never lists are dropped after PENDING_TTL_MS. */
@@ -94,8 +96,10 @@ class App {
   /** Why a delete, undo or edit failed, by entry ID. Kept until dismissed or tried again, so that a refresh does not hide it. */
   private readonly rowFailures = new Map<string, HTMLElement>();
   private ready = false;
-  /** Why connecting to Google Health failed; shown with a Retry button instead of "Connecting…". */
+  /** Why the account check failed; shown with a Retry button instead of the diary. */
   private connectError = "";
+  /** The account check under way, or the last one. Unset on signing out, so that its answer is ignored. */
+  private accountCheck?: object;
 
   private readonly prepApi: PrepApi;
   private readonly prepBuilder: PrepBuilder;
@@ -237,10 +241,14 @@ class App {
   /** The browser is back online: pick up what the outage interrupted. */
   private reconnect() {
     if (!this.auth.isSignedIn) return;
+    if (!this.ready) {
+      if (this.connectError) void this.afterSignIn();
+      return;
+    }
     if (this.loading) this.reloadAfterLoad = true;
-    else if (this.ready) void this.loadDay();
-    else if (this.connectError) void this.afterSignIn();
-    if (this.ready) void this.loadLoggedFoods();
+    else void this.loadDay();
+    void this.loadLoggedFoods();
+    if (this.servingUnitsFailed) void this.loadServingUnits();
   }
 
   private async signIn(prompt: "" | "consent" | "select_account" = "") {
@@ -257,28 +265,15 @@ class App {
   }
 
   private async afterSignIn() {
+    // The diary does not wait for the account check: each request to Google Health takes a second or more.
+    // Only a retry of a failed check waits for it, so that the diary does not flash before the same error.
+    const wait = this.connectError !== "";
     this.notice = "";
     this.connectError = "";
     this.ready = false;
-    this.render();
-    appLog.info("Connecting: checking the Google Health identity");
-    let healthUserId: string | undefined;
-    try {
-      const identity = await this.api.getIdentity();
-      healthUserId = identity.healthUserId;
-      appLog.info("Google Health account is linked", { healthUserId: healthUserId ?? "(not returned)" });
-    } catch (e) {
-      if (e instanceof SignInRequiredError) return this.handleError(e);
-      appLog.error("Identity check failed; showing the connection error", describeError(e));
-      this.connectError =
-        e instanceof HealthApiError && e.accountNotLinked
-          ? "Your Google account is not linked to Google Health yet. Open the Google Health app on your phone, sign in there once, then press Retry."
-          : isConnectionFailure(e)
-            ? CONNECT_FAILED
-            : errorMessage(e);
-      this.render();
-      return;
-    }
+    if (wait) this.render();
+    const usable = this.checkAccount();
+    if (wait && !(await usable)) return;
     if (!this.auth.grantedScopes.includes(NUTRITION_READ_SCOPE)) {
       appLog.warn("Read scope not granted; only this app's own entries will be listed", { granted: this.auth.grantedScopes });
       this.notice =
@@ -288,12 +283,50 @@ class App {
     this.ready = true;
     this.render();
     // The gram/ml units only matter for `serving`; find them without holding up the diary.
-    void this.loadServingUnits(healthUserId);
+    void this.loadServingUnits();
     void this.loadLoggedFoods();
     if (this.prepUser !== this.auth.subject) this.resetPreps();
     this.prepUser = this.auth.subject;
     void this.loadPreps();
-    await this.loadDay();
+    // A load from before the check failed may still be waiting for its answer.
+    if (this.loading) this.reloadAfterLoad = true;
+    else await this.loadDay();
+  }
+
+  /**
+   * Asks Google Health whether the account can be used: one never signed in to the Google Health app is not linked.
+   * False if it cannot, and the screen then says why instead of showing the diary. A diary already on screen
+   * gives way only to an unlinked account: its own requests report an outage or any other refusal.
+   */
+  private async checkAccount(): Promise<boolean> {
+    const check = (this.accountCheck = {});
+    appLog.info("Checking the Google Health identity");
+    try {
+      const identity = await this.api.getIdentity();
+      appLog.info("Google Health account is linked", { healthUserId: identity.healthUserId ?? "(not returned)" });
+      // Signed out meanwhile, or a newer check has started: this answer is for neither.
+      return this.accountCheck === check;
+    } catch (e) {
+      if (this.accountCheck !== check) return false;
+      if (e instanceof SignInRequiredError) {
+        this.handleError(e);
+        return false;
+      }
+      const notLinked = e instanceof HealthApiError && e.accountNotLinked;
+      if (this.ready && !notLinked) {
+        appLog.warn("Identity check failed for a reason other than an unlinked account; the diary stays", describeError(e));
+        return true;
+      }
+      appLog.error("Identity check failed; showing the connection error", describeError(e));
+      this.connectError = notLinked
+        ? "Your Google account is not linked to Google Health yet. Open the Google Health app on your phone, sign in there once, then press Retry."
+        : isConnectionFailure(e)
+          ? CONNECT_FAILED
+          : errorMessage(e);
+      this.ready = false;
+      this.render();
+      return false;
+    }
   }
 
   /** Food search favours foods logged before. It must not depend on this, so failure only costs the boost. */
@@ -315,10 +348,11 @@ class App {
   /**
    * Finds the API's gram and millilitre `food-measurement-unit`s. The list is
    * Google's whole unit catalogue, so stop as soon as both are found and cache
-   * them per Google Health user. Until then, entries put the amount in the name.
+   * them per Google account. Until then, entries put the amount in the name.
    */
-  private async loadServingUnits(healthUserId: string | undefined) {
-    const cacheKey = `foodDiary.servingUnits.${healthUserId ?? "me"}`;
+  private async loadServingUnits() {
+    this.servingUnitsFailed = false;
+    const cacheKey = `foodDiary.servingUnits.${this.auth.subject ?? "me"}`;
     const cached = readJson<Partial<Record<BaseUnit, string>>>(cacheKey);
     if (cached?.g && cached.ml) {
       this.setServingUnits(cached);
@@ -340,6 +374,7 @@ class App {
       if (found.g && found.ml) writeJson(cacheKey, found);
       else appLog.warn("Gram or millilitre unit not found; affected entries put the amount in the name instead of `serving`");
     } catch (e) {
+      this.servingUnitsFailed = true;
       appLog.warn("food-measurement-unit list not available; logging without `serving`", describeError(e));
     }
   }
@@ -990,6 +1025,7 @@ class App {
     this.loadedDay = undefined;
     this.notice = "";
     this.connectError = "";
+    this.accountCheck = undefined;
     this.listError = "";
     this.ready = false;
     this.auth.signOut();
