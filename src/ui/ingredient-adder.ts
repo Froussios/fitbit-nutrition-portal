@@ -15,7 +15,11 @@ const log = logger("ingredients");
 
 /** While typing, at most this many saved meals come before the food search hits. */
 const MAX_MEAL_HITS = 2;
-/** A saved meal is measured in servings: one is the meal as saved. */
+/**
+ * A saved meal is measured in servings: one is the meal as saved. The serving is modelled as a portion of 1 g, so
+ * toBaseAmount gives the number of servings. That is safe only because of `portionsOnly`: without it, a typed `g`
+ * would be read as grams and taken as that many servings.
+ */
 export const SERVINGS: Measurable = { basis: "g", portions: [{ name: "serving", amount: 1, unit: "g" }], portionsOnly: true };
 
 export interface IngredientAdderOptions {
@@ -143,7 +147,11 @@ export function createIngredientAdder(opts: IngredientAdderOptions): IngredientA
     refresh();
   }
 
-  // Enter in the amount adds the ingredient: inside the log form it would otherwise log the meal.
+  // Inside the log form, Enter would otherwise log the meal. In the search it only chooses from the list.
+  combobox.input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") ev.preventDefault();
+  });
+  // Enter in the amount adds the ingredient.
   amount.input.addEventListener("keydown", (ev) => {
     if (ev.key !== "Enter") return;
     ev.preventDefault();

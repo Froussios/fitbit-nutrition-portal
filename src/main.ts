@@ -115,6 +115,8 @@ class App {
   /** False once the site's API answers that it has no saved meals: the tab then stays hidden. */
   private mealsAvailable = true;
   private mealsLoading = false;
+  /** A save or delete finished while a load was under way: load again, so the list shows it. */
+  private mealsReload = false;
   private mealsError = "";
   /** Meals deleted in this session: shown with an undo until reload. */
   private mealsDeleted: SavedMeal[] = [];
@@ -946,7 +948,11 @@ class App {
   }
 
   private async loadMeals() {
-    if (!this.prepAvailable || !this.mealsAvailable || this.mealsLoading || !this.auth.isSignedIn) return;
+    if (!this.prepAvailable || !this.mealsAvailable || !this.auth.isSignedIn) return;
+    if (this.mealsLoading) {
+      this.mealsReload = true;
+      return;
+    }
     const user = this.auth.subject;
     this.mealsLoading = true;
     this.renderMeals();
@@ -970,6 +976,10 @@ class App {
     } finally {
       this.mealsLoading = false;
       this.renderMeals();
+    }
+    if (this.mealsReload) {
+      this.mealsReload = false;
+      await this.loadMeals();
     }
   }
 

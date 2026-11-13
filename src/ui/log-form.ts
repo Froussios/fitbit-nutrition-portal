@@ -176,7 +176,7 @@ export function createLogForm(
   portion.addEventListener("input", () => refreshPreview());
 
   // A saved meal's fields: its ingredients, which can be changed for this entry only. The meal stays as saved.
-  const ingredients = createIngredientList({ id: "meal-amount", mode: "adjust", onChange: () => refreshPreview() });
+  const ingredients = createIngredientList({ id: "log-meal-amount", mode: "adjust", onChange: () => refreshPreview() });
   const adder = createIngredientAdder({
     catalog,
     id: "meal-add",

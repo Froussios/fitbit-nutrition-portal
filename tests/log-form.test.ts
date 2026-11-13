@@ -276,6 +276,14 @@ describe("log form, saved meals", () => {
     expect(form.element.textContent).toContain("Added 1 ingredient from Weekday breakfast.");
   });
 
+  it("never logs the meal from Enter in the search for another ingredient", () => {
+    const { form, $ } = setUp(PREPS, MEALS);
+    form.chooseMeal(MEALS[0]!);
+    const enter = new KeyboardEvent("keydown", { key: "Enter", cancelable: true });
+    $<HTMLInputElement>("#meal-add-food").dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(true);
+  });
+
   it("goes back to the search when the chosen meal is deleted", () => {
     const { form, visible } = setUp(PREPS, MEALS);
     form.chooseMeal(MEALS[0]!);
