@@ -1281,8 +1281,14 @@ function renderSetup(canCancel = false) {
   replaceChildren(root, el("header", { class: "top" }, el("h1", {}, "Food Diary")), form, debugPanel);
 }
 
-/** Where the static food index lives: Cloudflare Pages in production (VITE_FOOD_INDEX_URL), else next to the app (public/food-index/ in development). */
-const FOOD_INDEX_URL = ((import.meta.env.VITE_FOOD_INDEX_URL as string | undefined)?.trim() || `${import.meta.env.BASE_URL}food-index`).replace(/\/?$/, "/");
+/**
+ * Where the static food index lives: Cloudflare Pages in production (VITE_FOOD_INDEX_URL), else next to the app
+ * (public/food-index/ in development). Made absolute, because the meal prep API's address is built from it with `new URL`.
+ */
+const FOOD_INDEX_URL = new URL(
+  ((import.meta.env.VITE_FOOD_INDEX_URL as string | undefined)?.trim() || `${import.meta.env.BASE_URL}food-index`).replace(/\/?$/, "/"),
+  document.baseURI,
+).href;
 
 /** Products from the Open Food Facts index if it is deployed, otherwise the built-in sample foods. */
 async function openProducts(): Promise<FoodCatalog> {
