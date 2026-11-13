@@ -351,6 +351,7 @@ class App {
    * them per Google account. Until then, entries put the amount in the name.
    */
   private async loadServingUnits() {
+    this.servingUnitsFailed = false;
     const cacheKey = `foodDiary.servingUnits.${this.auth.subject ?? "me"}`;
     const cached = readJson<Partial<Record<BaseUnit, string>>>(cacheKey);
     if (cached?.g && cached.ml) {
@@ -359,7 +360,6 @@ class App {
       return;
     }
     appLog.info("Looking up the gram and millilitre units in Google's unit catalogue");
-    this.servingUnitsFailed = false;
     try {
       const units = await this.api.listFoodMeasurementUnits({
         maxPages: 20,
