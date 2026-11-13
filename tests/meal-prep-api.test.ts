@@ -1,17 +1,18 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AuthError, GoogleKeys, verifyIdToken } from "../server/auth";
 import type { D1Database, D1PreparedStatement, D1Result } from "../server/d1";
 import { handle, type Env } from "../server/handler";
+import type { SavedMeal } from "../src/core/meal";
 import { KEEP_ENDED_MS, type Prep } from "../src/core/prep";
 
 /** D1's interface over a real SQLite database, with the real migration: D1 is SQLite. */
 function localD1(): D1Database {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
-  db.exec(readFileSync(new URL("../migrations/0001_meal_prep.sql", import.meta.url), "utf8"));
+  for (const file of readdirSync(new URL("../migrations/", import.meta.url)).sort()) db.exec(readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8"));
   const statement = (query: string, values: SQLInputValue[] = []): D1PreparedStatement => ({
     bind: (...v) => statement(query, v.map((x) => (x === undefined ? null : x)) as SQLInputValue[]),
     first: async <T>() => (db.prepare(query).get(...values) as T | undefined) ?? null,
@@ -281,6 +282,51 @@ describe("meal prep API", () => {
     ["a body that is too large", "PUT", "/api/preps/chili001", { name: "Chili", ingredients, padding: "x".repeat(70_000) }],
   ])("refuses %s", async (_name, method, path, body) => {
     expect([400, 413]).toContain((await call(method, path, body)).status);
+  });
+
+  describe("saved meals", () => {
+    const meals = async (user = "alice") => ((await call("GET", "/api/meals", undefined, { user })).body!["meals"] as SavedMeal[]);
+
+    it("stores a meal, replaces it, and deletes it", async () => {
+      expect(await meals()).toEqual([]);
+      expect((await call("PUT", "/api/meals/bowl0001", { name: " Burrito bowl ", ingredients })).status).toBe(204);
+      expect(await meals()).toEqual([{ id: "bowl0001", name: "Burrito bowl", ingredients, createdAt: NOW, updatedAt: NOW }]);
+      now += 1000;
+      expect((await call("PUT", "/api/meals/bowl0001", { name: "Bowl", ingredients: ingredients.slice(0, 1) })).status).toBe(204);
+      expect(await meals()).toMatchObject([{ name: "Bowl", ingredients: ingredients.slice(0, 1), createdAt: NOW, updatedAt: NOW + 1000 }]);
+      expect((await call("DELETE", "/api/meals/bowl0001")).status).toBe(204);
+      expect(await meals()).toEqual([]);
+      // Deleting one that is gone is not an error, so a retry after a lost answer works.
+      expect((await call("DELETE", "/api/meals/bowl0001")).status).toBe(204);
+    });
+
+    it("keeps each user's meals apart, and from their preps", async () => {
+      await call("PUT", "/api/meals/bowl0001", { name: "Bowl", ingredients });
+      expect(await meals("bob")).toEqual([]);
+      await call("DELETE", "/api/meals/bowl0001", undefined, { user: "bob" });
+      expect(await meals()).toHaveLength(1);
+      expect((await preps()).map((p) => p.id)).toEqual(["chili001"]);
+    });
+
+    it("refuses requests without a valid ID token", async () => {
+      expect((await call("GET", "/api/meals", undefined, { token: null })).status).toBe(401);
+    });
+
+    it.each([
+      ["no name", { ingredients }],
+      ["no ingredients", { name: "Bowl", ingredients: [] }],
+      ["a meal prep as an ingredient", { name: "Bowl", ingredients: [{ ...ingredients[0], ref: { source: "prep", id: "chili001" } }] }],
+      ["a saved meal as an ingredient", { name: "Bowl", ingredients: [{ ...ingredients[0], ref: { source: "meal", id: "bowl0002" } }] }],
+    ])("refuses a meal with %s", async (_name, body) => {
+      const res = await call("PUT", "/api/meals/bowl0001", body);
+      expect(res.status).toBe(400);
+      expect(String(res.body!["error"])).toMatch(/meal|Ingredient/);
+    });
+
+    it("refuses a bad meal ID", async () => {
+      expect((await call("PUT", "/api/meals/BAD!", { name: "Bowl", ingredients })).status).toBe(400);
+      expect((await call("PATCH", "/api/meals/bowl0001", { name: "Bowl" })).status).toBe(404);
+    });
   });
 
   it("answers 404 for anything else", async () => {

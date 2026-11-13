@@ -1,5 +1,5 @@
 /**
- * The meal prep API (DR-24), served by a Pages Function at /api/* on the food index's site.
+ * The meal prep and saved meal API (DR-24), served by a Pages Function at /api/* on the food index's site.
  *
  *   GET    /api/preps                      the user's preps and their portions
  *   PUT    /api/preps/:id                  create a prep, or replace its name and ingredients
@@ -7,15 +7,19 @@
  *   POST   /api/preps/:id/portions         reserve { id, fraction | null, entryId, eatenAt }; 409 if too much
  *   PATCH  /api/portions/:id               { entryId }: the diary entry exists
  *   DELETE /api/portions/:id               give a portion back
+ *   GET    /api/meals                      the user's saved meals
+ *   PUT    /api/meals/:id                  create a saved meal, or replace its name and ingredients
+ *   DELETE /api/meals/:id                  delete a saved meal
  *
  * Every request carries a Google ID token, and the user is whoever it names. Nothing in the
  * request can choose another user.
  */
 
+import { MEAL_ID } from "../src/core/meal";
 import { ENTRY_ID, FRACTION_EPSILON, MAX_NAME, PORTION_ID, PREP_ID, checkIngredients } from "../src/core/prep";
 import { AuthError, GoogleKeys, verifyIdToken, type KeyLookup } from "./auth";
 import type { D1Database } from "./d1";
-import { PrepStore } from "./store";
+import { MealStore, PrepStore } from "./store";
 
 export interface Env {
   readonly DB: D1Database;
@@ -156,11 +160,36 @@ export async function handle(request: Request, env: Env, deps: Deps = defaults):
       }
     }
 
+    if (path === "/api/meals" && method === "GET") return reply(request, env, 200, { meals: await new MealStore(env.DB).list(user) });
+
+    if ((m = /^\/api\/meals\/([^/]+)$/.exec(path))) {
+      const id = m[1]!;
+      if (!MEAL_ID.test(id)) throw new HttpError(400, "Bad meal ID.");
+      const meals = new MealStore(env.DB);
+      if (method === "PUT") {
+        const body = await readBody(request);
+        const name = typeof body["name"] === "string" ? body["name"].trim() : "";
+        if (!name || name.length > MAX_NAME) throw new HttpError(400, `A meal needs a name of up to ${MAX_NAME} characters.`);
+        let ingredients;
+        try {
+          ingredients = checkIngredients(body["ingredients"], "meal");
+        } catch (e) {
+          throw new HttpError(400, e instanceof Error ? e.message : "Bad ingredients.");
+        }
+        await meals.save(user, id, name, ingredients, now);
+        return reply(request, env, 204);
+      }
+      if (method === "DELETE") {
+        await meals.remove(user, id);
+        return reply(request, env, 204);
+      }
+    }
+
     throw new HttpError(404, "No such endpoint.");
   } catch (e) {
     if (e instanceof HttpError) return reply(request, env, e.status, { error: e.message, ...e.extra });
     // Never echo internal errors: they could contain request data.
-    console.error("meal prep API error", e instanceof Error ? e.name : "unknown");
+    console.error("meal API error", e instanceof Error ? e.name : "unknown");
     return reply(request, env, 500, { error: "Something went wrong." });
   }
 }

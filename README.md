@@ -2,7 +2,7 @@
 
 A food diary that runs entirely in the browser and stores every entry in the user's own
 **Google Health** account (the successor of the Fitbit Web API). There is no backend and no database.
-Meal prep adds a small database for recipes, and does not copy the diary into it (DR-24).
+Meal prep and saved meals add a small database for recipes, and do not copy the diary into it (DR-24, DR-29).
 
 This is the MVP, a proof of concept (milestone M0):
 
@@ -14,6 +14,9 @@ This is the MVP, a proof of concept (milestone M0):
    totals. Arrows beside the day step back to earlier days, a calendar button jumps to any day, a Today button jumps back, and new entries go on the day shown.
    The page URL names the day (`?day=2026-11-09`), so a day can be linked to; without it the diary shows today. Entries made by this app can be edited (amount and meal) and deleted. Deleting asks for no confirmation: a
    deleted entry stays crossed out with an undo button until the page is reloaded.
+4. Where the site serves its API, cook a batch and eat it in shares (**Meal prep**), or keep meals you eat often
+   (**Saved meals**). A saved meal is logged as one entry under its name. Its ingredients can be changed for that
+   one entry, and a saved meal can be added to another as its ingredients.
 
 * Design and verified API facts: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 * MVP targets, post-MVP milestones and work saved for later: [docs/ROADMAP.md](docs/ROADMAP.md)
@@ -133,13 +136,13 @@ src/
   auth/      Google sign-in: popup, checks on Google's answer
   food/      FoodCatalog interface, the static index engine and catalogue, sample foods
   ai/        the optional on-device model that reads amounts the rules refuse
-  ui/        DOM helpers, log form, food search combobox, diary table, meal prep tab and builder
-  prep/      the browser's client for the meal prep API
+  ui/        DOM helpers, log form, food search combobox, diary table, meal prep and saved meal tabs and builder
+  prep/      the browser's client for the meal prep and saved meal API
   main.ts    app shell
 pipeline/    food index builder (Open Food Facts export → public/food-index/), generic foods builder
-functions/   Cloudflare Pages Function for /api/* on the food index's site (meal prep, DR-24)
-server/      the meal prep API: requests, ID token checks, D1 storage
-migrations/  the meal prep database's schema (D1)
+functions/   Cloudflare Pages Function for /api/* on the food index's site (meal prep and saved meals, DR-24)
+server/      the meal prep and saved meal API: requests, ID token checks, D1 storage
+migrations/  the database's schema (D1), applied in order
 tests/       Vitest unit tests
 docs/        architecture and decisions
 ```

@@ -309,3 +309,20 @@ foods file (FNDDS; AFCD has none). Data built earlier keeps them until it is reb
 weights no longer use up the six portions kept per food. A serving written as a bare weight, such as `30 g`, is no longer
 offered or shown in the search row; Open Food Facts per-serving values are still read with it.
 **Reopen if.** A source names real servings as bare weights often enough to be missed.
+
+### DR-29 A saved meal is a recipe in the database, logged as one entry under its name
+**Decision.** A saved meal is a name and a list of ingredients, stored per user in the meal prep database (DR-24, table
+`meals`). Logging one writes one diary entry named after the meal, with the ingredients' nutrients summed, and nothing
+in the database. Its ingredients can be changed for that one entry, which leaves the saved meal as it was. A saved meal
+can be added to another meal, or to a meal being logged, as copies of its ingredients scaled to the servings given,
+never as a link to it ([design](ARCHITECTURE.md#46-saved-meals)).
+**Why.** Owner decisions (13 November 2026). It replaces the plan in #25 and #26: one entry per ingredient, grouped by ID,
+with the library rebuilt from the diary and no database. One entry per meal reads as the meal in every app that shows
+the diary, and a meal exists before it is first logged. Expanding a meal into its ingredients avoids loops and depth
+limits, keeps every ingredient adjustable, and matches how ingredients already keep the nutrients worked out when added.
+**Consequence.** The diary does not record the ingredients of a logged meal, or which changes were made for it. Editing
+or deleting a saved meal changes no entry already logged, and no meal it was copied into. Its diary row has no amount,
+like a meal prep portion, and can be scaled with "× this entry". Amounts change in the unit each ingredient was added
+in, so no food is looked up again.
+**Reopen if.** The owner wants a logged meal broken down by ingredient, or edits to one meal to flow into others.
+

@@ -118,7 +118,8 @@ Google `food` resources. Anonymous logs cannot be updated, so an edit writes a c
 e-<logged-at base36>-<random4>-<source>[-<food id>]     e.g. e-mvxb00vd-9gcl-smp-oats
 ```
 
-`source` is `off`, `afcd`, `aus` (AUSNUT), `fnds` (USDA FNDDS), `usda`, `smp` (sample) or `man` (manual), so usage per database can be counted from the diary. The food ID is dropped when it does not
+`source` is `off`, `afcd`, `aus` (AUSNUT), `fnds` (USDA FNDDS), `usda`, `smp` (sample), `man` (manual), `prep` (a meal prep
+portion, section 4.5) or `meal` (a saved meal, section 4.6), so usage per database can be counted from the diary. The food ID is dropped when it does not
 fit in 63 characters or is not ID-safe. Editing an entry uses this reference to load the food again, for its exact values
 and its portions, and the copy that replaces the entry keeps the same source and food (DR-22).
 
@@ -156,14 +157,15 @@ preps(user_id, id, name, ingredients, created_at, updated_at, discarded_at)     
 portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at)    -- PRIMARY KEY (user_id, id); migrations/0001_meal_prep.sql
 ```
 
-* **Screens.** The card above the diary has two tabs (`src/ui/entry-card.ts`). In **Log food**, the food search also
+* **Screens.** The card above the diary has three tabs (`src/ui/entry-card.ts`): Log food, Meal prep and Saved meals (section 4.6). In **Log food**, the food search also
   finds meal preps, and the preps on hand are offered under the empty search (FOOD_SEARCH.md section 3.1). A chosen
   prep shows what is left of the batch and asks for a share of it, with the meal and time as for any food, and has
   Eat the rest and Discard batch. The **Meal prep** tab (`src/ui/prep-card.ts`) lists each prep on one line with what
   is left. Its Log a portion opens Log food with the prep chosen. It also has Edit, Discard, New prep, and a list of what
   was eaten, where a portion can be removed. A portion's row in the diary can be deleted and undone, but not edited, because
-  its fraction lives in the prep. The builder (`src/ui/prep-builder.ts`) finds each ingredient in the food catalogue;
-  custom foods can't be ingredients yet. The tab is hidden on a site without the API, and the search then finds
+  its fraction lives in the prep. The builder (`src/ui/prep-builder.ts`, shared with saved meals) lists the ingredients, whose amounts can be
+  changed in place (`src/ui/ingredient-list.ts`), and finds each new one in the food catalogue
+  (`src/ui/ingredient-adder.ts`); custom foods can't be ingredients yet. The tab is hidden on a site without the API, and the search then finds
   foods only. The app checks for the API with a request that carries no token: a request with one needs a CORS
   preflight, which a site without the API refuses, so its 404 would look like a network failure.
 * **Ingredients** keep the nutrients worked out when cooking, because custom foods cannot be reloaded and the weekly
@@ -218,6 +220,39 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
   D1 permission. Without that secret, or if it can't reach D1, it warns and leaves the API out, still publishing the
   index. If preparing or deploying the API fails anyway, it publishes the index without it and fails the run (README,
   Food index).
+
+### 4.6 Saved meals
+
+DR-29. A saved meal is a name and its ingredients, kept in the same database and API as meal prep (section 4.5), and
+logged as one entry under its name. It has nothing left to track: each log is one serving.
+
+```sql
+meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (user_id, id); ingredients is JSON; migrations/0002_saved_meals.sql
+```
+
+* **Screens.** The **Saved meals** tab (`src/ui/meal-card.ts`) lists the meals by name with their energy, and has Log,
+  Edit, Delete (with an undo until reload, which saves the meal again) and New meal, which open the builder of
+  section 4.5. In **Log food** the search finds saved meals, and up to 8 are offered under the empty search. A chosen
+  meal shows its ingredients: an amount can be changed in the unit it was added in, an ingredient left out or put
+  back, and another added, for this entry only. "Reset to the saved meal" undoes that, and so does logging, so each
+  entry starts from the meal as saved.
+* **Logging** writes one entry like a meal prep portion: the meal's name, the summed nutrients, no `serving`, and the
+  ID `e-<time>-<rand>-meal-<mealId>`. The database is not written. The entry can be edited ("× this entry", DR-22) and
+  deleted like any other the app wrote. Ingredients come from `catalog` foods, which never include a meal or a prep.
+* **A meal in a meal.** The builder's search, and the one under a chosen meal in Log food, also find saved meals. One
+  is added as copies of its ingredients, scaled to the servings typed (`expandMeal` in `src/core/meal.ts`), so there is
+  no nesting to resolve and later edits to it change nothing here. A meal holds at most 60 ingredients, as a prep does.
+* **Ingredients** keep the nutrients worked out when added (section 4.5), and a new amount scales them. Editing a saved
+  meal changes later entries only.
+* **Older API.** An API without `/api/meals` answers its own 404, and the app hides saved meals but keeps meal prep.
+  The app deploys on merge, but the API only with the Food index workflow, so for a while the app may run against it.
+* **API.**
+
+  | Request | Does |
+  |---|---|
+  | `GET /api/meals` | The user's saved meals |
+  | `PUT /api/meals/:id` | Creates a meal, or replaces its name and ingredients |
+  | `DELETE /api/meals/:id` | Deletes a meal; deleting one that is gone succeeds |
 
 ## 5. Authentication
 

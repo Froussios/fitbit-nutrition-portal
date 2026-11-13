@@ -26,11 +26,13 @@ import { createAiSetting } from "./ui/ai-setting";
 import { createRowEditor, type RowEditor } from "./ui/row-editor";
 import { createDebugPanel } from "./ui/debug-panel";
 import { createDayPicker } from "./ui/day-picker";
-import { isFinished, PORTION_SUFFIX, portionName, portionOfEntry, portionProfile, randomId, type PortionEntry, type Prep, type PrepPortion } from "./core/prep";
+import { batchProfile, isFinished, PORTION_SUFFIX, portionName, portionOfEntry, portionProfile, randomId, type PortionEntry, type Prep, type PrepIngredient, type PrepPortion } from "./core/prep";
 import type { MealType } from "./health/types";
 import { PrepApi, PrepApiError, PrepApiMissingError } from "./prep/api-client";
 import { createPrepBuilder, type PrepBuilder, type PrepDraft } from "./ui/prep-builder";
 import { createPrepCard, type PrepCard } from "./ui/prep-card";
+import { createMealCard, type MealCard } from "./ui/meal-card";
+import type { SavedMeal } from "./core/meal";
 import { describeError, installGlobalErrorHandlers, logger } from "./debug/log";
 
 /** Refetch interval while the tab is visible: the client-only stand-in for webhook pushes. */
@@ -104,8 +106,20 @@ class App {
   private readonly prepApi: PrepApi;
   private readonly prepBuilder: PrepBuilder;
   private readonly prepCard: PrepCard;
-  /** The log form and the Meal prep tab. */
+  /** The log form, and the Meal prep and Saved meals tabs. */
   private readonly entryCard: EntryCard;
+  private readonly mealBuilder: PrepBuilder;
+  private readonly mealCard: MealCard;
+  /** The user's saved meals, as the API last listed them. */
+  private meals: SavedMeal[] = [];
+  /** False once the site's API answers that it has no saved meals: the tab then stays hidden. */
+  private mealsAvailable = true;
+  private mealsLoading = false;
+  private mealsError = "";
+  /** Meals deleted in this session: shown with an undo until reload. */
+  private mealsDeleted: SavedMeal[] = [];
+  private readonly mealBusy = new Set<string>();
+  private readonly mealMessages = new Map<string, { text: string; error: boolean }>();
   /** The user's meal preps (#55), as the API last listed them. */
   private preps: Prep[] = [];
   /** False once the site answers that it has no meal prep API: the card then stays hidden. */
@@ -159,9 +173,11 @@ class App {
         eat: (prep, fraction, mealType, time) => this.eatPortion(prep, fraction, mealType, time),
         discard: (prep) => this.discardFromForm(prep),
       },
+      (meal, ingredients, mealType, time) => this.logMeal(meal, ingredients, mealType, time),
     );
     this.prepBuilder = createPrepBuilder({
       catalog,
+      kind: "prep",
       draftKey: (prepId) => (this.auth.subject ? `foodDiary.prepDraft.${this.auth.subject}.${prepId ?? "new"}` : undefined),
       onSave: (draft) => this.savePrep(draft),
       onClose: () => this.renderPreps(),
@@ -186,7 +202,34 @@ class App {
       },
       this.prepBuilder.element,
     );
-    this.entryCard = createEntryCard(this.form.element, this.prepCard.element);
+    this.mealBuilder = createPrepBuilder({
+      catalog,
+      kind: "meal",
+      draftKey: (mealId) => (this.auth.subject ? `foodDiary.mealDraft.${this.auth.subject}.${mealId ?? "new"}` : undefined),
+      onSave: (draft) => this.saveMeal(draft),
+      onClose: () => this.renderMeals(),
+      meals: () => this.meals,
+    });
+    this.mealCard = createMealCard(
+      {
+        onNew: () => {
+          this.mealBuilder.open();
+          this.renderMeals();
+        },
+        onEdit: (meal) => {
+          this.mealBuilder.open(meal);
+          this.renderMeals();
+        },
+        onLog: (meal) => {
+          this.entryCard.show("log");
+          this.form.chooseMeal(meal);
+        },
+        onDelete: (meal) => void this.deleteMeal(meal),
+        onRestore: (meal) => void this.restoreMeal(meal),
+      },
+      this.mealBuilder.element,
+    );
+    this.entryCard = createEntryCard(this.form.element, this.prepCard.element, this.mealCard.element);
     // The ID token, never the access token: it proves who the user is and can't use the diary (DR-24).
     this.prepApi = new PrepApi(new URL("api/", FOOD_INDEX_URL).href, () => this.auth.getIdToken());
     // Logging needs the write scope; the read scope (whole diary) is asked for but optional.
@@ -234,7 +277,11 @@ class App {
     this.connectionNotice.hidden = !message;
     this.form.setOffline(this.connection.state === "offline");
     this.prepBuilder?.setOffline(this.connection.state === "offline");
-    if (this.entryCard) this.renderPreps();
+    this.mealBuilder?.setOffline(this.connection.state === "offline");
+    if (this.entryCard) {
+      this.renderPreps();
+      this.renderMeals();
+    }
     this.editor?.setOffline(this.connection.state === "offline");
   }
 
@@ -285,9 +332,13 @@ class App {
     // The gram/ml units only matter for `serving`; find them without holding up the diary.
     void this.loadServingUnits();
     void this.loadLoggedFoods();
-    if (this.prepUser !== this.auth.subject) this.resetPreps();
+    if (this.prepUser !== this.auth.subject) {
+      this.resetPreps();
+      this.resetMeals();
+    }
     this.prepUser = this.auth.subject;
     void this.loadPreps();
+    void this.loadMeals();
     // A load from before the check failed may still be waiting for its answer.
     if (this.loading) this.reloadAfterLoad = true;
     else await this.loadDay();
@@ -720,6 +771,8 @@ class App {
   }
 
   private renderPreps() {
+    // Saved meals live in the same API, so they go when meal prep does.
+    this.renderMeals();
     if (!this.prepAvailable) {
       this.form.setPreps({ available: false, preps: [], busy: this.prepBusy });
       this.entryCard.setPrep(false, 0);
@@ -865,6 +918,125 @@ class App {
     return outcome;
   }
 
+  // Saved meals -----------------------------------------------------------------------------------
+
+  private resetMeals() {
+    this.meals = [];
+    this.mealsError = "";
+    this.mealsDeleted = [];
+    this.mealBusy.clear();
+    this.mealMessages.clear();
+  }
+
+  private renderMeals() {
+    const available = this.prepAvailable && this.mealsAvailable;
+    this.form.setMeals({ available, meals: available ? this.meals : [] });
+    this.entryCard.setMeals(available, this.meals.length);
+    if (!available) return;
+    this.mealCard.update({
+      meals: this.meals,
+      loading: this.mealsLoading && this.meals.length === 0,
+      error: this.mealsError,
+      offline: this.connection.state === "offline",
+      deleted: this.mealsDeleted,
+      busy: this.mealBusy,
+      messages: this.mealMessages,
+      building: this.mealBuilder.isOpen,
+    });
+  }
+
+  private async loadMeals() {
+    if (!this.prepAvailable || !this.mealsAvailable || this.mealsLoading || !this.auth.isSignedIn) return;
+    const user = this.auth.subject;
+    this.mealsLoading = true;
+    this.renderMeals();
+    try {
+      const meals = await this.prepApi.listMeals();
+      if (user !== this.auth.subject) return; // signed in as someone else meanwhile
+      if (meals === undefined) {
+        appLog.info("This site's API has no saved meals; hiding them");
+        this.mealsAvailable = false;
+      } else {
+        this.meals = meals;
+        this.mealsError = "";
+      }
+    } catch (e) {
+      // A site without the API at all: loadPreps hides meal prep, and saved meals with it.
+      if (!(e instanceof PrepApiMissingError)) {
+        appLog.warn("Loading the saved meals failed", describeError(e));
+        this.mealsError = `Could not load your saved meals: ${refusalReason(e)}`;
+        this.handleError(e, false);
+      }
+    } finally {
+      this.mealsLoading = false;
+      this.renderMeals();
+    }
+  }
+
+  private async saveMeal(draft: PrepDraft) {
+    const id = draft.id ?? randomId(12);
+    try {
+      await this.prepApi.saveMeal(id, draft.name, draft.ingredients);
+    } catch (e) {
+      this.handleError(e, false);
+      throw new Error(`Could not save the meal: ${refusalReason(e)}`, { cause: e });
+    }
+    appLog.info(draft.id ? "Saved changes to a meal" : "Saved a new meal", { ingredients: draft.ingredients.length });
+    this.mealMessages.set(id, { text: draft.id ? "Saved. Meals logged from now on use the new ingredients." : "Saved.", error: false });
+    await this.loadMeals();
+  }
+
+  /** Deletes a saved meal. Until reload it stays in the list with an undo, which saves it again. */
+  private async deleteMeal(meal: SavedMeal) {
+    if (this.mealBusy.has(meal.id)) return;
+    this.mealBusy.add(meal.id);
+    this.renderMeals();
+    try {
+      await this.prepApi.deleteMeal(meal.id);
+      this.mealsDeleted = [...this.mealsDeleted.filter((m) => m.id !== meal.id), meal];
+      this.meals = this.meals.filter((m) => m.id !== meal.id);
+      this.mealMessages.set(meal.id, { text: "Deleted. Entries already in the diary stay.", error: false });
+    } catch (e) {
+      this.handleError(e, false);
+      this.mealMessages.set(meal.id, { text: `Could not delete ${meal.name}: ${refusalReason(e)}`, error: true });
+    } finally {
+      this.mealBusy.delete(meal.id);
+    }
+    await this.loadMeals();
+  }
+
+  private async restoreMeal(meal: SavedMeal) {
+    if (this.mealBusy.has(meal.id)) return;
+    this.mealBusy.add(meal.id);
+    this.renderMeals();
+    try {
+      await this.prepApi.saveMeal(meal.id, meal.name, meal.ingredients);
+      this.mealsDeleted = this.mealsDeleted.filter((m) => m.id !== meal.id);
+      this.mealMessages.set(meal.id, { text: "Back again.", error: false });
+    } catch (e) {
+      this.handleError(e, false);
+      this.mealMessages.set(meal.id, { text: `Could not bring back ${meal.name}: ${refusalReason(e)}`, error: true });
+    } finally {
+      this.mealBusy.delete(meal.id);
+    }
+    await this.loadMeals();
+  }
+
+  /** Logs a saved meal as one entry under its name, with the nutrients of the ingredients as changed for this entry. */
+  private async logMeal(meal: SavedMeal, ingredients: readonly PrepIngredient[], mealType: MealType | undefined, time: Date) {
+    const id = newEntryId({ source: "meal", id: meal.id });
+    const point = buildPortionPoint({ name: meal.name, profile: batchProfile(ingredients), mealType, time }, id);
+    appLog.info(`Logging the saved meal ${meal.name}`, { id, ingredients: ingredients.length, mealType });
+    try {
+      await this.write(point);
+    } catch (e) {
+      appLog.error("Logging the meal failed", describeError(e));
+      this.handleError(e, false);
+      throw isConnectionFailure(e) ? new Error(LOG_NOT_CONFIRMED, { cause: e }) : e;
+    }
+    await this.loadDay();
+  }
+
   /** Discards a prep from the log form, which says what happened and offers an undo. */
   private async discardFromForm(prep: Prep): Promise<PrepOutcome> {
     const error = await this.discardPrep(prep, true);
@@ -944,6 +1116,7 @@ class App {
    * under its own ID. The prep list may also predate the portion, so it is read again before giving up.
    */
   private async giveBackDeleted(entry: DiaryEntry) {
+    if (entry.ref?.source === "meal") return; // a saved meal has nothing to give back
     const byId = entry.ref?.source === "prep";
     const name = entry.point.nutritionLog?.foodDisplayName?.trim() ?? "";
     // Before the preps have loaded, any name shaped like a portion's is worth a look.
@@ -1116,6 +1289,7 @@ class App {
     );
     this.renderDiary();
     this.renderPreps();
+    this.renderMeals();
   }
 
   /** Which unit energy is shown in, everywhere in the app. */
@@ -1129,6 +1303,8 @@ class App {
           this.form.refreshPreview();
           this.editor?.refresh();
           this.prepBuilder.refreshPreview();
+          this.mealBuilder.refreshPreview();
+          this.renderMeals();
           this.renderDiary();
         },
       },

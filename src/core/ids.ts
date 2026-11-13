@@ -10,7 +10,8 @@ import type { FoodRef, FoodSource } from "./food";
  * writes (DR-18), and logging again after a failure sends a new ID:
  *
  *   e-<time36>-<rand>-<src>[-<foodId>]     single entry
- *   m-<mealId>-<n>-...                     meal ingredient (milestone 2)
+ *
+ * A saved meal is one entry with source `meal` and the meal's ID as its food ID.
  *
  * The food id part is dropped when it would not fit or is not ID-safe.
  */
@@ -27,6 +28,7 @@ const SOURCE_CODES: Record<FoodSource, string> = {
   sample: "smp",
   manual: "man",
   prep: "prep",
+  meal: "meal",
 };
 const SOURCE_BY_CODE = new Map(Object.entries(SOURCE_CODES).map(([s, c]) => [c, s as FoodSource]));
 

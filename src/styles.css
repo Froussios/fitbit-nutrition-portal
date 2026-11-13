@@ -300,6 +300,7 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
 .tabs[hidden] { display: none; }
 .tabs [role="tab"] { display: flex; align-items: center; gap: 6px; padding: 4px 12px 8px; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); font-size: 1.05rem; }
+.tabs [role="tab"][hidden] { display: none; }
 .tabs [role="tab"][aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 .count { padding: 0 7px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: var(--row-alt); border: 1px solid var(--border); }
 
@@ -314,9 +315,11 @@ button.chip[aria-pressed="true"]::before { content: "✓"; color: var(--accent);
 button.chip:disabled { opacity: 1; cursor: default; }
 
 /* Meal preps on hand, offered under an empty search. */
-.on-hand { margin: -4px 0 12px; }
+.on-hand { display: grid; gap: 8px; margin: -4px 0 12px; }
 .on-hand[hidden] { display: none; }
 .on-hand-head { margin: 0 0 4px; font-size: 0.8rem; color: var(--muted); }
+.on-hand-group[hidden] { display: none; }
+button.chip[hidden] { display: none; }
 .on-hand ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 button.on-hand-item { display: flex; align-items: baseline; gap: 8px; padding: 4px 12px; border-radius: 999px; background: var(--row-alt); }
 .on-hand-detail { font-size: 0.8rem; color: var(--muted); }
@@ -351,10 +354,40 @@ button.on-hand-item { display: flex; align-items: baseline; gap: 8px; padding: 4
 .prep-builder { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 12px 0; }
 .prep-builder[hidden] { display: none; }
 .prep-builder h3 { margin: 0 0 8px; }
-.prep-ingredients { list-style: none; padding: 0; margin: 8px 0; }
-.prep-ingredients li { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
-.prep-ingredient-name { flex: 1; }
-.prep-ingredient-amount { color: var(--muted); }
+
+/* Ingredients whose amounts can be changed in place: in the builders, and for a saved meal in the log form. */
+.ingredients-head { margin: 0 0 4px; font-size: 0.85rem; color: var(--muted); }
+.ingredients { list-style: none; padding: 0; margin: 0 0 12px; border-top: 1px solid var(--border); }
+.ingredients:empty { border-top: none; margin: 0; }
+.ingredients li { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem minmax(3rem, auto) 5.5rem 2.75rem; align-items: center; gap: 0 8px; border-bottom: 1px solid var(--border); }
+.ingredient-name { min-width: 0; overflow-wrap: anywhere; }
+.ingredients input { padding: 4px 6px; text-align: right; font-variant-numeric: tabular-nums; }
+.ingredients input[aria-invalid="true"] { border-color: var(--danger); }
+.ingredient-unit { color: var(--muted); }
+.ingredient-energy { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ingredients li.changed .ingredient-energy { color: var(--text); }
+.ingredients li.left-out .ingredient-name, .ingredients li.left-out .ingredient-unit { color: var(--muted); text-decoration: line-through; }
+.ingredients li.left-out .tag { text-decoration: none; }
+.ingredient-adder .add-field { flex: 0 0 auto; }
+.ingredient-adder .status:empty { display: none; }
+.ingredient-adder .status { margin: -4px 0 12px; }
+.meal-fields { margin-bottom: 12px; }
+.meal-fields[hidden] { display: none; }
+.meal-fields .hint { margin-top: 0; }
+.adjusted { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0 0 8px; font-size: 0.9rem; color: var(--muted); }
+.adjusted[hidden] { display: none; }
+
+/* The Saved meals tab: one line per meal. */
+.meal-card .meal-list { display: grid; margin-top: 12px; }
+.meal-card .meal-list[hidden] { display: none; }
+.meal { border-top: 1px solid var(--border); padding: 8px 0; }
+.meal:first-child { border-top: none; }
+.meal-line { display: grid; grid-template-columns: minmax(0, 1fr) 6rem auto; align-items: center; gap: 4px 12px; }
+.meal-energy { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.meal-line .actions button { padding: 4px 10px; font-size: 0.9rem; }
+.meal.deleted { color: var(--muted); }
+.meal .status { margin-top: 4px; }
+.meal-card > .status:empty { display: none; }
 
 /* The diary's day, between the arrows that step to the day before and after (#19). */
 .day-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }

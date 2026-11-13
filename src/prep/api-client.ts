@@ -1,8 +1,9 @@
 /**
- * The browser's side of the meal prep API (DR-24, docs/ARCHITECTURE.md section 4.5). It sends the
+ * The browser's side of the meal prep and saved meal API (DR-24, docs/ARCHITECTURE.md section 4.5). It sends the
  * Google ID token, which proves who the user is, and never the access token, which could use the diary.
  */
 
+import type { SavedMeal } from "../core/meal";
 import type { Prep, PrepIngredient, PrepPortion } from "../core/prep";
 import { describeError, logger } from "../debug/log";
 
@@ -98,6 +99,32 @@ export class PrepApi {
 
   async remove(portionId: string): Promise<void> {
     await this.request("DELETE", `portions/${portionId}`);
+  }
+
+  /**
+   * The user's saved meals. Undefined when the site's API is older than saved meals: it answers its own 404, and the
+   * app then shows meal prep without them. Throws PrepApiMissingError on a site with no API at all.
+   */
+  async listMeals(): Promise<SavedMeal[] | undefined> {
+    if (!(await this.available())) throw new PrepApiMissingError("Saved meals are not available on this site.");
+    try {
+      const body = (await this.request("GET", "meals")) as { meals?: SavedMeal[] } | undefined;
+      return body?.meals ?? [];
+    } catch (e) {
+      if (e instanceof PrepApiError && e.status === 404) {
+        log.info("This site's API has no saved meals yet");
+        return undefined;
+      }
+      throw e;
+    }
+  }
+
+  async saveMeal(id: string, name: string, ingredients: readonly PrepIngredient[]): Promise<void> {
+    await this.request("PUT", `meals/${id}`, { name, ingredients });
+  }
+
+  async deleteMeal(id: string): Promise<void> {
+    await this.request("DELETE", `meals/${id}`);
   }
 
   private async request(method: string, path: string, body?: unknown): Promise<unknown> {

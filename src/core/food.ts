@@ -14,7 +14,8 @@ export type FoodSource =
   | "usda" // Other USDA FoodData Central data, id = fdcId
   | "sample" // Built-in sample catalogue (proof of concept)
   | "manual" // Typed in by the user
-  | "prep"; // A portion of a meal prep (#55), id = the prep's ID
+  | "prep" // A portion of a meal prep (#55), id = the prep's ID
+  | "meal"; // A saved meal, logged as one entry, id = the meal's ID
 
 /**
  * The tag shown wherever a food appears, so a bad value can be traced to its database. A name
@@ -29,11 +30,12 @@ export const SOURCE_TAGS: Readonly<Record<FoodSource, string>> = {
   sample: "Sample",
   manual: "Custom",
   prep: "Meal prep",
+  meal: "Saved meal",
 };
 
-/** Whether the catalogue can load this food again: not a custom food, and not a meal prep, which lives in its own store. */
+/** Whether the catalogue can load this food again: not a custom food, and not a meal prep or saved meal, which live in their own store. */
 export function canReload(source: FoodSource): boolean {
-  return source !== "manual" && source !== "prep";
+  return source !== "manual" && source !== "prep" && source !== "meal";
 }
 
 /** Authoritative food composition data: only these count as generic foods, not whatever lacks a brand. */
