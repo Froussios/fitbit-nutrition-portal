@@ -146,8 +146,8 @@ const isAmount = (v: unknown, max = 1e7): v is number => typeof v === "number" &
 const isText = (v: unknown, max: number): v is string => typeof v === "string" && v.trim() !== "" && v.length <= max;
 
 /** Checks ingredients sent to the API; returns only the fields it knows. Throws a message fit to show. */
-export function checkIngredients(value: unknown): PrepIngredient[] {
-  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_INGREDIENTS) throw new Error(`A prep needs 1 to ${MAX_INGREDIENTS} ingredients.`);
+export function checkIngredients(value: unknown, what = "prep"): PrepIngredient[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_INGREDIENTS) throw new Error(`A ${what} needs 1 to ${MAX_INGREDIENTS} ingredients.`);
   return value.map((item: unknown, i) => {
     const fail = (what: string): never => {
       throw new Error(`Ingredient ${i + 1}: ${what}.`);

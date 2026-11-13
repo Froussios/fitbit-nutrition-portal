@@ -1,9 +1,10 @@
 /**
- * Meal prep storage in D1 (DR-24). Every query is limited to one user, whose ID the caller
+ * Meal prep and saved meal storage in D1 (DR-24). Every query is limited to one user, whose ID the caller
  * took from a verified token. Nothing here copies the diary.
  */
 
 import { FRACTION_EPSILON, KEEP_ENDED_MS, type Prep, type PrepIngredient, type PrepPortion, type PortionState } from "../src/core/prep";
+import type { SavedMeal } from "../src/core/meal";
 import type { D1Database } from "./d1";
 
 interface PrepRow {
@@ -132,5 +133,39 @@ export class PrepStore {
   /** Gives a portion back. Removing one that is already gone is not an error. */
   async remove(userId: string, id: string): Promise<void> {
     await this.db.prepare("DELETE FROM portions WHERE user_id = ?1 AND id = ?2").bind(userId, id).run();
+  }
+}
+
+interface MealRow {
+  id: string;
+  name: string;
+  ingredients: string;
+  created_at: number;
+  updated_at: number;
+}
+
+/** Saved meals in D1. Every query is limited to one user, whose ID the caller took from a verified token. */
+export class MealStore {
+  constructor(private readonly db: D1Database) {}
+
+  async list(userId: string): Promise<SavedMeal[]> {
+    const rows = await this.db.prepare("SELECT id, name, ingredients, created_at, updated_at FROM meals WHERE user_id = ?1 ORDER BY created_at").bind(userId).all<MealRow>();
+    return rows.results.map((r) => ({ id: r.id, name: r.name, ingredients: JSON.parse(r.ingredients) as PrepIngredient[], createdAt: r.created_at, updatedAt: r.updated_at }));
+  }
+
+  /** Creates the meal, or replaces its name and ingredients. Entries already in the diary keep their values. */
+  async save(userId: string, id: string, name: string, ingredients: readonly PrepIngredient[], now: number): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO meals (user_id, id, name, ingredients, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+         ON CONFLICT (user_id, id) DO UPDATE SET name = excluded.name, ingredients = excluded.ingredients, updated_at = excluded.updated_at`,
+      )
+      .bind(userId, id, name, JSON.stringify(ingredients), now)
+      .run();
+  }
+
+  /** Deleting a meal that is already gone is not an error. */
+  async remove(userId: string, id: string): Promise<void> {
+    await this.db.prepare("DELETE FROM meals WHERE user_id = ?1 AND id = ?2").bind(userId, id).run();
   }
 }

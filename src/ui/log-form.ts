@@ -2,7 +2,8 @@ import { amountAi } from "../ai/amount-ai";
 import { defaultAmount } from "../core/amount-text";
 import { nutrientsForAmount, type FoodItem } from "../core/food";
 import { kjToKcal } from "../core/nutrients";
-import { FRACTION_EPSILON, leftOf, parseFraction, portionProfile, type Prep } from "../core/prep";
+import { byName, tooManyIngredients, type SavedMeal } from "../core/meal";
+import { batchProfile, FRACTION_EPSILON, leftOf, parseFraction, portionProfile, type Prep, type PrepIngredient } from "../core/prep";
 import { toDateTimeLocalValue } from "../core/time";
 import type { BaseUnit } from "../core/units";
 import { MEAL_TYPES, type LogDraft } from "../health/mapping";
@@ -13,7 +14,9 @@ import { createAmountField } from "./amount-field";
 import { el, errorMessage, replaceChildren } from "./dom";
 import { createFoodCombobox, type ComboExtra } from "./food-combobox";
 import { field } from "./form-fields";
-import { madeAgo, percent, summary } from "./format";
+import { energyLabel, fmtEnergy, madeAgo, percent, summary } from "./format";
+import { createIngredientAdder } from "./ingredient-adder";
+import { createIngredientList } from "./ingredient-list";
 
 const log = logger("log-form");
 
@@ -21,6 +24,10 @@ const log = logger("log-form");
 const SOURCES_KEY = "foodDiary.searchSources";
 /** While typing, at most this many meal preps come before the food search hits, which keep most of the list. */
 const MAX_PREP_HITS = 2;
+/** The same for saved meals. */
+const MAX_MEAL_HITS = 2;
+/** Under an empty search, at most this many saved meals, by name. The search finds the rest. */
+export const MAX_MEALS_ON_HAND = 8;
 
 /** What came of eating or discarding a prep. */
 export interface PrepOutcome {
@@ -47,6 +54,15 @@ export interface LogFormPrepState {
   readonly busy: ReadonlySet<string>;
 }
 
+export interface LogFormMealState {
+  /** False on a site whose API has no saved meals: the form then doesn't offer them. */
+  readonly available: boolean;
+  readonly meals: readonly SavedMeal[];
+}
+
+/** Logs a saved meal as one entry under its name, with the ingredients as changed for this entry. Throws why it failed. */
+export type LogMeal = (meal: SavedMeal, ingredients: readonly PrepIngredient[], mealType: MealType | undefined, time: Date) => Promise<void>;
+
 export interface LogForm {
   readonly element: HTMLElement;
   /** Blocks submitting while the browser is offline; what the user entered stays in the form. */
@@ -59,20 +75,24 @@ export interface LogForm {
   setPreps(state: LogFormPrepState): void;
   /** Picks a prep, as if it was chosen in the search, and puts the focus on its portion. */
   choosePrep(prep: Prep): void;
+  /** The user's saved meals, as last listed. */
+  setMeals(state: LogFormMealState): void;
+  /** Picks a saved meal, as if it was chosen in the search. */
+  chooseMeal(meal: SavedMeal): void;
 }
 
 interface Sources {
   foods: boolean;
   preps: boolean;
+  meals: boolean;
 }
 
 function readSources(): Sources {
   try {
     const saved = JSON.parse(localStorage.getItem(SOURCES_KEY) ?? "null") as Partial<Sources> | null;
-    const sources = { foods: saved?.foods !== false, preps: saved?.preps !== false };
-    return sources.foods || sources.preps ? sources : { foods: true, preps: true };
+    return { foods: saved?.foods !== false, preps: saved?.preps !== false, meals: saved?.meals !== false };
   } catch {
-    return { foods: true, preps: true };
+    return { foods: true, preps: true, meals: true };
   }
 }
 
@@ -95,6 +115,7 @@ export function createLogForm(
   onSubmit: (draft: LogDraft) => Promise<void>,
   defaultTime: () => Date = () => new Date(),
   prepActions?: LogFormPrepActions,
+  logMeal?: LogMeal,
 ): LogForm {
   /** The chosen catalogue food, once its full nutrients have loaded. */
   let chosen: FoodItem | undefined;
@@ -104,14 +125,19 @@ export function createLogForm(
   let loading: string | undefined;
   /** The chosen meal prep. */
   let prep: Prep | undefined;
+  /** The chosen saved meal, as it was when chosen or last listed. */
+  let meal: SavedMeal | undefined;
   let choice = 0;
   let saving = false;
   let offline = false;
   let prepState: LogFormPrepState = { available: false, preps: [], busy: new Set() };
+  let mealState: LogFormMealState = { available: false, meals: [] };
   const sources = readSources();
-  /** What is searched now: meal preps only where the site has them. */
+  /** What is searched now: meal preps and saved meals only where the site has them. */
   const searchesPreps = () => prepState.available && sources.preps;
-  const searchesFoods = () => sources.foods || !searchesPreps();
+  const searchesMeals = () => mealState.available && sources.meals;
+  /** Foods, unless another source is on instead: one always stays on. */
+  const searchesFoods = () => sources.foods || (!searchesPreps() && !searchesMeals());
 
   // Custom food fields, values per 100 g or 100 ml.
   const cName = el("input", { id: "c-name", type: "text", placeholder: "e.g. Homemade muesli", maxlength: 80 });
@@ -149,6 +175,47 @@ export function createLogForm(
   );
   portion.addEventListener("input", () => refreshPreview());
 
+  // A saved meal's fields: its ingredients, which can be changed for this entry only. The meal stays as saved.
+  const ingredients = createIngredientList({ id: "log-meal-amount", mode: "adjust", onChange: () => refreshPreview() });
+  const adder = createIngredientAdder({
+    catalog,
+    id: "meal-add",
+    placeholder: "Search foods and saved meals, e.g. sour cream",
+    meals: () => (mealState.available ? mealState.meals : []),
+    onAdd: (added) => {
+      const problem = tooManyIngredients(ingredients.size, added.length);
+      if (problem) return problem;
+      ingredients.add(added);
+      refreshPreview();
+      return undefined;
+    },
+  });
+  const adjustedText = el("span", {});
+  const adjusted = el(
+    "p",
+    { class: "adjusted", hidden: true },
+    adjustedText,
+    el("button", { type: "button", class: "link", onclick: () => resetMeal(true) }, "Reset to the saved meal"),
+  );
+  const mealFields = el(
+    "div",
+    { class: "meal-fields", hidden: true },
+    el("p", { class: "ingredients-head" }, "Ingredients, for this entry"),
+    ingredients.element,
+    adder.element,
+    adjusted,
+    el("p", { class: "hint" }, "Changes here are for this entry only. To change the saved meal, edit it in Saved meals."),
+  );
+
+  /** Starts the chosen meal's ingredients again from the meal as saved. */
+  const resetMeal = (focus = false) => {
+    if (!meal) return;
+    ingredients.set(meal.ingredients);
+    adder.reset();
+    refreshPreview();
+    if (focus) combobox.input.focus();
+  };
+
   const mealSelect = el(
     "select",
     { id: "meal" },
@@ -159,16 +226,20 @@ export function createLogForm(
   const preview = el("p", { class: "preview", "aria-live": "polite" });
   const submit = el("button", { type: "submit", class: "primary" }, "Log entry");
   const prepButtons = el("span", { class: "actions", hidden: true }, eatRest, discard);
-  const status = el("p", { class: "status", role: "status" });
+  const status = el("p", { class: "status form-status", role: "status" });
   const offlineNote = el("p", { class: "status error", hidden: true }, "Logging needs a connection.");
 
   const sourceChips = {
     foods: el("button", { type: "button", class: "chip", onclick: () => toggleSource("foods") }, "Foods"),
     preps: el("button", { type: "button", class: "chip", onclick: () => toggleSource("preps") }, "Meal prep"),
+    meals: el("button", { type: "button", class: "chip", onclick: () => toggleSource("meals") }, "Saved meals"),
   };
-  const sourceBar = el("div", { class: "sources", role: "group", "aria-label": "Search in", hidden: true }, el("span", {}, "Search in"), sourceChips.foods, sourceChips.preps);
+  const sourceBar = el("div", { class: "sources", role: "group", "aria-label": "Search in", hidden: true }, el("span", {}, "Search in"), sourceChips.foods, sourceChips.preps, sourceChips.meals);
   const onHandList = el("ul", {});
-  const onHand = el("div", { class: "on-hand", hidden: true }, el("p", { class: "on-hand-head" }, "Meal prep on hand"), onHandList);
+  const onHandPreps = el("div", { class: "on-hand-group" }, el("p", { class: "on-hand-head" }, "Meal prep on hand"), onHandList);
+  const mealsOnHandList = el("ul", {});
+  const onHandMeals = el("div", { class: "on-hand-group" }, el("p", { class: "on-hand-head" }, "Saved meals"), mealsOnHandList);
+  const onHand = el("div", { class: "on-hand", hidden: true }, onHandPreps, onHandMeals);
 
   /** Everything after the search, shown once something is chosen. */
   const entryFields = el(
@@ -177,6 +248,7 @@ export function createLogForm(
     customFields,
     foodFields,
     prepFields,
+    mealFields,
     el("div", { class: "row" }, field("Meal", mealSelect), field("Time", time)),
     preview,
     el("div", { class: "actions" }, submit, prepButtons),
@@ -184,6 +256,8 @@ export function createLogForm(
 
   /** Changes when the search would find other preps, or show other amounts left. */
   const prepsKey = () => (searchesPreps() ? prepState.preps.map((p) => `${p.id}:${leftOf(p.portions)}:${p.name}`).join("|") : "");
+  /** Changes when the search would find other saved meals, or show other values for them. */
+  const mealsKey = () => (searchesMeals() ? mealState.meals.map((m) => `${m.id}:${m.updatedAt}:${m.name}`).join("|") : "");
   const prepBusy = () => (prep ? prepState.busy.has(prep.id) : false);
 
   const syncSubmit = () => {
@@ -251,8 +325,18 @@ export function createLogForm(
     preview.classList.toggle("error", Boolean(read && "problem" in read));
   };
 
+  const refreshMealPreview = () => {
+    const read = ingredients.read();
+    const changes = ingredients.changes();
+    adjusted.hidden = changes === 0;
+    if (meal) adjustedText.textContent = `${changes} ${changes === 1 ? "change" : "changes"} from the saved meal (${fmtEnergy(batchProfile(meal.ingredients).energyKcal)} ${energyLabel()}).`;
+    preview.textContent = read.problem ?? (read.ingredients.length ? `≈ ${summary(batchProfile(read.ingredients))}` : "Add an ingredient, or reset to the saved meal.");
+    preview.classList.toggle("error", Boolean(read.problem) || read.ingredients.length === 0);
+  };
+
   const refreshPreview = () => {
     if (prep) return refreshPrepPreview(prep);
+    if (meal) return refreshMealPreview();
     const food = currentFood();
     try {
       if (!food) throw new Error(loading ? `Loading ${loading}…` : "Search for a food, or choose “Custom food”.");
@@ -274,21 +358,41 @@ export function createLogForm(
 
   /** Shows the fields for what is chosen, or only the search and the preps on hand when nothing is. */
   const syncFields = () => {
-    const hasChoice = Boolean(prep || chosen || custom || loading);
+    const hasChoice = Boolean(prep || meal || chosen || custom || loading);
     entryFields.hidden = !hasChoice;
     customFields.hidden = !custom;
     // Disabled controls are skipped by form validation, so stale custom values can't block other foods.
     customFields.disabled = !custom;
-    foodFields.hidden = Boolean(prep);
+    foodFields.hidden = Boolean(prep || meal);
     prepFields.hidden = prepButtons.hidden = !prep;
-    submit.textContent = prep ? "Log portion" : "Log entry";
+    mealFields.hidden = !meal;
+    submit.textContent = prep ? "Log portion" : meal ? "Log meal" : "Log entry";
     renderOnHand(hasChoice);
     syncSubmit();
   };
 
-  const renderOnHand = (hasChoice = Boolean(prep || chosen || custom || loading)) => {
-    const shown = searchesPreps() && !hasChoice && !combobox.input.value.trim() ? prepState.preps : [];
-    onHand.hidden = shown.length === 0;
+  const renderOnHand = (hasChoice = Boolean(prep || meal || chosen || custom || loading)) => {
+    const empty = !hasChoice && !combobox.input.value.trim();
+    const shown = searchesPreps() && empty ? prepState.preps : [];
+    const meals = searchesMeals() && empty ? [...mealState.meals].sort(byName).slice(0, MAX_MEALS_ON_HAND) : [];
+    onHand.hidden = shown.length === 0 && meals.length === 0;
+    onHandPreps.hidden = shown.length === 0;
+    onHandMeals.hidden = meals.length === 0;
+    replaceChildren(
+      mealsOnHandList,
+      meals.map((m) =>
+        el(
+          "li",
+          {},
+          el(
+            "button",
+            { type: "button", class: "on-hand-item", onclick: () => chooseMeal(m) },
+            el("span", { class: "on-hand-name" }, m.name),
+            el("span", { class: "on-hand-detail" }, `${fmtEnergy(batchProfile(m.ingredients).energyKcal)} ${energyLabel()}`),
+          ),
+        ),
+      ),
+    );
     const now = Date.now();
     replaceChildren(
       onHandList,
@@ -338,6 +442,7 @@ export function createLogForm(
     loading = undefined;
     custom = false;
     prep = undefined;
+    meal = undefined;
     portion.value = "";
     combobox.reset();
     refreshAll();
@@ -349,12 +454,46 @@ export function createLogForm(
     chosen = undefined;
     loading = undefined;
     custom = false;
+    meal = undefined;
     prep = p;
     portion.value = "";
     combobox.showChoice(p.name);
     refreshAll();
     portion.focus();
   }
+
+  function chooseMeal(m: SavedMeal) {
+    clearStatus();
+    choice++;
+    chosen = undefined;
+    loading = undefined;
+    custom = false;
+    prep = undefined;
+    portion.value = "";
+    meal = m;
+    combobox.showChoice(m.name);
+    resetMeal();
+    refreshAll();
+    ingredients.element.querySelector("input")?.focus();
+  }
+
+  const mealRows = (query: string): ComboExtra[] => {
+    if (!searchesMeals()) return [];
+    const q = query.trim().toLowerCase();
+    return mealState.meals
+      .filter((m) => m.name.toLowerCase().includes(q))
+      .slice(0, MAX_MEAL_HITS)
+      .map((m) => {
+        const count = m.ingredients.length;
+        return {
+          name: m.name,
+          detail: `${fmtEnergy(batchProfile(m.ingredients).energyKcal)} ${energyLabel()}`,
+          tag: "Saved meal",
+          sub: `${count} ${count === 1 ? "ingredient" : "ingredients"}`,
+          choose: () => chooseMeal(m),
+        };
+      });
+  };
 
   const prepRows = (query: string): ComboExtra[] => {
     if (!searchesPreps()) return [];
@@ -368,7 +507,7 @@ export function createLogForm(
 
   const combobox = createFoodCombobox(catalog, {
     id: "food",
-    extras: prepRows,
+    extras: (query) => [...mealRows(query), ...prepRows(query)],
     searchFoods: searchesFoods,
     onChoose: (hit) => {
       clearStatus();
@@ -376,6 +515,7 @@ export function createLogForm(
       chosen = undefined;
       custom = false;
       prep = undefined;
+      meal = undefined;
       loading = hit.summary.name;
       amount.clear();
       refreshAll();
@@ -403,6 +543,7 @@ export function createLogForm(
       chosen = undefined;
       loading = undefined;
       prep = undefined;
+      meal = undefined;
       custom = true;
       if (query && !cName.value.trim()) cName.value = query;
       amount.clear();
@@ -416,6 +557,7 @@ export function createLogForm(
       loading = undefined;
       custom = false;
       prep = undefined;
+      meal = undefined;
       refreshAll();
     },
   });
@@ -426,14 +568,18 @@ export function createLogForm(
   });
 
   const syncSources = () => {
-    sourceBar.hidden = !prepState.available;
-    for (const key of ["foods", "preps"] as const) {
+    const offered = { foods: true, preps: prepState.available, meals: mealState.available };
+    sourceBar.hidden = !offered.preps && !offered.meals;
+    const on = (key: keyof Sources) => offered[key] && (key === "foods" ? searchesFoods() : key === "preps" ? searchesPreps() : searchesMeals());
+    for (const key of ["foods", "preps", "meals"] as const) {
       const chip = sourceChips[key];
-      chip.setAttribute("aria-pressed", String(sources[key]));
+      chip.hidden = !offered[key];
+      chip.setAttribute("aria-pressed", String(on(key)));
       // One source always stays on, or there would be nothing to search.
-      chip.disabled = sources[key] && !sources[key === "foods" ? "preps" : "foods"];
+      chip.disabled = on(key) && (["foods", "preps", "meals"] as const).filter(on).length === 1;
     }
-    combobox.input.placeholder = !searchesPreps() ? "Search foods, e.g. weet bix" : searchesFoods() ? "Search foods and meal preps" : "Search meal preps";
+    const names = [searchesFoods() && "foods", searchesPreps() && "meal preps", searchesMeals() && "saved meals"].filter((n): n is string => Boolean(n));
+    combobox.input.placeholder = names.length === 1 && names[0] === "foods" ? "Search foods, e.g. weet bix" : `Search ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0]}`;
   };
 
   function toggleSource(key: keyof Sources) {
@@ -497,6 +643,32 @@ export function createLogForm(
     }
   }
 
+  async function submitMeal() {
+    const m = meal;
+    if (!m || !logMeal || saving || offline) return;
+    const when = chosenTime();
+    const read = ingredients.read();
+    const invalid = read.problem ?? (read.ingredients.length === 0 ? "Add an ingredient, or reset to the saved meal." : Number.isNaN(when.getTime()) ? "Enter a valid time." : undefined);
+    if (invalid) return say(invalid, true);
+    saving = true;
+    syncSubmit();
+    say("Saving to Google Health…", false);
+    try {
+      await logMeal(m, read.ingredients, (mealSelect.value || undefined) as MealType | undefined, when);
+      say(`Logged ${m.name}.`, false);
+      // The next one starts from the meal as saved.
+      if (meal === m) resetMeal();
+      timeTouched = false;
+      time.value = toDateTimeLocalValue(defaultTime());
+      mealSelect.value = "";
+    } catch (e) {
+      say(errorMessage(e), true);
+    } finally {
+      saving = false;
+      syncSubmit();
+    }
+  }
+
   const form = el(
     "form",
     // Every field is checked below: the browser's own check would stop Enter before the form can say why.
@@ -512,6 +684,7 @@ export function createLogForm(
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (prep) return eatPrep(false);
+    if (meal) return submitMeal();
     // Enter leaves the focus in the field, so the typed unit has not moved yet.
     amount.settle();
     const food = currentFood();
@@ -554,7 +727,10 @@ export function createLogForm(
       offline = value;
       syncSubmit();
     },
-    refreshPreview,
+    refreshPreview: () => {
+      ingredients.refresh();
+      refreshPreview();
+    },
     refreshTime: () => {
       if (!timeTouched) time.value = toDateTimeLocalValue(defaultTime());
     },
@@ -582,6 +758,31 @@ export function createLogForm(
       }
     },
     choosePrep,
+    setMeals: (next) => {
+      const before = mealsKey();
+      mealState = next;
+      if (meal) {
+        const current = next.available ? next.meals.find((m) => m.id === meal!.id) : undefined;
+        if (!current) {
+          // Deleted, maybe on another device.
+          const name = meal.name;
+          const hadMessage = Boolean(status.textContent);
+          clearChoice();
+          if (!hadMessage) say(`${name} is no longer a saved meal.`, false);
+        } else if (current.updatedAt !== meal.updatedAt) {
+          // Edited elsewhere: start from the new version, unless this entry has changes of its own.
+          meal = current;
+          if (ingredients.changes() === 0) resetMeal();
+          else refreshPreview();
+        }
+      }
+      syncSources();
+      if (mealsKey() !== before) {
+        renderOnHand();
+        combobox.refresh();
+      }
+    },
+    chooseMeal,
   };
 }
 

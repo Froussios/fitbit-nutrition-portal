@@ -44,6 +44,25 @@ describe("PrepApi", () => {
     await expect(notFound.setDiscarded("abcd1234", true)).rejects.toBeInstanceOf(PrepApiError);
   });
 
+  it("lists saved meals, and tells an API that predates them", async () => {
+    const meals = [{ id: "bowl0001", name: "Bowl", ingredients: [], createdAt: 1, updatedAt: 1 }];
+    const api = (answer: Response) => new PrepApi(BASE, () => "t", (async (_u: URL, init?: RequestInit) => ((init?.headers as Record<string, string> | undefined)?.["Authorization"] ? answer.clone() : json({ error: "Sign in first." }, 401))) as typeof fetch);
+    await expect(api(json({ meals })).listMeals()).resolves.toEqual(meals);
+    await expect(api(json({ error: "No such endpoint." }, 404)).listMeals()).resolves.toBeUndefined();
+    await expect(api(json({ error: "Something went wrong." }, 500)).listMeals()).rejects.toBeInstanceOf(PrepApiError);
+  });
+
+  it("sends a saved meal, and deletes one", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    const api = new PrepApi(BASE, () => "t", fetchMock as unknown as typeof fetch);
+    const ingredient = { ref: { source: "afcd" as const, id: "f1" }, label: "Rice", quantity: 150, unit: "g", profile: { energyKcal: 167, nutrients: {} } };
+    await api.saveMeal("bowl0001", "Bowl", [ingredient]);
+    await api.deleteMeal("bowl0001");
+    const [[putUrl, put], [delUrl, del]] = fetchMock.mock.calls as unknown as [[URL, RequestInit], [URL, RequestInit]];
+    expect([putUrl!.href, put!.method, JSON.parse(String(put!.body))]).toEqual([`${BASE}meals/bowl0001`, "PUT", { name: "Bowl", ingredients: [ingredient] }]);
+    expect([delUrl!.href, del!.method]).toEqual([`${BASE}meals/bowl0001`, "DELETE"]);
+  });
+
   it("marks a request that got no answer", async () => {
     const api = new PrepApi(BASE, () => "t", (async () => Promise.reject(new TypeError("Failed to fetch"))) as typeof fetch);
     const e = (await api.list().catch((x: unknown) => x)) as PrepApiError;
