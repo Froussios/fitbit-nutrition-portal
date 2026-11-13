@@ -232,8 +232,9 @@ tokens in `sessionStorage`. The access token is only ever sent to Google, and th
 
 When they expire the user clicks **Continue**. The app passes the account's `sub` as `login_hint`, kept in `localStorage`
 until the user signs out, so that Google should not ask which account to use. Consent is remembered. After sign-in the app
-calls `users.getIdentity` to detect `ACCOUNT_NOT_LINKED`. Signing out revokes the access token, as best it can, because
-Google documents no CORS support for revoking.
+calls `users.getIdentity` to detect `ACCOUNT_NOT_LINKED`. The diary loads without waiting for the answer, because each
+request to the Health API takes a second or more, and a new URL costs a CORS preflight that takes as long again. Signing
+out revokes the access token, as best it can, because Google documents no CORS support for revoking.
 
 ### 5.2 Long-lived sessions: deferred to milestone 3
 
