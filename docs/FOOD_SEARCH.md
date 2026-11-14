@@ -116,8 +116,7 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
   tooltip names them all. Generic foods show their database's country (AFCD 🇦🇺, FNDDS 🇺🇸). No flag when Open Food
   Facts lists no country, which doesn't mean the product isn't sold here (section 5). Flags are emoji, which Windows
   draws as two letters (`AU`). Right: energy per serving when the product has a serving size, e.g. `107 kcal / 2 biscuits (30 g)`.
-  A serving that is only a weight or volume, such as `30 g`, is not shown, since it repeats the per-100 figure in another
-  size (DR-28).
+  A serving that Open Food Facts writes as only a weight or volume shows as one: `4 kcal / serving (354.9mL)` (DR-31).
 * A row is built from a `FoodSummary` view model computed from the `FoodItem` by a pure function in
   `src/core/`. The index builder runs the same function, so search results arrive as summaries and the full
   food is fetched only when chosen. Later visuals (a thumbnail, a macro bar, Nutri-Score) are new fields on that model and new

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { nutrientsForAmount } from "../src/core/food";
 import { fromOffProduct, offBasis, OffNormalizationError } from "../src/core/off";
-import { PORTION_PREFIX } from "../src/core/units";
+import { usefulPortions } from "../src/core/portions";
+import { formatMeasurementLabel, PORTION_PREFIX } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
 
 describe("fromOffProduct", () => {
@@ -19,7 +20,46 @@ describe("fromOffProduct", () => {
     expect(f.brand).toBe("Brand A");
     expect(f.basis).toBe("g");
     expect(f.per100).toEqual({ energyKcal: 400, nutrients: { protein: 10, fat: 7, sodium: 0.02 } });
-    expect(f.portions).toEqual([{ name: "45 g", amount: 45, unit: "g" }]);
+    expect(f.portions).toEqual([{ name: "serving (45 g)", amount: 45, unit: "g" }]);
+  });
+
+  it("names the serving as one, with its size (DR-31)", () => {
+    const base = { code: "4", nutriments: { "energy-kcal_100g": 100 } };
+    const portions = (p: object) => fromOffProduct({ ...base, ...p }).portions;
+    // A serving text that names what it is stays as written.
+    expect(portions({ serving_size: "1 cup (40 g)", serving_quantity: 40, serving_quantity_unit: "g" })).toEqual([{ name: "1 cup (40 g)", amount: 40, unit: "g" }]);
+    // No text: the size comes from the quantity.
+    expect(portions({ serving_quantity: 200, serving_quantity_unit: "g" })).toEqual([{ name: "serving (200 g)", amount: 200, unit: "g" }]);
+    // Bigger than one serving: the pack stays.
+    expect(portions({ serving_size: "30 g", serving_quantity: 30, serving_quantity_unit: "g", quantity: "500 g", product_quantity: 500, product_quantity_unit: "g" }))
+      .toEqual([{ name: "serving (30 g)", amount: 30, unit: "g" }, { name: "pack (500 g)", amount: 500, unit: "g" }]);
+    // The size from the quantity is rounded: 300 mg is 0.30000000000000004 g.
+    expect(portions({ serving_quantity: 300, serving_quantity_unit: "mg" })[0]!.name).toBe("serving (0.3 g)");
+  });
+
+  it("drops a pack within 3% of the serving, and keeps one of another size or unit (DR-31)", () => {
+    const base = { code: "5", nutriments: { "energy-kcal_100g": 40 }, serving_size: "330 ml", serving_quantity: 330, serving_quantity_unit: "ml" };
+    const names = (p: object) => fromOffProduct({ ...base, ...p }).portions.map((x) => x.name);
+    expect(names({ quantity: "335 ml", product_quantity: 335, product_quantity_unit: "ml" })).toEqual(["serving (330 ml)"]);
+    expect(names({ quantity: "345 ml", product_quantity: 345, product_quantity_unit: "ml" })).toEqual(["serving (330 ml)", "pack (345 ml)"]);
+    expect(names({ quantity: "330 g", product_quantity: 330, product_quantity_unit: "g" })).toEqual(["serving (330 ml)", "pack (330 g)"]);
+  });
+
+  it("offers a single-serve product's serving, not a pack of the same size (DR-31)", () => {
+    // Starbucks, Iced Caffe Americano, Tall, as Open Food Facts has it.
+    const f = fromOffProduct({
+      code: "41354097745169390062",
+      quantity: "12 fl oz",
+      product_quantity: 354.882,
+      product_quantity_unit: "ml",
+      serving_size: "354.88199999999995mL",
+      serving_quantity: 354.882,
+      serving_quantity_unit: "ml",
+      nutriments: { "energy-kcal_100g": 1.13 },
+    });
+    expect(f.portions).toEqual([{ name: "serving (354.88199999999995mL)", amount: 354.882, unit: "ml" }]);
+    expect(usefulPortions(f.portions)).toEqual(f.portions);
+    expect(formatMeasurementLabel(f.portions[0]!.name)).toBe("serving (354.9mL)");
   });
 
   it("treats legacy _100g values of a liquid product as per 100 ml", () => {

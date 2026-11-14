@@ -19,7 +19,7 @@ const OTHER_MEASURES: Readonly<Record<string, { readonly dimension: Dimension; r
 };
 
 /** Sizes in a name are rounded: "1 oz" is often 28 g. */
-const TOLERANCE = 0.03;
+export const SIZE_TOLERANCE = 0.03;
 
 /** What a few words such as "100 g", "1 1/2 cups", "12,5 g" or "12 fl oz" measure, in grams or millilitres. */
 function measureOf(text: string): { dimension: Dimension; amount: number } | undefined {
@@ -43,7 +43,7 @@ export function isRescaledUnit(portion: Portion): boolean {
   const brackets = m[2]?.split(/\s*(?:\bor\b|=|;|,(?!\d))\s*/).filter(Boolean) ?? [];
   if (!brackets.every((part) => measureOf(part))) return false;
   const measure = measureOf(m[1]!);
-  return measure !== undefined && measure.dimension === dimensionOf(portion.unit) && Math.abs(measure.amount / portion.amount - 1) <= TOLERANCE;
+  return measure !== undefined && measure.dimension === dimensionOf(portion.unit) && Math.abs(measure.amount / portion.amount - 1) <= SIZE_TOLERANCE;
 }
 
 /** The portions worth offering, in the source's order. */
