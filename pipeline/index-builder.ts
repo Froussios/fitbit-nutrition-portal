@@ -137,7 +137,7 @@ export class IndexBuilder {
     } catch {
       return this.drop("noEnergy");
     }
-    // A serving that is only a weight, such as "100 g", is neither offered nor shown in the search row (DR-28).
+    // Drops source portions that are only a weight, such as "100 g" (DR-28); an Open Food Facts serving is already named as one (DR-31).
     food = { ...food, portions: usefulPortions(food.portions) };
     const countries = offCountries(raw.countries_tags);
     if (countries.length) food = { ...food, countries };

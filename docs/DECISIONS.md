@@ -306,8 +306,8 @@ of flour at 125 g, `1 tablespoon` at 15 ml, `1 fl oz` of milk at 30.5 g, `1 oz, 
 100 g), and it saves nothing over the `g` unit beside it.
 **Consequence.** Applied by the builders, for every source with portions: the food index (Open Food Facts) and the generic
 foods file (FNDDS; AFCD has none). Data built earlier keeps them until it is rebuilt. In the generic foods file, plain
-weights no longer use up the six portions kept per food. A serving written as a bare weight, such as `30 g`, is no longer
-offered or shown in the search row; Open Food Facts per-serving values are still read with it.
+weights no longer use up the six portions kept per food. An Open Food Facts serving written as a bare weight, such as
+`30 g`, is offered as `serving (30 g)` instead of being dropped (DR-31).
 **Reopen if.** A source names real servings as bare weights often enough to be missed.
 
 ### DR-29 A saved meal is a recipe in the database, logged as one entry under its name
@@ -339,3 +339,17 @@ search only when the user would otherwise see no results.
 prefix's (its 16 commonest), so a short, common word can miss rare longer words. Highlighting marks the words a
 loose search matched.
 **Reopen if.** Loose results are often wrong, or exact searches that find only poor matches would be better loose.
+
+### DR-31 An Open Food Facts serving is offered as the serving, with its size
+**Decision.** A product's serving portion says both that it is the serving and how big it is. A serving text that names
+what it is (`1 cup (40 g)`, `2 biscuits (30 g)`) is kept as written. One that is only its size (`30 g`,
+`354.88199999999995mL`) becomes `serving (30 g)`, and with no text it is `serving (200 g)` from the quantity. When the pack is
+the size of the serving, within 3%, only the serving is offered.
+**Why.** Owner decision (14 November 2026). A Starbucks Tall Iced Americano offered only `× pack (12 fl oz)`: DR-28 dropped
+its serving, written as a bare volume, and kept the pack, though a café drink has no pack. Open Food Facts' serving
+field is a serving whatever its wording, so naming it as one keeps it without the risk DR-28 guards against. A pack
+the size of the serving would offer the same amount twice under two names.
+**Consequence.** Many more products offer a serving, and their search rows show energy per serving again. A product whose
+serving is a placeholder `100 g` offers `serving (100 g)`. Multi-serve products still offer `pack (…)`. Indexes built
+earlier keep the old portions until rebuilt.
+**Reopen if.** Placeholder servings are common enough to mislead, or `pack` reads wrongly on products that have one.

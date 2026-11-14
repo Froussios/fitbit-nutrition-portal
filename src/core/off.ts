@@ -1,5 +1,6 @@
 import type { FoodItem } from "./food";
 import { kjToKcal, NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "./nutrients";
+import { isRescaledUnit, SIZE_TOLERANCE } from "./portions";
 import type { BaseUnit, Portion } from "./units";
 
 /**
@@ -98,14 +99,18 @@ export function fromOffProduct(p: OffProduct): FoodItem {
   const per100: NutrientProfile = { energyKcal: kcal, nutrients };
 
   const portions: Portion[] = [];
+  let serving: Portion | undefined;
   if (servingBase && baseUnitOf(p.serving_quantity_unit ?? basis)) {
     const unit = baseUnitOf(p.serving_quantity_unit) ?? basis;
-    portions.push({ name: p.serving_size?.trim() || "serving", amount: servingBase, unit });
+    serving = { name: servingName(p.serving_size?.trim(), servingBase, unit), amount: servingBase, unit };
+    portions.push(serving);
   }
   const packQty = num(p.product_quantity);
   const packUnit = baseUnitOf(p.product_quantity_unit);
   if (packQty && packUnit) {
-    portions.push({ name: p.quantity ? `pack (${p.quantity.trim()})` : "pack", amount: toBase(packQty, p.product_quantity_unit), unit: packUnit });
+    const pack = { name: p.quantity ? `pack (${p.quantity.trim()})` : "pack", amount: toBase(packQty, p.product_quantity_unit), unit: packUnit };
+    // A single-serve product: the pack would repeat the serving under another name (DR-31).
+    if (!(serving && sameSize(serving, pack))) portions.push(pack);
   }
 
   const item: FoodItem = {
@@ -118,6 +123,20 @@ export function fromOffProduct(p: OffProduct): FoodItem {
   const brand = p.brands?.split(",")[0]?.trim();
   const packSize = p.quantity?.trim();
   return { ...item, ...(brand ? { brand } : {}), ...(packSize ? { packSize } : {}) };
+}
+
+/**
+ * The serving's portion name, saying both that it is the serving and how big it is (DR-31). A serving text that names
+ * what it is, such as "1 cup (40 g)", is kept as written. One that is only its size, such as "30 g", becomes
+ * "serving (30 g)", and with no text at all the size comes from the quantity: "serving (200 g)".
+ */
+function servingName(text: string | undefined, amount: number, unit: BaseUnit): string {
+  if (!text) return `serving (${amount} ${unit})`;
+  return isRescaledUnit({ name: text, amount, unit }) ? `serving (${text})` : text;
+}
+
+function sameSize(a: Portion, b: Portion): boolean {
+  return a.unit === b.unit && Math.abs(a.amount / b.amount - 1) <= SIZE_TOLERANCE;
 }
 
 function mapDefined<T, R>(v: T | undefined, f: (v: T) => R): R | undefined {
