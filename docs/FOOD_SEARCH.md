@@ -160,7 +160,7 @@ Product names, brands and queries go through the same tokeniser, shared by the i
   foods and products, it runs again with every word allowed to match as a prefix, and as its variants without a
   plural or past-tense ending (`looseForms` in `src/core/tokens.ts`: `iced` → `ice`, `biscuits` → `biscuit`,
   `tomatoes` → `tomato`, `berries` → `berry`). So `tall ice americano` finds `Tall Iced Americano` and `bake beans`
-  finds `Baked Beans`. Every word must still match. Loose results rank as tier 1 (section 4.3), and a word they
+  finds `Baked Beans`. Every word must still match. Loose results rank as tier 1 (section 4.3) unless every word is whole, and a word they
   matched does not count as an extra word. In the index, each word is the union of its 16 commonest longer words
   and its variants (`looseSearch` in `src/food/index-engine.ts`), so a short, common word can miss rarer ones.
 

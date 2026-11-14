@@ -220,6 +220,10 @@ describe("CombinedCatalog", () => {
     asked.length = 0;
     expect(await found("latte")).toEqual([]);
     expect(asked).toEqual([undefined]);
+    // A barcode is a single word of digits, which has no variants.
+    asked.length = 0;
+    expect(await found("9300000000006")).toEqual([]);
+    expect(asked).toEqual([undefined]);
   });
 
   it("returns the full food from the right source", async () => {

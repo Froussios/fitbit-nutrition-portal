@@ -391,7 +391,8 @@ export class FoodIndex {
     if (terms.length === 0) return [];
     const entries = await Promise.all(
       terms.map(async (word) => {
-        const [longer, forms] = await Promise.all([this.expansions(word, MAX_EXPANSIONS), Promise.all(looseForms(word).map((f) => this.lookup(f)))]);
+        // The word itself is looked up too: the capped expansions leave it out when 16 longer words are commoner.
+        const [longer, forms] = await Promise.all([this.expansions(word, MAX_EXPANSIONS), Promise.all([word, ...looseForms(word)].map((f) => this.lookup(f)))]);
         const all = new Map<string, DictEntry>();
         for (const e of [...longer, ...forms]) if (e) all.set(e[0], e);
         return [...all.values()];

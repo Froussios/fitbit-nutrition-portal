@@ -335,7 +335,7 @@ match, and there is still no typo tolerance ([FOOD_SEARCH.md](FOOD_SEARCH.md#42-
 `tall ice americano` found nothing because only the last word could be a prefix, so `ice` had to be a whole word.
 Running only after an empty search leaves every search that finds something exactly as before, and costs one more
 search only when the user would otherwise see no results.
-**Consequence.** Loose results rank as partial matches (rule 1, tier 1). A word's longer forms are capped like a
+**Consequence.** Loose results rank as partial matches (rule 1, tier 1) unless every word is whole after all. A word's longer forms are capped like a
 prefix's (its 16 commonest), so a short, common word can miss rare longer words. Highlighting marks the words a
 loose search matched.
 **Reopen if.** Loose results are often wrong, or exact searches that find only poor matches would be better loose.

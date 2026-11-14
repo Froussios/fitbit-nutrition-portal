@@ -421,6 +421,15 @@ describe("food index", () => {
     expect(await loose("grande ice americano")).toEqual([]);
   });
 
+  it("keeps a loose word itself when longer words starting with it are commoner", async () => {
+    // 20 commoner words starting with "tea", each in more products than "tea" itself.
+    const longer = Array.from({ length: 20 }, (_, i) => `tea${"abcdefghijklmnopqrst"[i]}x`);
+    const records = longer.flatMap((w, i) => [product(`61${i}0`, `${w} one`, { brands: "B" }), product(`61${i}1`, `${w} two`, { brands: "B" })]);
+    const index = await FoodIndex.open(build([...records, product("6999", "Tea Mug", { brands: "Cups" })]).reader);
+    const hits = await index.summaries(await index.search(parseQuery("tea mugs", true)));
+    expect(hits.map((r) => r[1])).toEqual(["Tea Mug"]);
+  });
+
   it("answers no-match prefixes without errors", async () => {
     const index = await FoodIndex.open(build(FIXTURE).reader);
     expect(await names(index, "zz")).toEqual([]);
