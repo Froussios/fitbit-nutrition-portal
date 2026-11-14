@@ -230,7 +230,8 @@ logged as one entry under its name. It has nothing left to track: each log is on
 meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (user_id, id); ingredients is JSON; migrations/0002_saved_meals.sql
 ```
 
-* **Screens.** The **Saved meals** tab (`src/ui/meal-card.ts`) lists the meals by name with their energy, and has Log,
+* **Screens.** The **Saved meals** tab (`src/ui/meal-card.ts`) lists the meals by name with their energy. Each one's
+  ingredients and amounts open under it ("3 ingredients"). It has Log,
   Edit, Delete (with an undo until reload, which saves the meal again) and New meal, which open the builder of
   section 4.5. In **Log food** the search finds saved meals, and up to 8 are offered under the empty search. A chosen
   meal shows its ingredients: an amount can be changed in the unit it was added in, an ingredient left out or put
