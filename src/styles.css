@@ -387,6 +387,11 @@ button.on-hand-item { display: flex; align-items: baseline; gap: 8px; padding: 4
 .meal-line .actions button { padding: 4px 10px; font-size: 0.9rem; }
 .meal.deleted { color: var(--muted); }
 .meal .status { margin-top: 4px; }
+.meal-ingredients { margin: 4px 0 0; }
+.meal-ingredients summary { margin-bottom: 0; font-size: 0.85rem; }
+.meal-ingredients ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; max-width: 32rem; }
+.meal-ingredients li { display: flex; justify-content: space-between; gap: 12px; }
+.meal-amount { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
 .meal-card > .status:empty { display: none; }
 
 /* The diary's day, between the arrows that step to the day before and after (#19). */

@@ -1,5 +1,6 @@
 import { byName, type SavedMeal } from "../core/meal";
-import { batchProfile } from "../core/prep";
+import { batchProfile, type PrepIngredient } from "../core/prep";
+import { describeAmount } from "../core/units";
 import { el, replaceChildren } from "./dom";
 import { energyLabel, fmtEnergy } from "./format";
 
@@ -28,8 +29,9 @@ export interface MealCardActions {
 }
 
 /**
- * The Saved meals tab: each meal on one line, with its energy. Log opens the log form with the meal chosen, where its
- * ingredients can be changed for that one entry. Here a meal is made, edited and deleted.
+ * The Saved meals tab: each meal on one line, with its energy, and its ingredients and amounts a click away. Log opens
+ * the log form with the meal chosen, where its ingredients can be changed for that one entry. Here a meal is made,
+ * edited and deleted.
  */
 export function createMealCard(actions: MealCardActions, builder: HTMLElement) {
   const list = el("div", { class: "meal-list" });
@@ -44,7 +46,9 @@ export function createMealCard(actions: MealCardActions, builder: HTMLElement) {
     list,
   );
 
-  function mealRow(meal: SavedMeal, s: MealCardState, deleted: boolean): HTMLElement {
+  const ingredientRow = (i: PrepIngredient) => el("li", {}, el("span", {}, i.label), el("span", { class: "meal-amount" }, describeAmount(i.quantity, i.unit)));
+
+  function mealRow(meal: SavedMeal, s: MealCardState, deleted: boolean, openLists: ReadonlySet<string | undefined>): HTMLElement {
     const busy = s.busy.has(meal.id);
     const off = busy || s.offline;
     const message = s.messages.get(meal.id);
@@ -62,11 +66,19 @@ export function createMealCard(actions: MealCardActions, builder: HTMLElement) {
       el(
         "div",
         { class: "meal-line" },
-        el("div", { class: "prep-name" }, el("strong", {}, meal.name), el("span", { class: "prep-age" }, deleted ? "deleted" : `${count} ${count === 1 ? "ingredient" : "ingredients"}`)),
+        el("div", { class: "prep-name" }, el("strong", {}, meal.name), deleted && el("span", { class: "prep-age" }, "deleted")),
         el("span", { class: "meal-energy" }, deleted ? "" : `${fmtEnergy(batchProfile(meal.ingredients).energyKcal)} ${energyLabel()}`),
         el("div", { class: "actions" }, ...buttons),
       ),
       message && el("p", { class: message.error ? "status error" : "status", role: message.error ? "alert" : "status" }, message.text),
+      !deleted &&
+        count > 0 &&
+        el(
+          "details",
+          { class: "meal-ingredients", open: openLists.has(meal.id) },
+          el("summary", {}, `${count} ${count === 1 ? "ingredient" : "ingredients"}`),
+          el("ul", {}, ...meal.ingredients.map(ingredientRow)),
+        ),
     );
   }
 
@@ -75,9 +87,11 @@ export function createMealCard(actions: MealCardActions, builder: HTMLElement) {
     status.textContent = next.loading ? "Loading…" : next.error;
     status.classList.toggle("error", !next.loading && Boolean(next.error));
     list.hidden = next.building;
+    // Keep the open ingredient lists open across redraws.
+    const openLists = new Set([...list.querySelectorAll<HTMLElement>("[data-meal]")].filter((a) => a.querySelector("details")?.open).map((a) => a.dataset["meal"]));
     const live = new Set(next.meals.map((m) => m.id));
     const rows = [...next.meals.map((m) => ({ meal: m, deleted: false })), ...next.deleted.filter((m) => !live.has(m.id)).map((m) => ({ meal: m, deleted: true }))].sort((a, b) => byName(a.meal, b.meal));
-    replaceChildren(list, rows.length === 0 && !next.loading ? el("p", { class: "empty" }, "No saved meals yet. Make one with New meal.") : rows.map((r) => mealRow(r.meal, next, r.deleted)));
+    replaceChildren(list, rows.length === 0 && !next.loading ? el("p", { class: "empty" }, "No saved meals yet. Make one with New meal.") : rows.map((r) => mealRow(r.meal, next, r.deleted, openLists)));
   }
 
   return { element, update };
