@@ -296,7 +296,7 @@ such as a breakfast logged at 9 pm.
 **Consequence.** Entries still have a time in Google Health, which the log form sets.
 **Reopen if.** The owner wants the time back, for example to see when snacks were eaten.
 
-### DR-28 A portion that is only a weight or volume is not offered
+### DR-28 A portion that is only a weight or volume is not offered (revised by DR-31)
 **Decision.** A portion is dropped when its name is just a weight or volume, perhaps with equivalents in brackets or a
 description after a comma (`100 g`, `1 oz, cooked`, `12 fl oz (355 ml)`), and its size is what that measure says, within 3%.
 Portions named as a serving (`1 pie (150 g)`, `1 serving (300 ml)`) stay, and so do measures whose size differs: `1 cup`

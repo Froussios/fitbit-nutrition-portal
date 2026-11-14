@@ -131,7 +131,8 @@ export function fromOffProduct(p: OffProduct): FoodItem {
  * "serving (30 g)", and with no text at all the size comes from the quantity: "serving (200 g)".
  */
 function servingName(text: string | undefined, amount: number, unit: BaseUnit): string {
-  if (!text) return `serving (${amount} ${unit})`;
+  // Rounded, so a converted amount does not become a key such as "serving (0.30000000000000004 g)".
+  if (!text) return `serving (${Math.round(amount * 10) / 10} ${unit})`;
   return isRescaledUnit({ name: text, amount, unit }) ? `serving (${text})` : text;
 }
 

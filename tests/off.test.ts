@@ -33,6 +33,16 @@ describe("fromOffProduct", () => {
     // Bigger than one serving: the pack stays.
     expect(portions({ serving_size: "30 g", serving_quantity: 30, serving_quantity_unit: "g", quantity: "500 g", product_quantity: 500, product_quantity_unit: "g" }))
       .toEqual([{ name: "serving (30 g)", amount: 30, unit: "g" }, { name: "pack (500 g)", amount: 500, unit: "g" }]);
+    // The size from the quantity is rounded: 300 mg is 0.30000000000000004 g.
+    expect(portions({ serving_quantity: 300, serving_quantity_unit: "mg" })[0]!.name).toBe("serving (0.3 g)");
+  });
+
+  it("drops a pack within 3% of the serving, and keeps one of another size or unit (DR-31)", () => {
+    const base = { code: "5", nutriments: { "energy-kcal_100g": 40 }, serving_size: "330 ml", serving_quantity: 330, serving_quantity_unit: "ml" };
+    const names = (p: object) => fromOffProduct({ ...base, ...p }).portions.map((x) => x.name);
+    expect(names({ quantity: "335 ml", product_quantity: 335, product_quantity_unit: "ml" })).toEqual(["serving (330 ml)"]);
+    expect(names({ quantity: "345 ml", product_quantity: 345, product_quantity_unit: "ml" })).toEqual(["serving (330 ml)", "pack (345 ml)"]);
+    expect(names({ quantity: "330 g", product_quantity: 330, product_quantity_unit: "g" })).toEqual(["serving (330 ml)", "pack (330 g)"]);
   });
 
   it("offers a single-serve product's serving, not a pack of the same size (DR-31)", () => {
