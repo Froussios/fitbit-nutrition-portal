@@ -1,6 +1,6 @@
 import type { FoodItem, FoodRef } from "../core/food";
 import { summarise, type FoodSummary } from "../core/food-summary";
-import { compareMatch, compareRank, highlightRuns, isEmptyQuery, matchRank, nameWordCount, parseQuery, productMatches, productWordCount, sameNameKey, type ParsedQuery, type TextRun } from "../core/tokens";
+import { compareMatch, compareRank, highlightRuns, isEmptyQuery, looseForms, matchRank, nameWordCount, parseQuery, productMatches, productWordCount, sameNameKey, type ParsedQuery, type TextRun } from "../core/tokens";
 
 /** One row of search results: what the dropdown shows, with matched words marked. */
 export interface FoodSearchHit {
@@ -13,6 +13,8 @@ export interface SearchOptions {
   /** Defaults to 10. */
   readonly limit?: number;
   readonly signal?: AbortSignal;
+  /** Search loosely (DR-30, ParsedQuery.loose). searchWithFallback() sets it when an exact search finds nothing. */
+  readonly loose?: boolean;
 }
 
 /**
@@ -24,7 +26,8 @@ export interface SearchOptions {
  * (StaticFoodCatalog, docs/FOOD_SEARCH.md).
  *
  * Matching (DR-13): every query word must be in the name or brand, in any
- * order, the last word may be a prefix, no typo tolerance. Ordering (DR-15):
+ * order, the last word may be a prefix, no typo tolerance; with `loose`, every
+ * word may be a prefix or a variant without an ending (DR-30). Ordering (DR-15):
  * see matchRank(). Whole-word matches in the name come first, products the query
  * uses up entirely first among them, then products where a query word is the food
  * and not its flavour, then branded before no brand listed, then the fewest name words
@@ -42,6 +45,24 @@ export interface FoodCatalog {
 }
 
 export const DEFAULT_LIMIT = 10;
+
+/** Whether a loose search could find anything an exact one does not. */
+function loosens(query: string): boolean {
+  const q = parseQuery(query);
+  return q.words.length > 0 || (q.prefix !== undefined && looseForms(q.prefix).length > 0);
+}
+
+/**
+ * Searches for exact words, and only when that finds nothing at all, searches again with every
+ * word allowed to be a prefix or a variant without an ending (DR-30): "tall ice americano" finds
+ * "Tall Iced Americano", "bake beans" finds "Baked Beans".
+ */
+export async function searchWithFallback(catalog: FoodCatalog, query: string, options: SearchOptions = {}): Promise<FoodSearchHit[]> {
+  const hits = await catalog.search(query, options);
+  if (hits.length > 0 || options.loose || !loosens(query)) return hits;
+  options.signal?.throwIfAborted();
+  return catalog.search(query, { ...options, loose: true });
+}
 
 export function toHit(summary: FoodSummary, q: ParsedQuery): FoodSearchHit {
   return {
@@ -71,7 +92,7 @@ export class LocalFoodCatalog implements FoodCatalog {
   }
 
   async search(query: string, options: SearchOptions = {}): Promise<FoodSearchHit[]> {
-    const q = parseQuery(query);
+    const q = parseQuery(query, options.loose);
     if (isEmptyQuery(q)) return [];
     return this.ranked
       .filter((f) => productMatches(q, f.name, f.brand))

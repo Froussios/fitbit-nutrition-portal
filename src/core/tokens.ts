@@ -4,7 +4,9 @@
  *
  * Matching is on exact words (DR-13): no typo tolerance, every query word must
  * appear in the product's name or brand, in any order, and the last query word
- * may be a prefix while the user is still typing. Ordering follows DR-15.
+ * may be a prefix while the user is still typing. Only when that finds nothing,
+ * a loose search lets every word match as a prefix or a variant (DR-30,
+ * looseForms). Ordering follows DR-15.
  */
 
 /** Words too common to search on. Mostly English, plus the most frequent ones in Open Food Facts' other big languages. */
@@ -105,6 +107,11 @@ export interface ParsedQuery {
   readonly words: readonly string[];
   /** The last word while it is still being typed; matches any word that starts with it. */
   readonly prefix?: string;
+  /**
+   * The fallback when nothing matches exactly (DR-30): every word, not just the last, also matches
+   * any word that starts with it, and its variants without an ending (looseForms).
+   */
+  readonly loose?: boolean;
 }
 
 /** Minimum length of a prefix before it is used; shorter last words are ignored until the next letter. */
@@ -115,7 +122,7 @@ export const MIN_PREFIX = 2;
  * punctuation) marks the last word as complete. Hyphenated query words are
  * split, not joined, so "weet-bix" matches "Weet-Bix" and "weet bix".
  */
-export function parseQuery(query: string): ParsedQuery {
+export function parseQuery(query: string, loose = false): ParsedQuery {
   const folded = fold(query);
   const parts: string[] = [];
   for (const chunk of folded.match(CHUNK) ?? []) parts.push(...chunk.split(JOINER).filter(Boolean));
@@ -128,21 +135,53 @@ export function parseQuery(query: string): ParsedQuery {
   const words = [...new Set(parts.filter(keep))];
   // A prefix that is already a complete word in the query adds nothing.
   if (prefix !== undefined && words.includes(prefix)) prefix = undefined;
-  return prefix === undefined ? { words } : { words, prefix };
+  return { words, ...(prefix === undefined ? {} : { prefix }), ...(loose ? { loose } : {}) };
 }
 
 export function isEmptyQuery(q: ParsedQuery): boolean {
   return q.words.length === 0 && q.prefix === undefined;
 }
 
+/** Shortest variant looseForms() gives: "ices" does not become "ic". */
+const MIN_FORM = 3;
+/** Endings a loose search drops from a query word, with what replaces them: "berries" → "berry". */
+const ENDINGS: readonly (readonly [string, string])[] = [["ies", "y"], ["es", ""], ["ed", ""], ["s", ""], ["d", ""]];
+
+/**
+ * The variants of a query word that a loose search also accepts as whole words: the word
+ * without a plural or past-tense ending. "iced" → "ice", "biscuits" → "biscuit",
+ * "tomatoes" → "tomato", "tomato", "berries" → "berry". Longer words starting with the
+ * query word need no variant, since a loose word is a prefix too ("ice" finds "iced").
+ */
+export function looseForms(word: string): string[] {
+  const out = new Set<string>();
+  for (const [end, add] of ENDINGS) {
+    if (!word.endsWith(end) || (end === "s" && word.endsWith("ss"))) continue;
+    const form = word.slice(0, -end.length) + add;
+    if (form.length >= MIN_FORM && /\p{L}$/u.test(form)) out.add(form);
+  }
+  out.delete(word);
+  return [...out];
+}
+
+/** In a loose search, whether a folded word satisfies one query word: it starts with it, or is one of its variants. */
+export function looseWordMatches(word: string, term: string): boolean {
+  return word.startsWith(term) || looseForms(term).includes(word);
+}
+
+/** The query words and the prefix, if any: everything a product must match. */
+const termsOf = (q: ParsedQuery): readonly string[] => (q.prefix === undefined ? q.words : [...q.words, q.prefix]);
+
 /** Does a folded word satisfy the query word or prefix? */
 export function wordMatches(word: string, q: ParsedQuery): boolean {
+  if (q.loose) return termsOf(q).some((t) => looseWordMatches(word, t));
   return q.words.includes(word) || (q.prefix !== undefined && word.startsWith(q.prefix));
 }
 
 /** Whether a product (name and brand) satisfies every query word. */
 export function productMatches(q: ParsedQuery, name: string, brand?: string): boolean {
   const words = indexWords(brand ? `${name} ${brand}` : name);
+  if (q.loose) return termsOf(q).every((t) => words.some((w) => looseWordMatches(w, t)));
   return q.words.every((w) => words.includes(w)) && (q.prefix === undefined || words.some((w) => w.startsWith(q.prefix!)));
 }
 
@@ -269,7 +308,8 @@ function extraWords(text: string, isTerm: (word: string) => boolean): number {
  *
  * 1. Tier. 0: every query word is a whole word in the name or brand, with at
  *    least one in the name. 1: the last word only matches as the start of a
- *    longer word ("coke" in "cokelat"). 2: nothing matched in the name.
+ *    longer word ("coke" in "cokelat"), or in a loose search a word matches only
+ *    as a prefix or variant. 2: nothing matched in the name.
  * 2. The query uses up the whole branded product, name and brand: it holds every
  *    query word and has no other words. There is nothing more to type to reach such
  *    a product, so it must not be pushed down by others: "vegemite" puts
@@ -286,14 +326,16 @@ function extraWords(text: string, isTerm: (word: string) => boolean): number {
 export function matchRank(q: ParsedQuery, name: string, brand?: string): readonly number[] {
   const nameW = indexWords(name);
   const brandW = brand ? indexWords(brand) : [];
-  const terms = q.prefix === undefined ? q.words : [...q.words, q.prefix];
-  const found = (words: readonly string[], term: string) => words.includes(term) || (term === q.prefix && words.some((w) => w.startsWith(term)));
+  const terms = termsOf(q);
+  const partly = (word: string, term: string) => (q.loose ? looseWordMatches(word, term) : term === q.prefix && word.startsWith(term));
+  const found = (words: readonly string[], term: string) => words.includes(term) || words.some((w) => partly(w, term));
   const inName = terms.filter((t) => found(nameW, t)).length;
   const wholeInName = terms.some((t) => nameW.includes(t));
   const allWhole = terms.every((t) => nameW.includes(t) || brandW.includes(t));
   const tier = inName === 0 ? 2 : allWhole && wholeInName ? 0 : 1;
   const inBrand = terms.filter((t) => found(brandW, t)).length;
-  const extras = extraWords(name, (w) => terms.includes(w));
+  // A loose word accounts for the words it matched: "iced" is no extra word when searching "ice".
+  const extras = extraWords(name, (w) => terms.includes(w) || (Boolean(q.loose) && terms.some((t) => looseWordMatches(w, t))));
   const usedUp = tier === 0 && Boolean(brand) && productWordCount(name, brand) === terms.length;
   const heads = headWords(name);
   const isFood = terms.some((t) => found(heads, t));

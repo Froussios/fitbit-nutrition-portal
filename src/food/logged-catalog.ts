@@ -94,7 +94,7 @@ export class LoggedFoodsCatalog implements FoodCatalog {
 
   async search(query: string, options: SearchOptions = {}): Promise<FoodSearchHit[]> {
     const limit = options.limit ?? DEFAULT_LIMIT;
-    const q = parseQuery(query);
+    const q = parseQuery(query, options.loose);
     const boosted = isEmptyQuery(q) ? [] : boostedFoods(q, this.entries, this.now(), limit);
     const unknown = boosted.filter((f) => !this.summaries.has(foodKey(f.ref)));
     const lookups = Promise.all(unknown.map((f) => this.lookUp(f.ref)));

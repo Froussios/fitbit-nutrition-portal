@@ -1,5 +1,5 @@
 import type { FoodItem } from "../core/food";
-import { compareMatch, matchRank, productMatches, type ParsedQuery } from "../core/tokens";
+import { compareMatch, looseForms, matchRank, productMatches, type ParsedQuery } from "../core/tokens";
 import {
   barcodeVariants,
   chunkPath,
@@ -179,7 +179,7 @@ interface Term {
   readonly rest?: Cursor | undefined;
   /** Products with it only in the brand. */
   readonly brand?: Cursor | undefined;
-  /** Whether a hit is the whole word, rather than a longer word starting with it. */
+  /** Whether a hit is the whole word, rather than a longer word starting with it. A loose search counts its words as whole. */
   readonly whole: boolean;
 }
 
@@ -326,6 +326,7 @@ export class FoodIndex {
    * have filled the results.
    */
   async search(q: ParsedQuery, limit = 10, budget: Budget = newBudget()): Promise<number[]> {
+    if (q.loose) return this.looseSearch(q, limit, budget);
     const entries = await Promise.all(q.words.map((w) => this.lookup(w)));
     if (entries.some((e) => !e)) return [];
     const wordTerms = () => entries.map((e) => this.termFor([e!], true, budget));
@@ -374,6 +375,40 @@ export class FoodIndex {
           hits.push(id);
           if (room() === 0) break;
         }
+      }
+    }
+    return this.inRankOrder(hits, q);
+  }
+
+  /**
+   * The fallback when nothing matches exactly (DR-30): every word matches its commonest longer words, as
+   * the last word does, and its variants without an ending (looseForms). Only names and brands are
+   * intersected, in the same passes as tier 1; the text ranking then orders the chosen products. The
+   * expansions are capped like a prefix's, so a short, common word may miss rarer longer words.
+   */
+  private async looseSearch(q: ParsedQuery, limit: number, budget: Budget): Promise<number[]> {
+    const terms = q.prefix === undefined ? q.words : [...q.words, q.prefix];
+    if (terms.length === 0) return [];
+    const entries = await Promise.all(
+      terms.map(async (word) => {
+        const [longer, forms] = await Promise.all([this.expansions(word, MAX_EXPANSIONS), Promise.all(looseForms(word).map((f) => this.lookup(f)))]);
+        const all = new Map<string, DictEntry>();
+        for (const e of [...longer, ...forms]) if (e) all.set(e[0], e);
+        return [...all.values()];
+      }),
+    );
+    if (entries.some((e) => e.length === 0)) return [];
+    // Fresh cursors for each pass, which walks them to the end. Counted as whole: a loose word accounts for the
+    // word it matched, so that word is not an extra one (matchRank).
+    const fresh = () => entries.map((e) => this.termFor(e, true, budget));
+    const hits: number[] = [];
+    for (const scope of ["head", "name"] as const) hits.push(...(await this.nameMatches(fresh(), scope, limit - hits.length, hits, budget)));
+    const brands = fresh().map((t) => t.brand);
+    if (hits.length < limit && brands.every((c) => c !== undefined)) {
+      for await (const id of this.intersect(brands, budget)) {
+        if (hits.includes(id)) continue;
+        hits.push(id);
+        if (hits.length === limit) break;
       }
     }
     return this.inRankOrder(hits, q);

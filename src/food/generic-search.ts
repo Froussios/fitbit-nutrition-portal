@@ -1,4 +1,4 @@
-import { CHUNK_FOR_WORDS, fold, parseQuery, sameNameKey, STOP_WORDS, type ParsedQuery } from "../core/tokens";
+import { CHUNK_FOR_WORDS, fold, looseForms, parseQuery, sameNameKey, STOP_WORDS, type ParsedQuery } from "../core/tokens";
 import { genericToFoodItem, type GenericRow } from "./generics-format";
 
 /**
@@ -53,13 +53,25 @@ const wordsOf = (text: string) =>
 
 interface Term {
   readonly word: string;
-  /** Still being typed: matches any word starting with it. */
+  /** Still being typed, or a loose search: matches any word starting with it. */
   readonly open: boolean;
+  /** In a loose search, other words it matches whole: its variants without an ending (DR-30). */
+  readonly forms?: readonly string[];
 }
+
+function termOf(word: string, open: boolean, loose: boolean): Term {
+  if (!loose) return { word: singular(word), open };
+  const forms = [...new Set([word, ...looseForms(word)].map(singular))];
+  return { word: singular(word), open: true, forms };
+}
+
+/** Whether a food's word satisfies a term: whole, as its start while open, or as one of its variants. */
+const termMatches = (t: Term, w: string) => w === t.word || (t.open && w.startsWith(t.word)) || (t.forms?.includes(w) ?? false);
 
 /** The query as typed, plus the same query in each other spelling convention. */
 export function queryVariants(q: ParsedQuery): readonly (readonly Term[])[] {
-  const typed: Term[] = [...q.words.map((w) => ({ word: singular(w), open: false })), ...(q.prefix === undefined ? [] : [{ word: singular(q.prefix), open: true }])];
+  const loose = Boolean(q.loose);
+  const typed: Term[] = [...q.words.map((w) => termOf(w, false, loose)), ...(q.prefix === undefined ? [] : [termOf(q.prefix, true, loose)])];
   const variants: Term[][] = [typed];
   const words = typed.map((t) => t.word);
   for (const group of SYNONYMS) {
@@ -69,7 +81,7 @@ export function queryVariants(q: ParsedQuery): readonly (readonly Term[])[] {
       if (at < 0) continue;
       for (const to of group) {
         if (to === from) continue;
-        const replacement = to.split(" ").map((w) => ({ word: singular(w), open: false }));
+        const replacement = to.split(" ").map((w) => termOf(w, false, loose));
         variants.push([...typed.slice(0, at), ...replacement, ...typed.slice(at + phrase.length)]);
       }
     }
@@ -96,12 +108,13 @@ function rankFood(food: Indexed, terms: readonly Term[]): readonly number[] | un
   let isFood = false;
   for (const t of terms) {
     const whole = food.words.includes(t.word);
-    if (!whole && !(t.open && food.words.some((w) => w.startsWith(t.word)))) return undefined;
+    if (!whole && !food.words.some((w) => termMatches(t, w))) return undefined;
     if (!whole) partial = 1;
-    if (food.head.has(t.word) || (t.open && [...food.head].some((w) => w.startsWith(t.word)))) isFood = true;
+    if ([...food.head].some((w) => termMatches(t, w))) isFood = true;
   }
-  const taken = new Set(terms.map((t) => t.word));
-  const other = food.words.filter((w) => !taken.has(w));
+  // A loose term accounts for the words it matched ("iced" for "ice"); otherwise only whole words count.
+  const taken = (w: string) => terms.some((t) => w === t.word || (t.forms !== undefined && termMatches(t, w)));
+  const other = food.words.filter((w) => !taken(w));
   const extras = other.filter((w) => !PLAIN_WORDS.has(w) && !/^\d/.test(w)).length;
   const plain = other.some((w) => PLAIN_WORDS.has(w));
   return [partial, isFood ? 0 : 1, food.fallback ? 1 : 0, extras, plain ? 0 : 1, other.length];

@@ -66,8 +66,9 @@ export class StaticFoodCatalog implements FoodCatalog {
   }
 
   async search(query: string, options: SearchOptions = {}): Promise<FoodSearchHit[]> {
-    const q = parseQuery(query);
-    const barcode = isBarcode(query) ? query.trim() : undefined;
+    const q = parseQuery(query, options.loose);
+    // An exact search has already looked the barcode up.
+    const barcode = !options.loose && isBarcode(query) ? query.trim() : undefined;
     if (isEmptyQuery(q) && !barcode) return [];
     const limit = options.limit ?? DEFAULT_LIMIT;
     const hits = await this.withIndex(async (index) => {

@@ -230,8 +230,10 @@ describe("food index", () => {
     for (let n = 0; files.has(`sum/${n}.json`); n++) rows.push(...(JSON.parse(files.get(`sum/${n}.json`) as string) as SummaryRow[]));
     const searchable = rows.slice(0, index.meta.searchableDocs);
 
-    for (const query of ["vanilla", "vanilla ", "queen", "vanilla queen", "queen vanilla ", "cola bean", "yogurt cream extract", "van", "vanilla qu", "cream co"]) {
-      const q = parseQuery(query);
+    const queries = ["vanilla", "vanilla ", "queen", "vanilla queen", "queen vanilla ", "cola bean", "yogurt cream extract", "van", "vanilla qu", "cream co"];
+    const loose = ["van que ", "beans", "colas creams ", "yog extracted"];
+    for (const [query, isLoose] of [...queries.map((t) => [t, false] as const), ...loose.map((t) => [t, true] as const)]) {
+      const q = parseQuery(query, isLoose);
       // Without the last rule (query words also in the brand), which only orders the chosen rows: the lists can't see it.
       const rankOf = (r: SummaryRow) => matchRank(q, r[1], r[2] ?? undefined).slice(0, 6).map((n) => n + 0);
       const ranks = searchable
@@ -397,6 +399,26 @@ describe("food index", () => {
     ];
     const index = await FoodIndex.open(build(records).reader);
     expect(await names(index, "big mac")).toContain("Big macz one two");
+  });
+
+  it("finds prefixes and variants of every word in a loose search, and nothing else", async () => {
+    const index = await FoodIndex.open(
+      build([
+        product("5001", "Tall Iced Americano", { brands: "Starbucks" }),
+        product("5002", "Baked Beans", { brands: "Heinz" }),
+        product("5003", "Ice cream", { brands: "Peters" }),
+        product("5004", "Rice", { brands: "SunRice" }),
+      ]).reader,
+    );
+    const loose = async (query: string) => (await index.summaries(await index.search(parseQuery(query, true)))).map((r) => r[1]);
+    expect(await names(index, "tall ice americano")).toEqual([]);
+    expect(await loose("tall ice americano")).toEqual(["Tall Iced Americano"]);
+    expect(await loose("talls iced americano ")).toEqual(["Tall Iced Americano"]);
+    expect(await loose("bake bean ")).toEqual(["Baked Beans"]);
+    expect(await loose("ice")).toEqual(["Ice cream", "Tall Iced Americano"]);
+    // Brand words too.
+    expect(await loose("starbuck americanos ")).toEqual(["Tall Iced Americano"]);
+    expect(await loose("grande ice americano")).toEqual([]);
   });
 
   it("answers no-match prefixes without errors", async () => {

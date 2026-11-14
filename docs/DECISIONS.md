@@ -90,7 +90,7 @@ are parked ([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38
 **Reopen if.** The coverage test ([#15](https://github.com/Froussios/fitbit-nutrition-portal/issues/15)) finds fewer than 45 of 50 items, or generic foods are a frequent miss.
 
 ### DR-13 Food search matches exact words, ranked by coverage
-Ordering revised by DR-15.
+Ordering revised by DR-15. A loose search runs when nothing matches exactly: DR-30.
 **Decision.** No typo tolerance. Every query word must appear in the product's name or brand, in any order;
 the last word matches as a prefix while typing. Results rank by coverage (query words in the name divided by
 words in the name), then popularity: "chocolate" ranks a product called "Chocolate" above "Dark chocolate".
@@ -326,3 +326,16 @@ like a meal prep portion, and can be scaled with "× this entry". Amounts change
 in, so no food is looked up again.
 **Reopen if.** The owner wants a logged meal broken down by ingredient, or edits to one meal to flow into others.
 
+### DR-30 When nothing matches exactly, search again with prefixes and variants
+**Decision.** Only when a search finds nothing at all (logged foods, generic foods and products together), it runs
+again loosely: every query word, not just the last, also matches any word starting with it, and the word without a
+plural or past-tense ending (`iced` also finds `ice`, `biscuits` `biscuit`, `baked` `bake`). Every word must still
+match, and there is still no typo tolerance ([FOOD_SEARCH.md](FOOD_SEARCH.md#42-matching)).
+**Why.** Owner decision (14 November 2026), from [#107](https://github.com/Froussios/fitbit-nutrition-portal/issues/107):
+`tall ice americano` found nothing because only the last word could be a prefix, so `ice` had to be a whole word.
+Running only after an empty search leaves every search that finds something exactly as before, and costs one more
+search only when the user would otherwise see no results.
+**Consequence.** Loose results rank as partial matches (rule 1, tier 1). A word's longer forms are capped like a
+prefix's (its 16 commonest), so a short, common word can miss rare longer words. Highlighting marks the words a
+loose search matched.
+**Reopen if.** Loose results are often wrong, or exact searches that find only poor matches would be better loose.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareMatch, compareRank, headWords, highlightRuns, indexWords, matchRank, nameWordCount, nameWords, parseQuery, productMatches, productWordCount } from "../src/core/tokens";
+import { compareMatch, compareRank, headWords, highlightRuns, indexWords, looseForms, looseWordMatches, matchRank, nameWordCount, nameWords, parseQuery, productMatches, productWordCount } from "../src/core/tokens";
 
 describe("words", () => {
   it("folds case and accents and drops stop words and single letters", () => {
@@ -45,6 +45,58 @@ describe("matching", () => {
   it("finds joined words from either spelling", () => {
     expect(productMatches(parseQuery("weetbix"), "Weet-Bix")).toBe(true);
     expect(productMatches(parseQuery("weet bix"), "Weet-Bix")).toBe(true);
+  });
+});
+
+describe("loose matching (DR-30)", () => {
+  it("gives a word's variants without a plural or past-tense ending", () => {
+    expect(looseForms("iced")).toEqual(["ice"]);
+    expect(looseForms("biscuits")).toEqual(["biscuit"]);
+    expect(looseForms("tomatoes")).toEqual(["tomato", "tomatoe"]);
+    expect(looseForms("berries")).toEqual(["berry", "berri", "berrie"]);
+    expect(looseForms("baked")).toEqual(["bak", "bake"]);
+    // Too short, a double s, or no ending to drop.
+    expect(looseForms("ices")).toEqual(["ice"]);
+    expect(looseForms("eds")).toEqual([]);
+    expect(looseForms("glass")).toEqual([]);
+    expect(looseForms("milk")).toEqual([]);
+    expect(looseForms("12s")).toEqual([]);
+  });
+
+  it("lets a loose word match as a prefix or a variant", () => {
+    expect(looseWordMatches("iced", "ice")).toBe(true);
+    expect(looseWordMatches("ice", "iced")).toBe(true);
+    expect(looseWordMatches("baked", "bake")).toBe(true);
+    expect(looseWordMatches("rice", "ice")).toBe(false);
+  });
+
+  it("is marked on the parsed query", () => {
+    expect(parseQuery("tall ice americano", true)).toEqual({ words: ["tall", "ice"], prefix: "americano", loose: true });
+    expect(parseQuery("tall ice americano")).toEqual({ words: ["tall", "ice"], prefix: "americano" });
+  });
+
+  it("matches every word as a prefix or variant, not only the last", () => {
+    const strict = parseQuery("tall ice americano");
+    const loose = parseQuery("tall ice americano", true);
+    expect(productMatches(strict, "Tall Iced Americano", "Starbucks")).toBe(false);
+    expect(productMatches(loose, "Tall Iced Americano", "Starbucks")).toBe(true);
+    expect(productMatches(parseQuery("tall iced americanos ", true), "Tall ice americano")).toBe(true);
+    expect(productMatches(parseQuery("bake beans ", true), "Baked Beans")).toBe(true);
+    // Still every word, and still no typos.
+    expect(productMatches(parseQuery("grande ice americano", true), "Tall Iced Americano")).toBe(false);
+    expect(productMatches(parseQuery("tall ics americano", true), "Tall Iced Americano")).toBe(false);
+  });
+
+  it("ranks a loose match as partial, without counting the matched words as extra", () => {
+    const q = parseQuery("ice americano", true);
+    const [tier, , isFood, , extras] = matchRank(q, "Iced Americano", "Starbucks");
+    expect([tier, isFood, extras]).toEqual([1, 0, 0]);
+    expect(compareMatch(matchRank(q, "Iced Americano", "Starbucks"), matchRank(q, "Iced Americano with milk", "Starbucks"))).toBeLessThan(0);
+  });
+
+  it("highlights the words a loose query matched", () => {
+    expect(highlightRuns("Tall Iced Americano", parseQuery("tall ice americano", true)).filter((r) => r.match).map((r) => r.text)).toEqual(["Tall", "Iced", "Americano"]);
+    expect(highlightRuns("Rice", parseQuery("ice", true))).toEqual([{ text: "Rice", match: false }]);
   });
 });
 
