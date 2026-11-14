@@ -29,8 +29,9 @@ export interface MealCardActions {
 }
 
 /**
- * The Saved meals tab: each meal on one line, with its energy, and its ingredients and amounts a click away. Log opens the log form with the meal chosen, where its
- * ingredients can be changed for that one entry. Here a meal is made, edited and deleted.
+ * The Saved meals tab: each meal on one line, with its energy, and its ingredients and amounts a click away. Log opens
+ * the log form with the meal chosen, where its ingredients can be changed for that one entry. Here a meal is made,
+ * edited and deleted.
  */
 export function createMealCard(actions: MealCardActions, builder: HTMLElement) {
   const list = el("div", { class: "meal-list" });

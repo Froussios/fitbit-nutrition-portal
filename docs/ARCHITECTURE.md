@@ -231,12 +231,11 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
 ```
 
 * **Screens.** The **Saved meals** tab (`src/ui/meal-card.ts`) lists the meals by name with their energy. Each one's
-  ingredients and amounts open under it ("3 ingredients"). It has Log,
-  Edit, Delete (with an undo until reload, which saves the meal again) and New meal, which open the builder of
-  section 4.5. In **Log food** the search finds saved meals, and up to 8 are offered under the empty search. A chosen
-  meal shows its ingredients: an amount can be changed in the unit it was added in, an ingredient left out or put
-  back, and another added, for this entry only. "Reset to the saved meal" undoes that, and so does logging, so each
-  entry starts from the meal as saved.
+  ingredients and amounts open under it ("3 ingredients"). It has Log, Edit, Delete (with an undo until reload, which
+  saves the meal again) and New meal, which open the builder of section 4.5. In **Log food** the search finds saved
+  meals, and up to 8 are offered under the empty search. A chosen meal shows its ingredients: an amount can be changed
+  in the unit it was added in, an ingredient left out or put back, and another added, for this entry only. "Reset to
+  the saved meal" undoes that, and so does logging, so each entry starts from the meal as saved.
 * **Logging** writes one entry like a meal prep portion: the meal's name, the summed nutrients, no `serving`, and the
   ID `e-<time>-<rand>-meal-<mealId>`. The database is not written. The entry can be edited ("× this entry", DR-22) and
   deleted like any other the app wrote. Ingredients come from `catalog` foods, which never include a meal or a prep.
