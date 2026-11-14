@@ -11,7 +11,7 @@ import type { MealType } from "../health/types";
 import type { FoodCatalog } from "../food/catalog";
 import { describeError, logger } from "../debug/log";
 import { createAmountField } from "./amount-field";
-import { el, errorMessage, replaceChildren } from "./dom";
+import { el, errorMessage, replaceChildren, singleTabStop } from "./dom";
 import { createFoodCombobox, type ComboExtra } from "./food-combobox";
 import { field } from "./form-fields";
 import { energyLabel, fmtEnergy, madeAgo, percent, summary } from "./format";
@@ -223,6 +223,7 @@ export function createLogForm(
     ...MEAL_TYPES.map((m) => el("option", { value: m.value }, m.label)),
   );
   const time = el("input", { id: "time", type: "datetime-local", value: toDateTimeLocalValue(defaultTime()), required: true });
+  singleTabStop(time);
   const preview = el("p", { class: "preview", "aria-live": "polite" });
   const submit = el("button", { type: "submit", class: "primary" }, "Log entry");
   const prepButtons = el("span", { class: "actions", hidden: true }, eatRest, discard);
