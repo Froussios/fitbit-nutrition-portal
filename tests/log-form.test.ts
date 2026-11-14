@@ -118,6 +118,21 @@ describe("log form", () => {
     expect(portion.value).toBe("");
   });
 
+  it("leaves the time with one Tab either way, rather than one per part of the date", () => {
+    const { form, $ } = setUp();
+    form.choosePrep(PREPS[0]!);
+    const time = $<HTMLInputElement>("#time");
+    const tab = (shiftKey: boolean) => {
+      time.focus();
+      const press = new KeyboardEvent("keydown", { key: "Tab", shiftKey, cancelable: true });
+      time.dispatchEvent(press);
+      expect(press.defaultPrevented).toBe(true);
+      return document.activeElement;
+    };
+    expect(tab(false)).toBe($("button[type=submit]"));
+    expect(tab(true)).toBe($("#meal"));
+  });
+
   it("refuses more than is left, and eats the rest on request", async () => {
     const { form, $, actions } = setUp();
     form.choosePrep(PREPS[1]!);

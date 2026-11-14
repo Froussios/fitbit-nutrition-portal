@@ -33,6 +33,29 @@ export function replaceChildren(parent: Element, ...children: Child[]): void {
   append(parent, ...children);
 }
 
+const TABBABLE = "a[href], button, input, select, textarea, [tabindex]";
+
+const tabbable = (node: HTMLElement): boolean =>
+  node.tabIndex >= 0 &&
+  !(node as HTMLInputElement).disabled &&
+  (typeof node.checkVisibility === "function" ? node.checkVisibility() : !node.closest("[hidden]"));
+
+/**
+ * Makes Tab and Shift+Tab leave a control in one step. Browsers give each part of a
+ * date or time input (day, month, year, hour, minute, AM/PM) its own Tab stop; with this,
+ * the arrow keys move between those parts instead, as they already do once inside.
+ */
+export function singleTabStop(control: HTMLElement): void {
+  control.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || e.altKey || e.ctrlKey || e.metaKey) return;
+    const order = [...document.querySelectorAll<HTMLElement>(TABBABLE)].filter((n) => n === control || tabbable(n));
+    const next = order[order.indexOf(control) + (e.shiftKey ? -1 : 1)];
+    if (!next) return; // First or last on the page: let the browser leave it.
+    e.preventDefault();
+    next.focus();
+  });
+}
+
 export function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
