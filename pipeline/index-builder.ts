@@ -2,6 +2,7 @@ import { HOME_COUNTRY } from "../src/core/countries";
 import { summarise } from "../src/core/food-summary";
 import { fromOffProduct, type OffProduct } from "../src/core/off";
 import { usefulPortions } from "../src/core/portions";
+import { ingredientLimitProblem } from "../src/core/prep";
 import { compareRank, headWords, indexWords, nameWordCount, popularity, productWordCount, sameNameKey } from "../src/core/tokens";
 import {
   CHUNK_SIZE,
@@ -93,7 +94,10 @@ interface Doc {
   readonly key: string;
 }
 
-export type DropReason = "obsolete" | "noCode" | "noName" | "noEnergy" | "implausibleEnergy" | "noWords" | "duplicateCode";
+export type DropReason = "obsolete" | "noCode" | "noName" | "noEnergy" | "implausibleEnergy" | "noWords" | "duplicateCode" | "tooLongForIngredient";
+
+/** How many skipped products the build report lists, so that a run of them doesn't bury the rest. */
+export const MAX_TOO_LONG_EXAMPLES = 20;
 
 function text(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
@@ -103,6 +107,8 @@ export class IndexBuilder {
   private readonly docs: Doc[] = [];
   private readonly seenCodes = new Set<string>();
   readonly counts: Record<string, number> = { read: 0, kept: 0 };
+  /** The first products skipped because they could not be saved as an ingredient (#91), for the build report. */
+  readonly tooLong: { readonly code: string; readonly problem: string }[] = [];
 
   constructor(private readonly options: BuildOptions) {}
 
@@ -139,6 +145,12 @@ export class IndexBuilder {
     if (!(kcal >= 0 && kcal <= MAX_KCAL)) return this.drop("implausibleEnergy");
     const words = indexWords(food.brand ? `${food.name} ${food.brand}` : food.name);
     if (words.length === 0) return this.drop("noWords");
+    // A food found in search must be one the meal prep API can save: skip it, and the build report flags it (#91).
+    const problem = ingredientLimitProblem(food);
+    if (problem) {
+      if (this.tooLong.length < MAX_TOO_LONG_EXAMPLES) this.tooLong.push({ code: code.slice(0, 40), problem });
+      return this.drop("tooLongForIngredient");
+    }
     if (this.seenCodes.has(code)) return this.drop("duplicateCode");
     this.seenCodes.add(code);
 

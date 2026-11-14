@@ -199,12 +199,23 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
 * **Finished and discarded preps** are hidden and kept for 30 days, so that an undo can bring them back, then deleted the
   next time that user's list loads. An unfinished recipe draft stays on the device until it is saved.
 * **Failures.** If the API is down, eating is blocked and normal logging still works, as with other failures (DR-18).
+* **Limits** ([#91](https://github.com/Froussios/fitbit-nutrition-portal/issues/91)). One user's preps and saved meals together
+  may take up to 2 MB (`MAX_USER_BYTES` in `server/store.ts`): the name and ingredients in UTF-8, plus 512 bytes a row, so
+  that many tiny rows can't slip under it. A typical row is about 4 KB. The save is one `INSERT … SELECT … WHERE`
+  that adds up the user's rows, so two requests can't both squeeze in. It is refused with 409 only when it would grow the
+  user's total past the cap: a full user can still rename or trim. Ended preps count until they are deleted. The total is
+  worked out on every save, not kept: on SQLite that takes about 0.4 ms for a user at the cap, and keeping it in a table or
+  covering index would cost one more row written per save, against the free plan's 100,000 a day. A request body is read
+  up to 160 KB, counted in bytes, and refused early when its `Content-Length` is over. The largest valid body is about
+  137 KB. The food ID, label and unit limits (`MAX_FOOD_ID`, `MAX_LABEL`, `MAX_UNIT` in `src/core/prep.ts`) are generous,
+  and the index builder skips any food that would break them (FOOD_SEARCH.md section 5.3), so every food in search can be
+  an ingredient.
 * **API.** `functions/api/[[path]].ts` hands every request to `server/handler.ts`:
 
   | Request | Does |
   |---|---|
   | `GET /api/preps` | The user's preps and their portions, after deleting those ended over 30 days ago |
-  | `PUT /api/preps/:id` | Creates a prep, or replaces its name and ingredients |
+  | `PUT /api/preps/:id` | Creates a prep, or replaces its name and ingredients; 409 with `limit` if out of room |
   | `PATCH /api/preps/:id` | `{ discarded }`: discards a prep or brings it back |
   | `POST /api/preps/:id/portions` | Reserves `{ id, fraction, entryId, eatenAt }`, or the rest when `fraction` is null; 409 with `left` if too much |
   | `PATCH /api/portions/:id` | `{ entryId }`: the diary entry exists |
@@ -251,7 +262,7 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
   | Request | Does |
   |---|---|
   | `GET /api/meals` | The user's saved meals |
-  | `PUT /api/meals/:id` | Creates a meal, or replaces its name and ingredients |
+  | `PUT /api/meals/:id` | Creates a meal, or replaces its name and ingredients; 409 with `limit` if out of room, as for preps |
   | `DELETE /api/meals/:id` | Deletes a meal; deleting one that is gone succeeds |
 
 ## 5. Authentication
