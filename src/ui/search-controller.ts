@@ -1,5 +1,5 @@
 import { isBarcode } from "../food/index-format";
-import type { FoodCatalog, FoodSearchHit } from "../food/catalog";
+import { searchWithFallback, type FoodCatalog, type FoodSearchHit } from "../food/catalog";
 import { MIN_QUERY } from "./combobox-state";
 
 export type SearchUpdate =
@@ -76,7 +76,7 @@ export class SearchController {
     const abort = (this.abort = new AbortController());
     const generation = this.generation;
     try {
-      const hits = await this.catalog.search(text, { signal: abort.signal });
+      const hits = await searchWithFallback(this.catalog, text, { signal: abort.signal });
       if (generation === this.generation) {
         this.cache.set(key, hits);
         if (this.cache.size > this.cacheSize) this.cache.delete(this.cache.keys().next().value!);

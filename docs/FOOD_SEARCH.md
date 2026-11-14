@@ -156,6 +156,13 @@ Product names, brands and queries go through the same tokeniser, shared by the i
   Without this nothing would show until a word was finished. A trailing space marks the last word as
   complete. A last word of 1 letter is ignored until the second letter.
 * **No typo tolerance.** `chocolat` still finds `chocolate` (prefix), but `chocloate` finds nothing.
+* **Loose search when nothing matches (DR-30).** If a search finds nothing at all, across logged foods, generic
+  foods and products, it runs again with every word allowed to match as a prefix, and as its variants without a
+  plural or past-tense ending (`looseForms` in `src/core/tokens.ts`: `iced` → `ice`, `biscuits` → `biscuit`,
+  `tomatoes` → `tomato`, `berries` → `berry`). So `tall ice americano` finds `Tall Iced Americano` and `bake beans`
+  finds `Baked Beans`. Every word must still match. Loose results rank as tier 1 (section 4.3) unless every word is whole, and a word they
+  matched does not count as an extra word. In the index, each word is the union of its 16 commonest longer words
+  and its variants (`looseSearch` in `src/food/index-engine.ts`), so a short, common word can miss rarer ones.
 
 ### 4.3 Ordering
 
@@ -226,7 +233,8 @@ Cheap additions that fit the same index, to consider only if the coverage test o
 * **Synonyms** applied to the query (`coke` → `coca cola`, `choc` → `chocolate`), as a small table in the app.
 * **"Did you mean"**: when a word is not in the dictionary, suggest dictionary words one edit away (the
   client already holds that dictionary shard).
-* **Plurals**: index a simple singular form (`biscuits` → `biscuit`).
+* **Plurals**: index a simple singular form (`biscuits` → `biscuit`). Done on the query side instead, only when
+  nothing matches exactly: the loose search (section 4.2, DR-30).
 
 ## 5. Hosting and execution (R7, decision D3)
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fromAfcd, fromFndds, type TableRow } from "../pipeline/generics-builder";
 import { CombinedCatalog, GENERICS_WAIT_MS, MAX_GENERIC_ROWS } from "../src/food/combined-catalog";
-import { LocalFoodCatalog, type FoodCatalog } from "../src/food/catalog";
+import { LocalFoodCatalog, searchWithFallback, type FoodCatalog } from "../src/food/catalog";
 import { genericToFoodItem, GENERICS_FORMAT, type GenericRow, type GenericsFile } from "../src/food/generics-format";
 import { GenericIndex, MIN_PRIMARY_FOODS, queryVariants, singular } from "../src/food/generic-search";
 import { parseQuery } from "../src/core/tokens";
@@ -147,6 +147,16 @@ describe("generic search", () => {
     expect(queryVariants(parseQuery("rice"))).toHaveLength(1);
   });
 
+  it("finds prefixes and variants of every word in a loose search", () => {
+    const rows = [row("afcd", "1", "Ice, cubes"), row("afcd", "2", "Beans, baked, canned"), row("afcd", "3", "Rice, white, boiled")];
+    const loose = (query: string) => new GenericIndex(rows).search(parseQuery(query, true)).map((r) => r[2]);
+    expect(names(rows, "iced cubes")).toEqual([]);
+    expect(loose("iced cubes")).toEqual(["Ice, cubes"]);
+    expect(loose("bake bean ")).toEqual(["Beans, baked, canned"]);
+    expect(loose("whit rice ")).toEqual(["Rice, white, boiled"]);
+    expect(loose("brown rice")).toEqual([]);
+  });
+
   it("finds a food again from the lower-case ID stored in a diary entry", () => {
     const index = new GenericIndex([row("afcd", "F005634", "Milk")]);
     expect(index.get("afcd", "f005634")?.name).toBe("Milk");
@@ -191,6 +201,29 @@ describe("CombinedCatalog", () => {
     // Products left rows empty, so more generic foods fill them.
     expect(hits).toHaveLength(10);
     expect(hits.slice(MAX_GENERIC_ROWS + 1).every((h) => h.summary.ref.source === "afcd")).toBe(true);
+  });
+
+  it("searches loosely, generic foods and products alike, only when nothing matches exactly", async () => {
+    const asked: (boolean | undefined)[] = [];
+    const inner = products([product("x", "Tall Iced Americano", "Starbucks"), product("y", "Ice cream", "Peters")]);
+    const spy: FoodCatalog = { label: "spy", search: (q, o) => (asked.push(o?.loose), inner.search(q, o)), get: (r) => inner.get(r) };
+    const catalog = combined([row("afcd", "1", "Ice, cubes")], spy);
+    const found = async (query: string) => (await searchWithFallback(catalog, query)).map((h) => label(h.summary));
+    expect(await found("tall ice americano")).toEqual(["Tall Iced Americano (Starbucks)"]);
+    expect(asked).toEqual([undefined, true]);
+    // Exact matches exist, so the iced products are not added.
+    asked.length = 0;
+    expect(await found("ice ")).toEqual(["Ice, cubes", "Ice cream (Peters)"]);
+    expect(asked).toEqual([undefined]);
+    expect(await found("iced cubes")).toEqual(["Ice, cubes"]);
+    // Nothing a loose search could add: a single last word with no ending is already a prefix.
+    asked.length = 0;
+    expect(await found("latte")).toEqual([]);
+    expect(asked).toEqual([undefined]);
+    // A barcode is a single word of digits, which has no variants.
+    asked.length = 0;
+    expect(await found("9300000000006")).toEqual([]);
+    expect(asked).toEqual([undefined]);
   });
 
   it("returns the full food from the right source", async () => {

@@ -1,6 +1,6 @@
 import { isGenericSource, type FoodItem, type FoodRef } from "../core/food";
 import { summarise } from "../core/food-summary";
-import { isEmptyQuery, parseQuery } from "../core/tokens";
+import { isEmptyQuery, parseQuery, type ParsedQuery } from "../core/tokens";
 import { DEFAULT_LIMIT, toHit, type FoodCatalog, type FoodSearchHit, type SearchOptions } from "./catalog";
 import { GenericIndex } from "./generic-search";
 import { GENERICS_FORMAT, genericToFoodItem, type GenericsFile, type GenericRow } from "./generics-format";
@@ -86,7 +86,7 @@ export class CombinedCatalog implements FoodCatalog {
    * first search waits for the download, and only briefly: a slow or stalled file costs a few
    * generic rows, never the products. A cancelled search stops waiting straight away.
    */
-  private async generics(query: string, signal: AbortSignal | undefined): Promise<GenericRow[]> {
+  private async generics(query: ParsedQuery, signal: AbortSignal | undefined): Promise<GenericRow[]> {
     if (this.ready) return this.ready.search(query);
     const loading = this.load();
     if (this.waited) return [];
@@ -110,14 +110,18 @@ export class CombinedCatalog implements FoodCatalog {
 
   async search(query: string, options: SearchOptions = {}): Promise<FoodSearchHit[]> {
     const limit = options.limit ?? DEFAULT_LIMIT;
-    const q = parseQuery(query);
-    const generics = isEmptyQuery(q) ? [] : await this.generics(query, options.signal);
+    const q = parseQuery(query, options.loose);
+    const generics = isEmptyQuery(q) ? [] : await this.generics(q, options.signal);
     const first = generics.slice(0, Math.min(MAX_GENERIC_ROWS, limit));
     let products: FoodSearchHit[] = [];
     if (first.length < limit) {
       try {
         // Asking only for the rows that will show saves fetching a summary file for each of the others.
-        products = await this.products.search(query, { limit: limit - first.length, ...(options.signal ? { signal: options.signal } : {}) });
+        products = await this.products.search(query, {
+          limit: limit - first.length,
+          ...(options.signal ? { signal: options.signal } : {}),
+          ...(options.loose ? { loose: true } : {}),
+        });
       } catch (e) {
         if (options.signal?.aborted || first.length === 0) throw e;
         log.warn("Products are unavailable, showing generic foods only", { error: describeError(e) });
