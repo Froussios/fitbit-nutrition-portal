@@ -41,7 +41,7 @@ const tabbable = (node: HTMLElement): boolean =>
   // Tab stops only on the chosen radio of a group.
   !(node instanceof HTMLInputElement && node.type === "radio" && node.name && !node.checked) &&
   !node.closest("[hidden]") &&
-  (typeof node.checkVisibility !== "function" || node.checkVisibility());
+  (typeof node.checkVisibility !== "function" || node.checkVisibility({ visibilityProperty: true }));
 
 /**
  * Makes Tab and Shift+Tab leave a control in one step. Browsers give each part of a
