@@ -389,7 +389,8 @@ button.on-hand-item { display: flex; align-items: baseline; gap: 8px; padding: 4
 .meal .status { margin-top: 4px; }
 .meal-ingredients { margin: 4px 0 0; }
 .meal-ingredients summary { margin-bottom: 0; font-size: 0.85rem; }
-.meal-ingredients ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; max-width: 32rem; }
+/* Indented under its meal, with a rule beside it, so that it reads as that meal's recipe. */
+.meal-ingredients ul { list-style: none; padding: 2px 0 2px 12px; margin: 8px 0 0 1.25rem; border-left: 2px solid var(--border); display: grid; gap: 4px; max-width: 32rem; }
 .meal-ingredients li { display: flex; justify-content: space-between; gap: 12px; }
 .meal-amount { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
 .meal-card > .status:empty { display: none; }
