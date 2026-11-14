@@ -4,9 +4,11 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AuthError, GoogleKeys, verifyIdToken } from "../server/auth";
 import type { D1Database, D1PreparedStatement, D1Result } from "../server/d1";
-import { handle, type Env } from "../server/handler";
+import { MAX_BODY, handle, type Env } from "../server/handler";
+import { MAX_USER_BYTES, ROW_OVERHEAD } from "../server/store";
 import type { SavedMeal } from "../src/core/meal";
-import { KEEP_ENDED_MS, type Prep } from "../src/core/prep";
+import { KEEP_ENDED_MS, MAX_FOOD_ID, MAX_INGREDIENTS, MAX_LABEL, MAX_NAME, MAX_UNIT, type Prep } from "../src/core/prep";
+import { NUTRIENT_KEYS } from "../src/core/nutrients";
 
 /** D1's interface over a real SQLite database, with the real migration: D1 is SQLite. */
 function localD1(): D1Database {
@@ -279,9 +281,128 @@ describe("meal prep API", () => {
     ["a bad portion ID", "POST", "/api/preps/chili001/portions", { id: "x", fraction: 0.5, entryId: null, eatenAt: NOW }],
     ["no time", "POST", "/api/preps/chili001/portions", { id: "portion01", fraction: 0.5, entryId: null }],
     ["a body that is not JSON", "PATCH", "/api/preps/chili001", "{"],
-    ["a body that is too large", "PUT", "/api/preps/chili001", { name: "Chili", ingredients, padding: "x".repeat(70_000) }],
   ])("refuses %s", async (_name, method, path, body) => {
-    expect([400, 413]).toContain((await call(method, path, body)).status);
+    expect((await call(method, path, body)).status).toBe(400);
+  });
+
+  describe("request bodies", () => {
+    /** A body of `chunks` pieces of `size` bytes, counting how many were read. */
+    function streamed(chunks: number, size = 16 * 1024) {
+      const state = { pulled: 0 };
+      const body = new ReadableStream<Uint8Array>({
+        pull(c) {
+          if (state.pulled++ >= chunks) return c.close();
+          c.enqueue(new Uint8Array(size).fill(0x20));
+        },
+      });
+      return { body, state };
+    }
+    const send = (body: BodyInit, headers: Record<string, string> = {}) =>
+      handle(
+        new Request("https://food-index.froussios.com/api/preps/chili002", {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${idToken()}`, "Content-Type": "application/json", ...headers },
+          body,
+          duplex: "half",
+        } as RequestInit),
+        env,
+        deps(),
+      );
+
+    it("refuses a body that says it is too large without reading it", async () => {
+      const { body, state } = streamed(100);
+      expect((await send(body, { "Content-Length": String(MAX_BODY + 1) })).status).toBe(413);
+      expect(state.pulled).toBeLessThanOrEqual(1);
+    });
+
+    it("stops reading a body with no length once it is too large", async () => {
+      const { body, state } = streamed(1000);
+      expect((await send(body)).status).toBe(413);
+      expect(state.pulled * 16 * 1024).toBeLessThan(MAX_BODY + 3 * 16 * 1024);
+    });
+
+    it("counts bytes, not characters", async () => {
+      const padding = "€".repeat(Math.ceil(MAX_BODY / 3)); // under MAX_BODY characters, over it in bytes
+      expect(padding.length).toBeLessThan(MAX_BODY);
+      expect((await call("PUT", "/api/preps/chili002", { name: "Chili", ingredients, padding })).status).toBe(413);
+    });
+
+    it("refuses a body that is not UTF-8", async () => {
+      expect((await send(new Uint8Array([0x7b, 0xff, 0x7d]))).status).toBe(400);
+    });
+
+    it("accepts the largest valid prep, every field at its limit in 3-byte characters", async () => {
+      const n = 1234567.8901234567;
+      const widest = {
+        ref: { source: "ausnut", id: "€".repeat(MAX_FOOD_ID) },
+        label: "€".repeat(MAX_LABEL),
+        quantity: n,
+        unit: "€".repeat(MAX_UNIT),
+        profile: { energyKcal: n, nutrients: Object.fromEntries(NUTRIENT_KEYS.map((k) => [k, n])) },
+      };
+      const body = { name: "€".repeat(MAX_NAME), ingredients: Array(MAX_INGREDIENTS).fill(widest) };
+      expect(Buffer.byteLength(JSON.stringify(body))).toBeGreaterThan(MAX_BODY * 0.8); // the limit is not far above it
+      expect((await call("PUT", "/api/preps/chili002", body)).status).toBe(204);
+    });
+  });
+
+  describe("storage cap", () => {
+    const big = Array.from({ length: MAX_INGREDIENTS }, (_, i) => ({
+      ref: { source: "off", id: `93000000${i}` },
+      label: `${"Long product name ".repeat(15)}${i}`,
+      quantity: 100,
+      unit: "g",
+      profile: { energyKcal: 100, nutrients: { protein: 1 } },
+    }));
+    /** What a row counts for, as the store measures it. */
+    const size = (name: string, ings: unknown) => Buffer.byteLength(name) + Buffer.byteLength(JSON.stringify(ings)) + ROW_OVERHEAD;
+    const mealId = (n: number) => `meal${String(n).padStart(4, "0")}`;
+
+    /** Fills alice's space with big meals, next to her chili; returns how many fit. */
+    async function fill(): Promise<number> {
+      let used = size("Chili", ingredients);
+      let n = 0;
+      while (used + size(`Meal ${n}`, big) <= MAX_USER_BYTES) {
+        expect((await call("PUT", `/api/meals/${mealId(n)}`, { name: `Meal ${n}`, ingredients: big })).status).toBe(204);
+        used += size(`Meal ${n}`, big);
+        n++;
+      }
+      return n;
+    }
+
+    it("refuses a new meal or prep once the user's preps and meals together would be over the cap", async () => {
+      const n = await fill();
+      expect(n).toBeGreaterThan(10);
+      const refused = await call("PUT", `/api/meals/${mealId(n)}`, { name: `Meal ${n}`, ingredients: big });
+      expect(refused.status).toBe(409);
+      expect(refused.body).toMatchObject({ limit: MAX_USER_BYTES, error: expect.stringContaining("no room") });
+      expect((await call("PUT", "/api/preps/chili009", { name: "Chili", ingredients: big })).status).toBe(409);
+      // Nothing was half-saved.
+      expect((await call("GET", "/api/meals")).body!["meals"]).toHaveLength(n);
+      expect(await preps()).toHaveLength(1);
+    });
+
+    it("counts each user's rows only for that user", async () => {
+      await fill();
+      expect((await call("PUT", "/api/meals/bowl0001", { name: "Bowl", ingredients: big }, { user: "bob" })).status).toBe(204);
+    });
+
+    it("still lets a full user replace a row without growing it, or shrink one, but not grow one", async () => {
+      await fill();
+      expect((await call("PUT", `/api/meals/${mealId(0)}`, { name: "Meal 0", ingredients: big })).status).toBe(204);
+      expect((await call("PUT", "/api/preps/chili001", { name: "Chili", ingredients: big })).status).toBe(409);
+      expect((await preps())[0]!.ingredients).toEqual(ingredients);
+      expect((await call("PUT", `/api/meals/${mealId(1)}`, { name: "Small", ingredients })).status).toBe(204);
+      // Shrinking that meal freed enough for the chili to grow.
+      expect((await call("PUT", "/api/preps/chili001", { name: "Chili", ingredients: big })).status).toBe(204);
+    });
+
+    it("makes room again when a meal is deleted", async () => {
+      const n = await fill();
+      expect((await call("PUT", `/api/meals/${mealId(n)}`, { name: `Meal ${n}`, ingredients: big })).status).toBe(409);
+      expect((await call("DELETE", `/api/meals/${mealId(0)}`)).status).toBe(204);
+      expect((await call("PUT", `/api/meals/${mealId(n)}`, { name: `Meal ${n}`, ingredients: big })).status).toBe(204);
+    });
   });
 
   describe("saved meals", () => {

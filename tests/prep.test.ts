@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { PORTION_SUFFIX, batchProfile, checkIngredients, formatFraction, isFinished, leftOf, parseFraction, portionName, portionOfEntry, portionProfile, type Prep } from "../src/core/prep";
+import { readFileSync } from "node:fs";
+import { SAMPLE_FOODS } from "../src/food/sample-foods";
+import { genericToFoodItem, type GenericsFile } from "../src/food/generics-format";
+import { MAX_FOOD_ID, MAX_LABEL, MAX_UNIT, PORTION_SUFFIX, batchProfile, checkIngredients, ingredientLimitProblem, formatFraction, isFinished, leftOf, parseFraction, portionName, portionOfEntry, portionProfile, type Prep } from "../src/core/prep";
 
 describe("parseFraction", () => {
   it.each([
@@ -80,6 +83,33 @@ describe("checkIngredients", () => {
 
   it("refuses a meal prep as an ingredient", () => {
     expect(() => checkIngredients([{ ...good, ref: { source: "prep", id: "chili001" } }])).toThrow("unknown food");
+  });
+
+  it("accepts every field at its limit, and nothing over it", () => {
+    const longest = { ...good, ref: { source: "off", id: "1".repeat(MAX_FOOD_ID) }, label: "é".repeat(MAX_LABEL), unit: `portion:${"s".repeat(MAX_UNIT - 8)}` };
+    expect(checkIngredients([longest])).toEqual([longest]);
+    expect(() => checkIngredients([{ ...longest, ref: { source: "off", id: "1".repeat(MAX_FOOD_ID + 1) } }])).toThrow("unknown food");
+    expect(() => checkIngredients([{ ...longest, label: "é".repeat(MAX_LABEL + 1) }])).toThrow("no name");
+    expect(() => checkIngredients([{ ...longest, unit: "s".repeat(MAX_UNIT + 1) }])).toThrow("no unit");
+  });
+});
+
+describe("ingredientLimitProblem", () => {
+  const food = { ref: { source: "off" as const, id: "9300000000001" }, name: "Muesli", brand: "Brand", portions: [{ name: "1 bowl (45 g)", amount: 45, unit: "g" as const }] };
+
+  it("agrees with checkIngredients on what can be saved", () => {
+    expect(ingredientLimitProblem(food)).toBeUndefined();
+    // The label joins the name and brand as "Name (Brand)".
+    expect(ingredientLimitProblem({ ...food, brand: "b".repeat(MAX_LABEL - 9) })).toBeUndefined();
+    expect(ingredientLimitProblem({ ...food, brand: "b".repeat(MAX_LABEL - 8) })).toContain("name and brand");
+    expect(ingredientLimitProblem({ ...food, portions: [{ name: "p".repeat(MAX_UNIT - 7), amount: 45, unit: "g" }] })).toContain("portion");
+    expect(ingredientLimitProblem({ ...food, ref: { source: "off", id: "1".repeat(MAX_FOOD_ID + 1) } })).toContain("ID");
+  });
+
+  it("passes every generic and sample food, so all of them can be ingredients", () => {
+    const generics = (JSON.parse(readFileSync(new URL("../src/food/data/generics.json", import.meta.url), "utf8")) as GenericsFile).foods.map(genericToFoodItem);
+    const problems = [...generics, ...SAMPLE_FOODS].map((f) => [f.ref.id, ingredientLimitProblem(f)]).filter(([, p]) => p);
+    expect(problems).toEqual([]);
   });
 });
 

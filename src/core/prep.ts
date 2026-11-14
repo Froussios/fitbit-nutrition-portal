@@ -5,8 +5,9 @@
  * A fraction is always of the whole batch: 1/6 means a sixth of what was cooked, not of what is left.
  */
 
-import type { FoodRef, FoodSource } from "./food";
+import { foodLabel, type FoodItem, type FoodRef, type FoodSource } from "./food";
 import { NUTRIENT_KEYS, scaleProfile, sumProfiles, type NutrientKey, type NutrientProfile } from "./nutrients";
+import { PORTION_PREFIX } from "./units";
 
 /** Below this, a fraction counts as nothing: 1/3 + 1/3 + 1/3 must leave nothing, despite rounding. */
 export const FRACTION_EPSILON = 1e-6;
@@ -18,6 +19,16 @@ export const PORTION_ID = /^[a-z0-9]{8,32}$/;
 export const ENTRY_ID = /^[a-z0-9-]{4,63}$/;
 export const MAX_NAME = 80;
 export const MAX_INGREDIENTS = 60;
+/**
+ * The longest food ID, label and unit an ingredient may have, in UTF-16 units as `String.length` counts them. The food
+ * index builders skip any food that would break one (`ingredientLimitProblem`), so every food in search can be saved.
+ * Generous on purpose: Open Food Facts is trusted, and its long names, brands and serving texts are real (#91).
+ */
+export const MAX_FOOD_ID = 100;
+/** A food's name and brand, as `foodLabel` joins them: the builder keeps 150 characters of the name, and the brand is uncapped. */
+export const MAX_LABEL = 300;
+/** A unit key, or `portion:` and the portion's name, such as a serving text from Open Food Facts. */
+export const MAX_UNIT = 160;
 
 /** One ingredient, with the nutrients worked out when cooking: custom foods can't be reloaded, and the index changes weekly. */
 export interface PrepIngredient {
@@ -145,6 +156,21 @@ const NUTRIENT_SET: ReadonlySet<string> = new Set(NUTRIENT_KEYS);
 const isAmount = (v: unknown, max = 1e7): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max;
 const isText = (v: unknown, max: number): v is string => typeof v === "string" && v.trim() !== "" && v.length <= max;
 
+/**
+ * Why a food could not be saved as an ingredient, or undefined when it can. The food index builders skip such foods,
+ * so that a food found in search never fails `checkIngredients` (#91).
+ */
+export function ingredientLimitProblem(food: Pick<FoodItem, "ref" | "name" | "brand" | "portions">): string | undefined {
+  if (food.ref.id.length > MAX_FOOD_ID) return `ID is ${food.ref.id.length} characters, over ${MAX_FOOD_ID}`;
+  const label = foodLabel(food);
+  if (label.length > MAX_LABEL) return `name and brand are ${label.length} characters, over ${MAX_LABEL}`;
+  for (const p of food.portions) {
+    const unit = `${PORTION_PREFIX}${p.name}`;
+    if (unit.length > MAX_UNIT) return `portion "${p.name.slice(0, 40)}…" makes a unit of ${unit.length} characters, over ${MAX_UNIT}`;
+  }
+  return undefined;
+}
+
 /** Checks ingredients sent to the API; returns only the fields it knows. Throws a message fit to show. */
 export function checkIngredients(value: unknown, what = "prep"): PrepIngredient[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > MAX_INGREDIENTS) throw new Error(`A ${what} needs 1 to ${MAX_INGREDIENTS} ingredients.`);
@@ -155,10 +181,10 @@ export function checkIngredients(value: unknown, what = "prep"): PrepIngredient[
     if (typeof item !== "object" || item === null) return fail("not an ingredient");
     const { ref, label, quantity, unit, profile } = item as Record<string, unknown>;
     const r = ref as Record<string, unknown> | null;
-    if (typeof r !== "object" || r === null || !SOURCES.has(r["source"] as FoodSource) || !isText(r["id"], 100)) fail("unknown food");
-    if (!isText(label, 200)) fail("no name");
+    if (typeof r !== "object" || r === null || !SOURCES.has(r["source"] as FoodSource) || !isText(r["id"], MAX_FOOD_ID)) fail("unknown food");
+    if (!isText(label, MAX_LABEL)) fail("no name");
     if (!isAmount(quantity) || quantity === 0) fail("no amount");
-    if (!isText(unit, 80)) fail("no unit");
+    if (!isText(unit, MAX_UNIT)) fail("no unit");
     const p = profile as Record<string, unknown> | null;
     if (typeof p !== "object" || p === null || !isAmount(p["energyKcal"])) fail("no energy");
     const n = (p as Record<string, unknown>)["nutrients"];

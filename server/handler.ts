@@ -2,13 +2,13 @@
  * The meal prep and saved meal API (DR-24), served by a Pages Function at /api/* on the food index's site.
  *
  *   GET    /api/preps                      the user's preps and their portions
- *   PUT    /api/preps/:id                  create a prep, or replace its name and ingredients
+ *   PUT    /api/preps/:id                  create a prep, or replace its name and ingredients; 409 if out of room
  *   PATCH  /api/preps/:id                  { discarded: boolean }
  *   POST   /api/preps/:id/portions         reserve { id, fraction | null, entryId, eatenAt }; 409 if too much
  *   PATCH  /api/portions/:id               { entryId }: the diary entry exists
  *   DELETE /api/portions/:id               give a portion back
  *   GET    /api/meals                      the user's saved meals
- *   PUT    /api/meals/:id                  create a saved meal, or replace its name and ingredients
+ *   PUT    /api/meals/:id                  create a saved meal, or replace its name and ingredients; 409 if out of room
  *   DELETE /api/meals/:id                  delete a saved meal
  *
  * Every request carries a Google ID token, and the user is whoever it names. Nothing in the
@@ -19,7 +19,7 @@ import { MEAL_ID } from "../src/core/meal";
 import { ENTRY_ID, FRACTION_EPSILON, MAX_NAME, PORTION_ID, PREP_ID, checkIngredients } from "../src/core/prep";
 import { AuthError, GoogleKeys, verifyIdToken, type KeyLookup } from "./auth";
 import type { D1Database } from "./d1";
-import { MealStore, PrepStore } from "./store";
+import { MAX_USER_BYTES, MealStore, PrepStore } from "./store";
 
 export interface Env {
   readonly DB: D1Database;
@@ -34,7 +34,11 @@ export interface Deps {
   readonly now: () => number;
 }
 
-const MAX_BODY = 64 * 1024;
+/**
+ * The largest request body read, in bytes. The largest valid one is about 137 KB: a prep with MAX_INGREDIENTS ingredients
+ * whose every field is at its limit and written in 3-byte characters (a test checks it fits).
+ */
+export const MAX_BODY = 160 * 1024;
 /** Shared by every request this Function instance serves, so that Google's keys are fetched rarely. */
 const googleKeys = new GoogleKeys();
 const defaults: Deps = { keys: googleKeys.lookup, now: Date.now };
@@ -70,18 +74,50 @@ function reply(request: Request, env: Env, status: number, body?: unknown): Resp
   });
 }
 
+/** The body's bytes, refusing it with 413 once it is over MAX_BODY. Stops reading there, whatever Content-Length said. */
+async function readBytes(request: Request): Promise<Uint8Array> {
+  const declared = Number(request.headers.get("Content-Length"));
+  if (declared > MAX_BODY) throw new HttpError(413, "The request is too large.");
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY) {
+      await reader.cancel().catch(() => undefined);
+      throw new HttpError(413, "The request is too large.");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.byteLength;
+  }
+  return bytes;
+}
+
 async function readBody(request: Request): Promise<Record<string, unknown>> {
-  const text = await request.text();
-  if (text.length > MAX_BODY) throw new HttpError(413, "The request is too large.");
+  const bytes = await readBytes(request);
   let value: unknown;
   try {
-    value = JSON.parse(text);
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
     throw new HttpError(400, "The request is not JSON.");
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new HttpError(400, "The request is not an object.");
   return value as Record<string, unknown>;
 }
+
+/** A save refused because the user's preps and saved meals would take more than MAX_USER_BYTES (#91). */
+const full = () =>
+  new HttpError(409, `There's no room to save this: your preps and saved meals are using all ${MAX_USER_BYTES / 1024 / 1024} MB of space. Delete a saved meal, or make this one smaller.`, {
+    limit: MAX_USER_BYTES,
+  });
 
 const isTime = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v > 0 && v < 1e14;
 
@@ -121,7 +157,7 @@ export async function handle(request: Request, env: Env, deps: Deps = defaults):
         } catch (e) {
           throw new HttpError(400, e instanceof Error ? e.message : "Bad ingredients.");
         }
-        await store.save(user, id, name, ingredients, now);
+        if (!(await store.save(user, id, name, ingredients, now))) throw full();
         return reply(request, env, 204);
       }
       if (method === "PATCH") {
@@ -176,7 +212,7 @@ export async function handle(request: Request, env: Env, deps: Deps = defaults):
         } catch (e) {
           throw new HttpError(400, e instanceof Error ? e.message : "Bad ingredients.");
         }
-        await meals.save(user, id, name, ingredients, now);
+        if (!(await meals.save(user, id, name, ingredients, now))) throw full();
         return reply(request, env, 204);
       }
       if (method === "DELETE") {

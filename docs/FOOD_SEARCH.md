@@ -289,7 +289,11 @@ Worker; the index does not change.
 2. Products that fail `fromOffProduct()`: no usable energy value.
 3. Implausible energy (below 0 or above 900 kcal per 100 g/ml).
 4. Products flagged obsolete.
-5. Duplicates (same words in name and brand, same kcal per 100) are collapsed in the word index to the most
+5. Products that could not be saved as a meal prep or saved meal ingredient: a name and brand, barcode or serving
+   text longer than the API's limits (`ingredientLimitProblem` in `src/core/prep.ts`, #91). Open Food Facts is trusted,
+   so the limits are generous and long texts are assumed to be real. The build report lists the first 20, and the run
+   shows a warning, so the limits can be raised if real products are lost.
+6. Duplicates (same words in name and brand, same kcal per 100) are collapsed in the word index to the most
    popular one. Products with no brand and the same name (every word in order: `Milk chocolate` is neither
    `Chocolate milk` nor `Milk with chocolate`) are collapsed whatever their kcal: without a brand,
    nothing in the dropdown tells them apart, and `Vanilla` would otherwise fill every row. All of them stay

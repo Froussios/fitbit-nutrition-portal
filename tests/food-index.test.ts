@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IndexBuilder, type BuildOptions, type RawProduct } from "../pipeline/index-builder";
+import { MAX_FOOD_ID, MAX_LABEL, MAX_UNIT } from "../src/core/prep";
 import { compareMatch, matchRank, parseQuery, productMatches } from "../src/core/tokens";
 import { FoodIndex, IndexNotFoundError, newBudget, type IndexReader } from "../src/food/index-engine";
 import { CHUNK_SIZE, deltas, fromSummaryRow, undeltas, type DictEntry, type SummaryRow } from "../src/food/index-format";
@@ -73,6 +74,23 @@ describe("food index", () => {
       "dropped.obsolete": 1,
       duplicates: 2,
     });
+  });
+
+  it("skips products too long to save as an ingredient, and lists the first ones for the report", () => {
+    const name = "Toasted muesli with almonds and honey ".repeat(4).slice(0, 150);
+    const serving = (text: string) => ({ serving_size: text, serving_quantity: 45, serving_quantity_unit: "g" });
+    const { builder } = build([
+      // At the limits: kept.
+      product("3001", name, { brands: "b".repeat(MAX_LABEL - name.length - 3), ...serving("s".repeat(MAX_UNIT - "portion:".length)) }),
+      product("3002", name, { brands: "b".repeat(MAX_LABEL - name.length - 2) }),
+      product("3003", "Muesli", serving("1 bowl ".repeat(30))),
+      product("4".repeat(MAX_FOOD_ID + 1), "Muesli"),
+    ]);
+    expect(builder.counts).toMatchObject({ read: 4, kept: 1, "dropped.tooLongForIngredient": 3 });
+    expect(builder.tooLong.map((t) => t.code)).toEqual(["3002", "3003", "4".repeat(40)]);
+    expect(builder.tooLong[0]!.problem).toContain(`over ${MAX_LABEL}`);
+    expect(builder.tooLong[1]!.problem).toContain(`over ${MAX_UNIT}`);
+    expect(builder.tooLong[2]!.problem).toContain(`over ${MAX_FOOD_ID}`);
   });
 
   it("ranks branded products first, then by coverage, then popularity", async () => {

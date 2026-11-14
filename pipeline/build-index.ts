@@ -122,12 +122,37 @@ async function main(): Promise<void> {
     "|---|---|",
     ...[...sizes].sort((a, b) => b[1] - a[1]).map(([k, v]) => `| ${k} | ${mb(v)} |`),
     `| **total** | **${mb(bytes)}** in ${files.toLocaleString("en-AU")} files (largest ${mb(largest)}) |`,
+    ...tooLongReport(builder),
   ].join("\n");
   process.stdout.write(`${report}\n`);
+  // On stderr, so that the step summary (stdout) doesn't show it raw; GitHub Actions reads workflow commands from both.
+  const skipped = builder.counts["dropped.tooLongForIngredient"] ?? 0;
+  if (skipped) {
+    process.stderr.write(
+      `::warning title=Food index skipped ${skipped} products::${skipped} products have a name, brand, barcode or serving text too long to save as a meal prep or saved meal ingredient, so they were left out of the index. See the run summary; if they look like real products, raise the limits in src/core/prep.ts (#91).\n`,
+    );
+  }
 
   if (files > maxFiles) throw new Error(`Index has ${files} files, over the limit of ${maxFiles}`);
   if (largest > 20e6) throw new Error(`A file is ${mb(largest)}, over the 20 MB limit (Cloudflare Pages allows 25 MiB)`);
   if (!existsSync(join(versionDir, "meta.json"))) throw new Error("meta.json was not written");
+}
+
+/** The build report's list of products skipped for being too long to save as an ingredient (#91). */
+function tooLongReport(builder: IndexBuilder): string[] {
+  const skipped = builder.counts["dropped.tooLongForIngredient"] ?? 0;
+  if (!skipped) return [];
+  return [
+    "",
+    `### ${skipped.toLocaleString("en-AU")} products skipped: too long to save as an ingredient`,
+    "",
+    "The meal prep API would refuse them (limits in `src/core/prep.ts`). If they look like real products, raise the limits.",
+    "",
+    "| Barcode | Problem |",
+    "|---|---|",
+    ...builder.tooLong.map(({ code, problem }) => `| \`${code.replace(/[`|]/g, "")}\` | ${problem.replace(/[|\n]/g, " ")} |`),
+    ...(skipped > builder.tooLong.length ? [`| … | and ${(skipped - builder.tooLong.length).toLocaleString("en-AU")} more |`] : []),
+  ];
 }
 
 const LICENCE = `Food index derived from Open Food Facts.
