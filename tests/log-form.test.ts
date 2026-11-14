@@ -131,6 +131,12 @@ describe("log form", () => {
     };
     expect(tab(false)).toBe($("button[type=submit]"));
     expect(tab(true)).toBe($("#meal"));
+    // Disabled and hidden controls are passed over; with nothing after the time, it lets go of focus.
+    const eatRest = [...form.element.querySelectorAll("button")].find((b) => b.textContent === "Eat the rest")!;
+    $<HTMLButtonElement>("button[type=submit]").disabled = true;
+    expect(tab(false)).toBe(eatRest);
+    eatRest.parentElement!.hidden = true;
+    expect(tab(false)).toBe(document.body);
   });
 
   it("refuses more than is left, and eats the rest on request", async () => {
