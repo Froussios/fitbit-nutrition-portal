@@ -47,6 +47,7 @@ const tabbable = (node: HTMLElement): boolean =>
  * Makes Tab and Shift+Tab leave a control in one step. Browsers give each part of a
  * date or time input (day, month, year, hour, minute, AM/PM) its own Tab stop; with this,
  * the arrow keys move between those parts instead, as they already do once inside.
+ * It follows plain document order: positive tabindex, `inert` and modal dialogs are not modelled.
  */
 export function singleTabStop(control: HTMLElement): void {
   control.addEventListener("keydown", (e) => {
