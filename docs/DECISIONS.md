@@ -353,3 +353,15 @@ the size of the serving would offer the same amount twice under two names.
 serving is a placeholder `100 g` offers `serving (100 g)`. Multi-serve products still offer `pack (…)`. Indexes built
 earlier keep the old portions until rebuilt.
 **Reopen if.** Placeholder servings are common enough to mislead, or `pack` reads wrongly on products that have one.
+
+### DR-32 Synonyms only for words that name the same food everywhere
+**Decision.** The generic food search's synonym table holds only words that name the same food in every source's
+region: spellings (`yoghurt`, `yogurt`) and regional names (`capsicum`, `bell pepper`). `biscuit` and `cookie` are no
+longer synonyms. Plurals of words ending in `ie` keep the `ie` (`cookies` is `cookie`, not `cooky`)
+([FOOD_SEARCH.md](FOOD_SEARCH.md#13-generic-foods)).
+**Why.** Owner decision (17 November 2026). `cookie` showed AFCD biscuits, including rice crackers and crispbreads, and
+no cookies at all: the 36 AFCD biscuits it matched were enough Australian foods to hide FNDDS, which has 93 cookies.
+The table was added with DR-16 to bridge spelling conventions that split the sources; the biscuit/cookie pair went
+beyond that.
+**Consequence.** `cookie` finds FNDDS cookies, and `biscuit` finds only AFCD biscuits.
+**Reopen if.** Ranking takes the user's region into account, so a regional name could map to its local meaning.

@@ -111,6 +111,11 @@ describe("generic search", () => {
     expect(singular("swiss")).toBe("swiss");
     expect(singular("pies")).toBe(singular("pie"));
     expect(singular("ties")).toBe(singular("tie"));
+    expect(singular("cookies")).toBe("cookie");
+    expect(singular("smoothies")).toBe("smoothie");
+    expect(singular("bries")).toBe("brie");
+    expect(singular("patties")).toBe("patty");
+    expect(names([row("fndds", "1", "Cookie, chocolate chip")], "cookies")).toEqual(["Cookie, chocolate chip"]);
     expect(names(rows, "bananas")).toEqual(["Banana, raw"]);
     expect(names(rows, "tomatoes")).toEqual(["Tomato, raw"]);
     expect(names(rows, "bana")).toEqual(["Banana, raw"]);
@@ -145,6 +150,12 @@ describe("generic search", () => {
     expect(names(rows, "full cream milk")).toEqual(["Milk, cow, fluid, regular fat"]);
     expect(names([row("fndds", "1", "Yogurt, plain")], "yoghurt")).toEqual(["Yogurt, plain"]);
     expect(queryVariants(parseQuery("rice"))).toHaveLength(1);
+  });
+
+  it("does not treat a cookie as a biscuit", () => {
+    const au = Array.from({ length: MIN_PRIMARY_FOODS }, (_, i) => row("afcd", `${i}`, `Biscuit, savoury, kind ${"abc"[i]}`));
+    expect(names([...au, row("fndds", "9", "Cookie, NFS")], "cookie")).toEqual(["Cookie, NFS"]);
+    expect(names([...au, row("fndds", "9", "Cookie, NFS")], "biscuit")).toHaveLength(MIN_PRIMARY_FOODS);
   });
 
   it("finds prefixes and variants of every word in a loose search", () => {

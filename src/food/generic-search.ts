@@ -16,13 +16,16 @@ export const MIN_PRIMARY_FOODS = 3;
 /** Words that describe the plain form of a food, so they don't count against a match, and a name with one wins a tie. */
 const PLAIN_WORDS: ReadonlySet<string> = new Set(["raw", "plain", "fresh", "regular", "fat", "fluid", "whole", "natural", "commercial", "cow", "nfs", "unflavoured", "flesh", "lean", "peeled", "unpeeled"].map(singular));
 
-/** Same word whatever the spelling convention. Applied to the query only: nothing is ever joined on these. */
+/**
+ * Same food whatever the spelling or regional name. Applied to the query only: nothing is ever joined on these.
+ * A pair belongs here only if the words name the same food in every source's region (DR-32), so not
+ * biscuit/cookie: an Australian biscuit is also a cracker.
+ */
 const SYNONYMS: readonly (readonly string[])[] = [
   ["yoghurt", "yogurt"],
   ["prawn", "shrimp"],
   ["capsicum", "bell pepper"],
   ["mince", "ground"],
-  ["biscuit", "cookie"],
   ["crisps", "chips"],
   ["eggplant", "aubergine"],
   ["zucchini", "courgette"],
@@ -39,11 +42,17 @@ const SYNONYMS: readonly (readonly string[])[] = [
   ["oat milk", "oat beverage"],
 ];
 
+/**
+ * Words ending in "ie" whose plural keeps it: "cookies" is "cookie", not "cooky". The ones in the generic food
+ * names; "pattie" is left out, so that "patties" still finds the "Patty" rows.
+ */
+const IE_WORDS: ReadonlySet<string> = new Set(["brie", "brownie", "calorie", "cookie", "hoagie", "movie", "rotisserie", "smoothie", "veggie"]);
+
 /** A simple singular, enough to make "bananas" find "Banana" and "tomatoes" find "Tomato". */
 export function singular(word: string): string {
   if (word.length <= 3 || word.endsWith("ss")) return word;
-  // "berries" is "berry", but "pies" is "pie".
-  if (word.endsWith("ies")) return word.length > 4 ? `${word.slice(0, -3)}y` : word.slice(0, -1);
+  // "berries" is "berry", but "pies" is "pie" and "cookies" is "cookie".
+  if (word.endsWith("ies")) return word.length > 4 && !IE_WORDS.has(word.slice(0, -1)) ? `${word.slice(0, -3)}y` : word.slice(0, -1);
   if (word.endsWith("oes")) return word.slice(0, -2);
   return word.endsWith("s") ? word.slice(0, -1) : word;
 }

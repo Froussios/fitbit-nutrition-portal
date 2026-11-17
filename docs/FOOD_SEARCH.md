@@ -775,10 +775,11 @@ A row with exactly the same name as a higher-priority row is dropped. Its values
 An index built before DR-16 has products with no brand first, so until it is rebuilt those are the candidates a search
 finds first; the 10 chosen are still put in the order above, so the order looks mixed.
 
-**Synonyms** cover spelling conventions, because they split the sources: `yoghurt` appears only in AFCD and `yogurt`
-only in FNDDS. A small table applied to the query also searches the other spelling (`ketchup` and `tomato sauce`,
-`ground` and `mince`, `full cream` and `regular fat`). It changes nothing in the data, and does not apply to product
-search.
+**Synonyms** cover spelling conventions and regional names, because they split the sources: `yoghurt` appears only in
+AFCD and `yogurt` only in FNDDS. A small table applied to the query also searches the other name (`ketchup` and
+`tomato sauce`, `ground` and `mince`, `full cream` and `regular fat`). A pair is added only if both words name the same
+food in every source's region (DR-32): `biscuit` and `cookie` are not a pair, because an Australian biscuit is also a
+cracker or crispbread. It changes nothing in the data, and does not apply to product search.
 
 ### 13.4 Combining with products
 
