@@ -42,8 +42,11 @@ const SYNONYMS: readonly (readonly string[])[] = [
   ["oat milk", "oat beverage"],
 ];
 
-/** Words in the generic food names that end in "ie", whose plural is not "-y" plus "ies": "cookies" is "cookie". */
-const IE_WORDS: ReadonlySet<string> = new Set(["brownie", "calorie", "cookie", "hoagie", "movie", "rotisserie", "smoothie", "veggie"]);
+/**
+ * Words ending in "ie" whose plural keeps it: "cookies" is "cookie", not "cooky". The ones in the generic food
+ * names; "pattie" is left out, so that "patties" still finds the "Patty" rows.
+ */
+const IE_WORDS: ReadonlySet<string> = new Set(["brie", "brownie", "calorie", "cookie", "hoagie", "movie", "rotisserie", "smoothie", "veggie"]);
 
 /** A simple singular, enough to make "bananas" find "Banana" and "tomatoes" find "Tomato". */
 export function singular(word: string): string {

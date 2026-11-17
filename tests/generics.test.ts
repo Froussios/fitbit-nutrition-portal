@@ -113,6 +113,8 @@ describe("generic search", () => {
     expect(singular("ties")).toBe(singular("tie"));
     expect(singular("cookies")).toBe("cookie");
     expect(singular("smoothies")).toBe("smoothie");
+    expect(singular("bries")).toBe("brie");
+    expect(singular("patties")).toBe("patty");
     expect(names([row("fndds", "1", "Cookie, chocolate chip")], "cookies")).toEqual(["Cookie, chocolate chip"]);
     expect(names(rows, "bananas")).toEqual(["Banana, raw"]);
     expect(names(rows, "tomatoes")).toEqual(["Tomato, raw"]);
