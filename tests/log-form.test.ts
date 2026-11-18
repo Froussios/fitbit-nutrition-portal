@@ -31,7 +31,8 @@ function setUp(preps: readonly Prep[] | null = PREPS, meals: readonly SavedMeal[
     discard: vi.fn(async () => ({ text: "Discarded.", error: false })),
   };
   const logMeal = vi.fn<LogMeal>(async () => {});
-  const form = createLogForm(catalog(), vi.fn(async () => {}), () => new Date(2026, 10, 11, 19, 5), actions, logMeal);
+  const onSubmit = vi.fn(async (_draft: unknown) => {});
+  const form = createLogForm(catalog(), onSubmit, () => new Date(2026, 10, 11, 19, 5), actions, logMeal);
   document.body.append(form.element);
   if (preps) form.setPreps({ available: true, preps, busy: new Set() });
   if (meals) form.setMeals({ available: true, meals });
@@ -48,7 +49,7 @@ function setUp(preps: readonly Prep[] | null = PREPS, meals: readonly SavedMeal[
     await vi.advanceTimersByTimeAsync(500);
   };
   const options = () => [...form.element.querySelectorAll("[role=option]")].map((o) => o.querySelector(".opt-name")?.textContent ?? o.textContent);
-  return { form, actions, logMeal, $, visible, type, options };
+  return { form, actions, logMeal, onSubmit, $, visible, type, options };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -116,6 +117,31 @@ describe("log form", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(actions.eat).toHaveBeenCalledWith(PREPS[0], 1 / 6, "DINNER", new Date(2026, 10, 11, 19, 5));
     expect(portion.value).toBe("");
+    // The next entry is likely from the same meal.
+    expect($<HTMLSelectElement>("#meal").value).toBe("DINNER");
+  });
+
+  it("keeps the meal for the next food logged", async () => {
+    const { form, $, type, onSubmit } = setUp();
+    const logFood = async (name: string) => {
+      await type(name);
+      [...form.element.querySelectorAll<HTMLElement>("[role=option]")].find((o) => o.textContent?.includes(name))!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      const qty = $<HTMLInputElement>("#qty");
+      qty.value = "100";
+      qty.dispatchEvent(new Event("input"));
+      form.element.dispatchEvent(new Event("submit", { cancelable: true }));
+      await vi.advanceTimersByTimeAsync(0);
+    };
+    $<HTMLSelectElement>("#meal").value = "BREAKFAST";
+    await logFood("Chickpeas");
+    expect($<HTMLSelectElement>("#meal").value).toBe("BREAKFAST");
+    await logFood("Chia seeds");
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+    expect(onSubmit.mock.calls.map(([d]) => [(d as { food: FoodItem }).food.name, (d as { mealType?: string }).mealType])).toEqual([
+      ["Chickpeas", "BREAKFAST"],
+      ["Chia seeds", "BREAKFAST"],
+    ]);
   });
 
   it("leaves the time with one Tab either way, rather than one per part of the date", () => {
@@ -249,6 +275,7 @@ describe("log form, saved meals", () => {
     await submit(form.element as HTMLFormElement);
     expect(logMeal).toHaveBeenCalledWith(MEALS[0], [expect.objectContaining({ label: "Rice", quantity: 100, profile: { energyKcal: 100, nutrients: { protein: 10 } } })], "LUNCH", new Date(2026, 10, 11, 19, 5));
     expect($("p.form-status").textContent).toBe("Logged Chicken burrito bowl.");
+    expect($<HTMLSelectElement>("#meal").value).toBe("LUNCH");
     // The saved meal is untouched, and the next entry starts from it.
     expect(MEALS[0]!.ingredients[0]!.quantity).toBe(150);
     expect(amounts(form.element).map((i) => i.value)).toEqual(["150", "100"]);
