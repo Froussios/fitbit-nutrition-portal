@@ -183,6 +183,25 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     });
   }
 
+  // A click outside the row closes the editor, as Cancel does. Only a click whose press also began outside counts: not the
+  // click that opened the editor, nor a text selection dragged out of a field. Keyboard focus leaving the row closes nothing.
+  const outside = new AbortController();
+  let pressedOutside = false;
+  const isOutside = (target: EventTarget | null) => {
+    const row = actions.closest("tr");
+    return Boolean(row?.isConnected && target instanceof Node && !row.contains(target));
+  };
+  document.addEventListener("pointerdown", (ev) => (pressedOutside = isOutside(ev.target)), { capture: true, signal: outside.signal });
+  document.addEventListener(
+    "click",
+    (ev) => {
+      const pressed = pressedOutside;
+      pressedOutside = false;
+      if (pressed && !saving && isOutside(ev.target)) onCancel();
+    },
+    { capture: true, signal: outside.signal },
+  );
+
   if (logged) {
     amountField.set(String(logged.amount), logged.unit);
   } else {
@@ -243,6 +262,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
       refresh();
     },
     dispose() {
+      outside.abort();
       lookup.abort();
       amountField.dispose();
     },
