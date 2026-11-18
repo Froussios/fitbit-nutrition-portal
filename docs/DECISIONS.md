@@ -386,6 +386,7 @@ does not exist on the new day, in the hour skipped when daylight saving starts, 
 **Reopen if.** Moving needs the clock time too, or entries are moved often enough to want it from the log form.
 
 ### DR-34 Generic foods rank by what the food is; region only breaks ties
+Which region comes first revised by DR-35.
 Revises DR-16, where USDA foods appeared only when AFCD had fewer than 3 matches.
 **Decision.** The generic food search ranks first by what the food is: a query word that names it (English puts the food
 last, so `Peanut butter` is a butter), then a word that modifies it, then a word after the comma. Then whole words, then
@@ -407,3 +408,23 @@ plain food comes before an Australian compound one. Some half-typed words find a
 **Reopen if.** The app learns the user's country ([#42](https://github.com/Froussios/fitbit-nutrition-portal/issues/42)),
 so region comes from the locale rather than a fixed list of overseas sources; or more class-first names turn up that the
 list of classes misses.
+
+### DR-35 The user's country comes from the device's time zone, never from a location permission
+Revises DR-34, where region meant Australian before US for every user.
+**Decision.** The app works out the user's country in the browser (`userCountry()` in `src/core/countries.ts`): the
+device's time zone first (`Australia/Sydney` is Australia, from a table generated from the IANA time zone database by
+`npm run build:time-zones`), else the region of the first preferred language that has one (`en-AU`), else none. Search
+favours that country: in DR-34's tie-break and choice of which copy to keep, the generic database from it comes first
+(FOOD_SEARCH.md section 13.3); equally good product matches sold there come first; and the dropdown shows its flag.
+With no country, or none that a source is from, nothing is favoured. The product index's fixed order still favours one
+country, chosen when it is built (`INDEX_COUNTRY`, Australia).
+**Why.** Owner request (18 November 2026): the preference for Australian foods was hardcoded, and the app needs only the
+country. Asking for location data would be overreach for a food diary: the geolocation permission gives coordinates,
+and an IP lookup sends the user's address to a service for a country. The time zone is already known to every page,
+needs no prompt, and never leaves the device. It follows where the device is set to be, while a language is only a
+preference (many devices outside the US say `en-US`), so the time zone goes first.
+**Consequence.** A user who sets their device to another country's time zone gets that country. Zones that name no
+country (`UTC`) fall back to the language. A user outside Australia gets products ranked for their country only among
+the candidates the Australian-ordered index offers; a fuller fix needs an index per country or a Worker (#42). Household
+measures (DR-06) and number formats are still Australian.
+**Reopen if.** The index is built per country, or a user's detected country is wrong often enough to want a setting.

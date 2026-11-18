@@ -20,6 +20,8 @@ export class StaticFoodCatalog implements FoodCatalog {
   constructor(
     private readonly baseUrl: string,
     private readonly fetchImpl: typeof fetch = (...a) => fetch(...a),
+    /** The user's country, whose products come first among equally good matches (FoodIndex). */
+    private readonly home?: string,
   ) {}
 
   get label(): string {
@@ -36,7 +38,7 @@ export class StaticFoodCatalog implements FoodCatalog {
         json: (path) => this.fetchJson(base + path),
         bytes: async (path) => new Uint8Array(await (await this.fetchOk(base + path)).arrayBuffer()),
       };
-      return FoodIndex.open(reader);
+      return FoodIndex.open(reader, this.home);
     })();
     this.index.catch(() => (this.index = undefined));
     return this.index;

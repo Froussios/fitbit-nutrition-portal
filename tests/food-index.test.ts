@@ -160,10 +160,27 @@ describe("food index", () => {
     expect(await names(index, "chocolate")).toEqual(["Milk chocolate", "Milk chocolate", "Probiotic chocolate", "Milk chocolate"]);
   });
 
-  it("counts entries sold in Australia for more", async () => {
+  it("counts entries sold in the index's country for more", async () => {
     const american = Array.from({ length: 5 }, (_, i) => product(`830${i}`, "Whole milk", { brands: `Maker${i}`, nutriments: { "energy-kcal_100g": 60 + i } }));
     const index = await FoodIndex.open(build([...american, product("8310", "Lite milk", { brands: "Aussie", countries_tags: ["en:australia"], nutriments: { "energy-kcal_100g": 64 } })]).reader);
     expect((await names(index, "milk"))[0]).toBe("Lite milk");
+  });
+
+  it("puts equally good matches sold in the user's country first", async () => {
+    const records = [
+      product("8401", "Oat milk", { brands: "Acme", unique_scans_n: 900, countries_tags: ["en:united-states"] }),
+      product("8402", "Oat milk", { brands: "Bolt", unique_scans_n: 1, countries_tags: ["en:united-kingdom", "en:ireland"] }),
+      product("8403", "Oat milk drink", { brands: "Crest", countries_tags: ["en:united-kingdom"] }),
+    ];
+    const brands = async (home: string | undefined) => {
+      const index = await FoodIndex.open(build(records).reader, home);
+      return (await index.summaries(await index.search(parseQuery("oat milk")))).map((r) => r[2]);
+    };
+    expect(await brands(undefined)).toEqual(["Acme", "Bolt", "Crest"]);
+    expect(await brands("US")).toEqual(["Acme", "Bolt", "Crest"]);
+    // A better match still wins: the extra word puts Crest last wherever the user is.
+    expect(await brands("GB")).toEqual(["Bolt", "Acme", "Crest"]);
+    expect(await brands("IE")).toEqual(["Bolt", "Acme", "Crest"]);
   });
 
   it("puts food matches before flavour matches, even with no brand listed", async () => {

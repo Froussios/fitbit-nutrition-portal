@@ -1,3 +1,4 @@
+import { sourceCountry } from "../core/countries";
 import { CHUNK_FOR_WORDS, fold, looseForms, parseQuery, sameNameKey, STOP_WORDS, type ParsedQuery } from "../core/tokens";
 import { genericToFoodItem, type GenericRow } from "./generics-format";
 
@@ -7,12 +8,6 @@ import { genericToFoodItem, type GenericRow } from "./generics-format";
  * prepared after it: "Milk, cow, fluid". Before the comma, English puts the
  * food last, as in product names: "Peanut butter" is a butter (DR-34).
  */
-
-/**
- * Sources from outside Australia. Region only breaks ties between foods that answer the query equally well
- * (DR-34): it never hides a food, and never lifts a worse match above a better one.
- */
-const OVERSEAS_SOURCES: ReadonlySet<string> = new Set(["fndds", "usda"]);
 
 /**
  * Class words that a name can put before the food itself: AFCD writes peanuts as "Nut, peanut" and chia as
@@ -129,6 +124,7 @@ interface Indexed {
   readonly nouns: readonly string[];
   /** The other words: how the food is prepared, or which variety it is. */
   readonly rest: readonly string[];
+  /** From a source outside the user's country, when another source is from it (DR-35). */
   readonly overseas: boolean;
   /**
    * Its words apart from plain words and numbers, in order, before and after the first comma: two sources' rows
@@ -179,13 +175,13 @@ const partsOf = (text: string, joiner: RegExp) => text.split(joiner).map(wordsOf
 
 const firstSegment = (name: string) => wordsOf(name.split(SEGMENT)[0] ?? "");
 
-function indexRow(row: GenericRow, heads: HeadsBySource): Indexed {
+function indexRow(row: GenericRow, heads: HeadsBySource, overseas: boolean): Indexed {
   const name = row[2];
   const [headText = "", ...after] = name.split(SEGMENT);
   const words = wordsOf(name);
   const keyOf = (text: string) => wordsOf(text).filter((w) => !isMinor(w)).join(" ");
   const key = `${keyOf(headText)}|${keyOf(after.join(","))}`;
-  const base = { row, words, overseas: OVERSEAS_SOURCES.has(row[0]), key };
+  const base = { row, words, overseas, key };
   const first = wordsOf(headText);
   const second = wordsOf(after[0] ?? "");
   // "Nut, peanut" is a nut and a peanut, unless the source also has a food named by that word alone: AFCD's
@@ -229,7 +225,7 @@ const compare = (a: readonly number[], b: readonly number[]) => {
  * 2. Every query word is whole, rather than the start of a longer word: "Coke" before "Cokelat". A half-typed
  *    word that names the food still comes before a whole word that only modifies it: "tom" finds tomatoes
  *    before a Tom Collins.
- * 3. Australian before overseas. This only chooses between foods that are equally what was asked for: it can't
+ * 3. The user's country before overseas (DR-35). This only chooses between foods that are equally what was asked for: it can't
  *    put "Peanut butter" above "Peanuts" for "peanuts", but it can put potato crisps above apple crisp.
  * 4. The query's own noun, its last word, is the food's: "chocolate milk" finds the milk drink before the bar
  *    "Chocolate, milk". Only after region: AFCD often names the cut after the comma ("Pork, loin chop"), so as the
@@ -280,18 +276,25 @@ export class GenericIndex {
   private readonly foods: readonly Indexed[];
   private readonly byId = new Map<string, GenericRow>();
 
-  constructor(rows: readonly GenericRow[]) {
+  /**
+   * @param home the user's country (`userCountry()`, DR-35). Region only breaks ties between foods that answer the
+   * query equally well (DR-34): foods from sources outside it come after, and a copy of one of its foods is left out.
+   * When no source is from it, or it is unknown, every source counts the same.
+   */
+  constructor(rows: readonly GenericRow[], home?: string) {
+    const fromHome = (r: GenericRow) => home !== undefined && sourceCountry(r[0]) === home;
+    const anyFromHome = rows.some(fromHome);
     const heads = new Map<string, Set<string>>();
     for (const r of rows) {
       const first = firstSegment(r[2]).join(" ");
       if (!heads.has(r[0])) heads.set(r[0], new Set());
       heads.get(r[0])!.add(first);
     }
-    this.foods = rows.map((r) => indexRow(r, heads));
+    this.foods = rows.map((r) => indexRow(r, heads, anyFromHome && !fromHome(r)));
     for (const r of rows) this.byId.set(`${r[0]}:${r[1].toLowerCase()}`, r);
   }
 
-  /** The best foods for a query, Australian first among equally good matches (rankFood). */
+  /** The best foods for a query, the user's country's first among equally good matches (rankFood). */
   search(query: string | ParsedQuery): GenericRow[] {
     const q = typeof query === "string" ? parseQuery(query) : query;
     const variants = queryVariants(q);
@@ -305,9 +308,9 @@ export class GenericIndex {
       }
       if (best) found.push({ food, rank: best });
     }
-    // An overseas food is left out when an Australian one that matched has the same words on each side of the
-    // first comma, apart from plain words and numbers: "Milk, whole" adds nothing to "Milk, cow, fluid, regular
-    // fat (~3.5%)". Its values are never merged into the Australian food's.
+    // An overseas food is left out when one from the user's country that matched has the same words on each side
+    // of the first comma, apart from plain words and numbers: for an Australian user, "Milk, whole" adds nothing to
+    // "Milk, cow, fluid, regular fat (~3.5%)". Its values are never merged into the other food's.
     const local = new Set(found.filter((f) => !f.food.overseas).map((f) => f.food.key));
     const seen = new Set<string>();
     const out: GenericRow[] = [];

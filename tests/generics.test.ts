@@ -89,7 +89,9 @@ describe("generic foods builder", () => {
 const row = (source: FoodSource, id: string, name: string, kcal = 100): GenericRow => [source, id, name, "g", kcal, [], null, []];
 
 describe("generic search", () => {
-  const names = (rows: readonly GenericRow[], query: string) => new GenericIndex(rows).search(query).map((r) => r[2]);
+  /** For a user in Australia unless `home` says otherwise; null when the user's country is unknown. */
+  const names = (rows: readonly GenericRow[], query: string, home: string | null = "AU") =>
+    new GenericIndex(rows, home ?? undefined).search(query).map((r) => r[2]);
 
   it("treats the words before the first comma as the food", () => {
     const rows = [row("afcd", "1", "Bread, banana, commercial"), row("afcd", "2", "Chocolate, milk"), row("afcd", "3", "Milk, cow, fluid"), row("afcd", "4", "Banana, cavendish, peeled, raw")];
@@ -146,6 +148,25 @@ describe("generic search", () => {
     expect(names(crisps, "apple crisp")).toEqual(["Crisp, apple"]);
   });
 
+  it("takes region from the user's country, wherever that is", () => {
+    const honey = [row("fndds", "1", "Honey, raw"), row("afcd", "2", "Honey, floral")];
+    expect(names(honey, "honey", "AU")).toEqual(["Honey, floral", "Honey, raw"]);
+    expect(names(honey, "honey", "US")).toEqual(["Honey, raw", "Honey, floral"]);
+    // For a US user, the Australian copy of a US food is the one left out.
+    const same = [row("fndds", "1", "Honey", 304), row("afcd", "2", "Honey", 278)];
+    expect(new GenericIndex(same, "US").search("honey").map((r) => r[0])).toEqual(["fndds"]);
+  });
+
+  it("favours no source when none is from the user's country, or the country is unknown", () => {
+    for (const home of ["GB", null]) {
+      // Ties fall to the other rules: "Honey" leaves nothing unsaid.
+      expect(names([row("afcd", "1", "Honey, floral"), row("fndds", "2", "Honey")], "honey", home)).toEqual(["Honey", "Honey, floral"]);
+      // Rows with the same words from different sources are both kept, unless the whole name is the same.
+      const milk = [row("fndds", "1", "Milk, whole", 61), row("afcd", "2", "Milk, cow, fluid, whole")];
+      expect(names(milk, "milk", home)).toHaveLength(2);
+    }
+  });
+
   it("shows US foods however many Australian foods match", () => {
     const au = Array.from({ length: 6 }, (_, i) => row("afcd", `${i}`, `Yoghurt, kind ${"abcdef"[i]}`));
     expect(names([...au, row("fndds", "9", "Yogurt, Greek")], "yoghurt")).toContain("Yogurt, Greek");
@@ -181,10 +202,10 @@ describe("generic search", () => {
   });
 
   it("drops a US food with the same words as an Australian one that matched, but never merges values", () => {
-    const hits = new GenericIndex([row("fndds", "1", "Honey", 304), row("afcd", "2", "Honey", 278)]).search("honey");
+    const hits = new GenericIndex([row("fndds", "1", "Honey", 304), row("afcd", "2", "Honey", 278)], "AU").search("honey");
     expect(hits.map((r) => [r[0], r[4]])).toEqual([["afcd", 278]]);
     const milk = [row("fndds", "1", "Milk, whole", 61), row("afcd", "2", "Milk, cow, fluid, regular fat (~3.5%)", 64), row("fndds", "3", "Milk, reduced sodium")];
-    expect(new GenericIndex(milk).search("milk").map((r) => [r[2], r[4]])).toEqual([["Milk, cow, fluid, regular fat (~3.5%)", 64], ["Milk, reduced sodium", 100]]);
+    expect(new GenericIndex(milk, "AU").search("milk").map((r) => [r[2], r[4]])).toEqual([["Milk, cow, fluid, regular fat (~3.5%)", 64], ["Milk, reduced sodium", 100]]);
     // The comma counts: AFCD's milk chocolate bar is not FNDDS's chocolate milk drink.
     expect(names([row("afcd", "1", "Chocolate, milk"), row("fndds", "2", "Chocolate milk, NFS")], "chocolate milk")).toHaveLength(2);
     // Within one source, rows that differ only in plain words are different foods.
@@ -392,7 +413,7 @@ describe("the committed generic foods file", () => {
     expect(count("fndds")).toBeGreaterThan(5000);
     expect(f.foods.every((r) => r[4] >= 0 && r[4] <= 950 && r[2].length > 0)).toBe(true);
     expect(new Set(f.foods.map((r) => `${r[0]}:${r[1]}`)).size).toBe(f.foods.length);
-    const index = new GenericIndex(f.foods);
+    const index = new GenericIndex(f.foods, "AU");
     const milk = index.search("milk")[0]!;
     expect(milk[2]).toMatch(/^Milk, cow, fluid, regular fat/);
     expect(milk[4]).toBeGreaterThan(55);

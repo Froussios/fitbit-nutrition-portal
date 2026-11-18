@@ -112,7 +112,7 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 * **Line 2:** brand · pack size (Open Food Facts `quantity`), or **Generic** for a food from an authoritative
   source, or **No brand listed** for an Open Food Facts product with no brand. Then a tag naming the row's source,
   so a bad value can be traced to its database: `Open Food Facts`, `AFCD` or `FNDDS`. Then a small flag for where the
-  food is sold: Australia's if the product lists it, else the first country listed, then `+N` for the others; the
+  food is sold: the user's country (DR-35) if the product lists it, else the first country listed, then `+N` for the others; the
   tooltip names them all. Generic foods show their database's country (AFCD 🇦🇺, FNDDS 🇺🇸). No flag when Open Food
   Facts lists no country, which doesn't mean the product isn't sold here (section 5). Flags are emoji, which Windows
   draws as two letters (`AU`). Right: energy per serving when the product has a serving size, e.g. `107 kcal / 2 biscuits (30 g)`.
@@ -181,7 +181,8 @@ shown next (section 13, DR-16). Open Food Facts products follow, ordered by thes
 | 5 | **Fewer extra words:** name words that are not query words. | `Vanilla (Queen)` before `Vanilla extract (Queen)` |
 | 6 | **More query words in the name.** | `Vanilla queen (Other)` before `Vanilla extract (Queen)`, searching `vanilla queen` |
 | 7 | **More query words in the brand as well.** | `Vanilla (Vanilla Queen)` before `Vanilla (Queen)` |
-| 8 | **More popular** (below). | |
+| 8 | **Sold in the user's country** (DR-35), among the products a search fetched. It comes before popularity. | Searching `oat milk` in the UK: `Oat milk (Bolt)`, sold in the UK, before `Oat milk (Acme)`, sold in the US, however often Acme is scanned |
+| 9 | **More popular** (below). | |
 
 **Food or flavour (rule 3).** `headWords` in `src/core/tokens.ts` uses word position. English puts the food last, so
 `Dark chocolate` is a chocolate and `Chocolate milk` is a milk. Sizes (`455g`) and anything after `with`, `in`, a
@@ -197,16 +198,16 @@ build the rule: 90% correct, against 45% for treating every match as the food. K
 * **English word order only**, for now.
 
 Popularity is estimated in two steps. First the **number of entries with exactly this name**, of any brand, with
-entries sold in Australia counting 10 times. Few records have a scan count, while every record has a name, and this
+entries sold in the index's country (`INDEX_COUNTRY`, Australia) counting 10 times. Few records have a scan count, while every record has a name, and this
 is what brings `Milk chocolate` (334 entries) above `Probiotic chocolate`. Ties then fall to:
 
 ```
 popularity = log10(1 + unique_scans_n)       how often Open Food Facts apps have scanned it
-           + 2 if sold in Australia          (countries_tags has en:australia)
+           + 2 if sold in INDEX_COUNTRY      (countries_tags has en:australia)
            + completeness                    0..1, Open Food Facts' own score
 ```
 
-**Pre-sorted index.** Rules 4, 5 and 8 mostly do not depend on the query, so the builder numbers the products in
+**Pre-sorted index.** Rules 4, 5 and 9 mostly do not depend on the query, so the builder numbers the products in
 this fixed order: branded first, then fewer distinct name words, then fewer distinct words in the name and brand
 together, then more entries with the same name, then more popular. A word has three sorted lists of product IDs:
 products where it says what the food is, products with it elsewhere in the name, and products with it only in the
@@ -217,12 +218,14 @@ has, is used up (rule 2), so the engine can jump straight to those IDs.
 
 Each tier is one pass over the lists (section 6.2). A pass stops as soon as no later product could beat the
 10 it has: a later product's extra words are at least its word count minus the number of query words. For a
-one-word search that is simply the first 10 IDs after any used-up products. Rule 7 needs the brand text, so it
-only orders the 10 chosen products; it cannot bring a product into them. Popularity only separates products with
+one-word search that is simply the first 10 IDs after any used-up products. Rules 7 and 8 need the summary
+text (the brand, and the countries a product is sold in), so they only order the 10 chosen products; they cannot
+bring a product into them. Rule 8 is the only one that depends on the user, so the index's own order still favours
+the country it was built for (`INDEX_COUNTRY`, section 12). Popularity only separates products with
 the same word counts, so among equally good matches a shorter brand comes first.
 
 The order is approximate in two cases: a last word of 2 or 3
-letters that many words start with (`milk ch`) checks at most 100 candidates (section 6.2), and rule 7 above.
+letters that many words start with (`milk ch`) checks at most 100 candidates (section 6.2), and rules 7 and 8 above.
 Tests compare the engine with a brute-force ranking of every product.
 
 ### 4.4 If exact words prove too strict
@@ -472,8 +475,8 @@ For a query `dark choc`:
    cut the median search from 325 KB to 155 KB for common names, and found 95% of rare names, up from 90%. Rare names
    cost a little more, a median of 165 KB up from 143 KB.
 5. **Brand only (third tier), if there is still room.** Intersect the brand-only lists. Fixed order is exact here.
-6. **Summaries.** Fetch the summary files holding the chosen IDs, put them in final order (`matchRank`) and
-   compute highlight runs from the query words.
+6. **Summaries.** Fetch the summary files holding the chosen IDs, put them in final order (`matchRank`, then sold in
+   the user's country, then ID: rules 7 to 9 in section 4.3) and compute highlight runs from the query words.
 7. **On choosing a row**, `get()` fetches that product's detail file and assembles the `FoodItem`.
 
 The engine also reads format 2 indexes, where a word has a single list, so the app can ship before the index is
@@ -695,10 +698,12 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
 * **Reconciling products.** Identical Open Food Facts entries still disagree (`Vegemite (Vegemite)`: 6 and 177
   kcal). Generic foods now cover the worst cases, and they no longer carry the unbranded ones' values
   ([#41](https://github.com/Froussios/fitbit-nutrition-portal/issues/41)).
-* **Australian weighting.** Entries sold in Australia count 10 times when estimating popularity, because plain
-  counts lean American (`Whole milk` 350 entries, `Full cream milk` 71). The factor of 10 is a judgement call that
-  has not been checked against real data; the first real build should show whether it is right. The country should
-  come from the client's locale instead: [#42](https://github.com/Froussios/fitbit-nutrition-portal/issues/42).
+* **Index country weighting.** Entries sold in the index's country (`INDEX_COUNTRY` in `pipeline/index-builder.ts`,
+  Australia) count 10 times when estimating popularity, because plain counts lean American (`Whole milk` 350 entries,
+  `Full cream milk` 71). The factor of 10 is a judgement call that has not been checked against real data; the first
+  real build should show whether it is right. The user's own country (DR-35) only reorders equally good matches among
+  the products a search fetched; a user elsewhere still gets candidates chosen in the index's order
+  ([#42](https://github.com/Froussios/fitbit-nutrition-portal/issues/42)).
 * **Data per search.** Over budget and accepted for now: section 9.1.
 * **Candidate limit.** After other words, a 2- or 3-letter last word that starts more than 16 dictionary words may
   check up to 100 candidates against their text (section 6.2), which can miss matches while the word is half typed
@@ -781,9 +786,11 @@ join key either: AFCD and AUSNUT share 1,201 food keys, and only 482 of those ha
    except a plural that names another food: potato `crisps` are a snack, an apple `crisp` a dessert. Because rule 1
    comes first, a half-typed word that names the food beats a whole word that only modifies one: `tom` finds tomatoes
    before a Tom Collins.
-3. **Australian before US.** Region only chooses between foods that are equally what was asked for. It can't put
+3. **The user's country first** (DR-35): for a user in Australia AFCD before FNDDS, in the US the other way round.
+   When no source is from the user's country, or it is unknown, this rule and the dropping of copies below don't
+   apply. Region only chooses between foods that are equally what was asked for. For an Australian user it can't put
    AFCD's peanut butter above FNDDS's peanuts, but it puts AFCD's peanuts above FNDDS's, and potato crisps above apple
-   crisp. FNDDS foods are never hidden for being from the US.
+   crisp. No food is ever hidden for being from another country. The examples below are for an Australian user.
 4. **The query's own noun.** Of foods equal so far, the one whose food is the query's last word: `chocolate milk`
    finds AFCD's milk drink before its bar `Chocolate, milk`, and `milk chocolate` the bar first. It comes after
    region, not before it, because AFCD often names a cut after the comma (`Pork, loin chop`, `Beef, mince`), where
@@ -795,7 +802,7 @@ join key either: AFCD and AUSNUT share 1,201 food keys, and only 482 of those ha
    `Peanut butter`, and `Milk, cow, fluid, flavoured, chocolate` against `Chocolate, milk`.
 6. **The plain form:** a name with a plain word, then the shortest name.
 
-A US food is dropped when an Australian food that matched has the same words before the first comma and the same
+A food from another country is dropped when one from the user's country that matched has the same words before the first comma and the same
 words after it, apart from plain words and numbers: `Milk, whole` adds nothing to `Milk, cow, fluid, regular fat
 (~3.5%)`, nor `Cheese, Cheddar` to `Cheese, cheddar, natural, regular fat`. The comma counts: AFCD's bar
 `Chocolate, milk` doesn't hide FNDDS's drink `Chocolate milk, NFS`. Numbers are left out on purpose, so a regional

@@ -225,13 +225,13 @@ export function highlightRuns(text: string, q: ParsedQuery): TextRun[] {
 
 /**
  * Popularity used to break ties between equally good matches: how often Open
- * Food Facts apps scanned the product, a boost for products sold in Australia,
- * and Open Food Facts' completeness score (0..1).
+ * Food Facts apps scanned the product, a boost for products sold in the country
+ * the index is built for (INDEX_COUNTRY), and Open Food Facts' completeness score (0..1).
  */
-export function popularity(uniqueScans: number | undefined, soldInAustralia: boolean, completeness: number | undefined): number {
+export function popularity(uniqueScans: number | undefined, soldInIndexCountry: boolean, completeness: number | undefined): number {
   const scans = Number.isFinite(uniqueScans) && uniqueScans! > 0 ? uniqueScans! : 0;
   const complete = Number.isFinite(completeness) ? Math.min(1, Math.max(0, completeness!)) : 0;
-  return Math.log10(1 + scans) + (soldInAustralia ? 2 : 0) + complete;
+  return Math.log10(1 + scans) + (soldInIndexCountry ? 2 : 0) + complete;
 }
 
 /**
@@ -264,7 +264,7 @@ export interface RankedProduct {
   readonly branded: boolean;
   readonly nameWordCount: number;
   readonly productWordCount: number;
-  /** Entries of any brand with this exact name, weighted towards Australia: an estimate of how popular the food is. */
+  /** Entries of any brand with this exact name, weighted towards the index's country: an estimate of how popular the food is. */
   readonly sameNameCount: number;
   readonly popularity: number;
   readonly key: string;

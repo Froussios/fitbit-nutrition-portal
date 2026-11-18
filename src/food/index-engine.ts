@@ -209,14 +209,16 @@ export class FoodIndex {
   private constructor(
     private readonly reader: IndexReader,
     readonly meta: IndexMeta,
+    private readonly home: string | undefined,
   ) {}
 
-  static async open(reader: IndexReader): Promise<FoodIndex> {
+  /** @param home the user's country (`userCountry()`): among equally good matches, products sold there come first. */
+  static async open(reader: IndexReader, home?: string): Promise<FoodIndex> {
     const meta = await reader.json<IndexMeta>("meta.json");
     if (meta.format !== INDEX_FORMAT && meta.format !== LEGACY_INDEX_FORMAT) {
       throw new Error(`Food index format ${meta.format} is not supported (expected ${INDEX_FORMAT})`);
     }
-    return new FoodIndex(reader, meta);
+    return new FoodIndex(reader, meta, home);
   }
 
   /** Reads a file once per session; failed reads are retried next time. */
@@ -415,12 +417,18 @@ export class FoodIndex {
     return this.inRankOrder(hits, q);
   }
 
-  /** The text-based ranking of the chosen products: it also sees brand matches of words that are in the name. */
+  /**
+   * The text-based ranking of the chosen products: it also sees brand matches of words that are in the name. Equally
+   * good matches sold in the user's country go first. The index's own order favours the country it was built for
+   * (INDEX_COUNTRY in pipeline/index-builder.ts), so this can only reorder the products chosen, not bring others in.
+   */
   private async inRankOrder(ids: readonly number[], q: ParsedQuery): Promise<number[]> {
     const rows = await this.summaries(ids);
+    const home = this.home;
+    const away = (row: SummaryRow) => (home !== undefined && row[9]?.split(" ").includes(home) ? 0 : 1);
     return ids
-      .map((id, i) => ({ id, rank: matchRank(q, rows[i]![1], rows[i]![2] ?? undefined) }))
-      .sort((a, b) => compareMatch(a.rank, b.rank) || a.id - b.id)
+      .map((id, i) => ({ id, rank: matchRank(q, rows[i]![1], rows[i]![2] ?? undefined), away: away(rows[i]!) }))
+      .sort((a, b) => compareMatch(a.rank, b.rank) || a.away - b.away || a.id - b.id)
       .map((h) => h.id);
   }
 

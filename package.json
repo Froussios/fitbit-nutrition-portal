@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.pipeline.json",
     "test": "vitest run",
     "build:index": "node --max-old-space-size=6144 --import tsx pipeline/build-index.ts",
-    "build:generics": "node --import tsx pipeline/build-generics.ts"
+    "build:generics": "node --import tsx pipeline/build-generics.ts",
+    "build:time-zones": "node --import tsx pipeline/build-time-zones.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
