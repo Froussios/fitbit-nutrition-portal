@@ -1,4 +1,3 @@
-import { HOME_COUNTRY } from "../src/core/countries";
 import { summarise } from "../src/core/food-summary";
 import { fromOffProduct, type OffProduct } from "../src/core/off";
 import { usefulPortions } from "../src/core/portions";
@@ -67,12 +66,17 @@ export interface BuildOptions {
 
 const MAX_NAME = 150;
 /**
- * How much more an entry sold in Australia counts when estimating how popular a food is. Open Food
+ * The country whose products the index's fixed order favours. Search runs over that order without a server, so it
+ * is chosen when the index is built, not per user; the browser then puts products sold in the user's own country
+ * (`userCountry()`) first among the equally good matches it fetched (#42).
+ */
+export const INDEX_COUNTRY = "AU";
+/**
+ * How much more an entry sold in INDEX_COUNTRY counts when estimating how popular a food is. Open Food
  * Facts leans American, so plain counts would rank "Whole milk" (350 entries) far above "Full cream
  * milk" (71) for Australian users. Not yet checked against the real data: see docs/FOOD_SEARCH.md section 12.
- * To come from the client's locale instead: #42.
  */
-const AUSTRALIA_WEIGHT = 10;
+const INDEX_COUNTRY_WEIGHT = 10;
 const MAX_KCAL = 900;
 
 interface Doc {
@@ -86,7 +90,7 @@ interface Doc {
   /** Filled in once every product has been read. */
   sameNameCount: number;
   readonly nameKey: string;
-  /** Sold in HOME_COUNTRY. */
+  /** Sold in INDEX_COUNTRY. */
   readonly soldHere: boolean;
   readonly popularity: number;
   readonly dedupeKey: string;
@@ -165,8 +169,8 @@ export class IndexBuilder {
       productWordCount: productWordCount(food.name, food.brand),
       sameNameCount: 0,
       nameKey: sameNameKey(food.name),
-      soldHere: countries.includes(HOME_COUNTRY),
-      popularity: popularity(raw.unique_scans_n, countries.includes(HOME_COUNTRY), raw.completeness),
+      soldHere: countries.includes(INDEX_COUNTRY),
+      popularity: popularity(raw.unique_scans_n, countries.includes(INDEX_COUNTRY), raw.completeness),
       // Unbranded products with the same name can't be told apart in the dropdown, whatever their energy.
       dedupeKey: food.brand ? `${sortedWords}|${Math.round(kcal)}` : sameNameKey(food.name),
       key: code,
@@ -186,7 +190,7 @@ export class IndexBuilder {
 
     // How common each exact name is, across all brands: an estimate of how popular the food is.
     const sameName = new Map<string, number>();
-    for (const d of this.docs) sameName.set(d.nameKey, (sameName.get(d.nameKey) ?? 0) + (d.soldHere ? AUSTRALIA_WEIGHT : 1));
+    for (const d of this.docs) sameName.set(d.nameKey, (sameName.get(d.nameKey) ?? 0) + (d.soldHere ? INDEX_COUNTRY_WEIGHT : 1));
     for (const d of this.docs) d.sameNameCount = sameName.get(d.nameKey)!;
     sameName.clear();
 

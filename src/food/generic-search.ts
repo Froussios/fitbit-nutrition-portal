@@ -1,3 +1,4 @@
+import { sourceCountry } from "../core/countries";
 import { CHUNK_FOR_WORDS, fold, looseForms, parseQuery, sameNameKey, STOP_WORDS, type ParsedQuery } from "../core/tokens";
 import { genericToFoodItem, type GenericRow } from "./generics-format";
 
@@ -8,9 +9,10 @@ import { genericToFoodItem, type GenericRow } from "./generics-format";
  * before the first comma.
  */
 
-/** Australian sources come first; these show only when the Australian ones have too little. */
-const FALLBACK_SOURCES: ReadonlySet<string> = new Set(["fndds", "usda"]);
-/** Below this many Australian foods where a query word is the food, foods from the fallback sources are shown too. */
+/**
+ * Below this many foods from the user's country's sources where a query word is the food, foods from the other
+ * sources are shown too. When no source is from the user's country, every source counts the same.
+ */
 export const MIN_PRIMARY_FOODS = 3;
 
 /** Words that describe the plain form of a food, so they don't count against a match, and a name with one wins a tie. */
@@ -106,9 +108,9 @@ interface Indexed {
   readonly fallback: boolean;
 }
 
-function indexRow(row: GenericRow): Indexed {
+function indexRow(row: GenericRow, fallback: boolean): Indexed {
   const name = row[2];
-  return { row, words: wordsOf(name), head: new Set(wordsOf(name.split(/[,(]/)[0] ?? "")), fallback: FALLBACK_SOURCES.has(row[0]) };
+  return { row, words: wordsOf(name), head: new Set(wordsOf(name.split(/[,(]/)[0] ?? "")), fallback };
 }
 
 /** How well a food answers one version of the query; lower is better. Undefined if it doesn't match. */
@@ -141,12 +143,15 @@ export class GenericIndex {
   private readonly foods: readonly Indexed[];
   private readonly byId = new Map<string, GenericRow>();
 
-  constructor(rows: readonly GenericRow[]) {
-    this.foods = rows.map(indexRow);
+  /** @param home the user's country (`userCountry()`): its sources come first. None favoured when undefined. */
+  constructor(rows: readonly GenericRow[], home?: string) {
+    const fromHome = (r: GenericRow) => home !== undefined && sourceCountry(r[0]) === home;
+    const anyFromHome = rows.some(fromHome);
+    this.foods = rows.map((r) => indexRow(r, anyFromHome && !fromHome(r)));
     for (const r of rows) this.byId.set(`${r[0]}:${r[1].toLowerCase()}`, r);
   }
 
-  /** The best foods for a query. Australian foods first; fallback ones only when few Australian foods are what was asked for. */
+  /** The best foods for a query. The user's country's foods first; other ones only when few of those are what was asked for. */
   search(query: string | ParsedQuery): GenericRow[] {
     const q = typeof query === "string" ? parseQuery(query) : query;
     const variants = queryVariants(q);

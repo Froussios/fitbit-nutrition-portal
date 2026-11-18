@@ -1,4 +1,4 @@
-import { countryName, flagEmoji, foodCountries, shownCountry } from "../core/countries";
+import { countryName, flagEmoji, foodCountries, shownCountry, userCountry } from "../core/countries";
 import { foodLabel, isGenericSource, SOURCE_TAGS } from "../core/food";
 import type { FoodSummary } from "../core/food-summary";
 import type { TextRun } from "../core/tokens";
@@ -66,9 +66,9 @@ function runs(parts: readonly TextRun[]): Node[] {
 const unitLabel = (s: FoodSummary) => `100 ${s.basis}`;
 
 /** A small flag for where the food is sold, with every listed country in its tooltip; null when none is known. */
-export function countryFlag(s: FoodSummary): HTMLElement | null {
+export function countryFlag(s: FoodSummary, home: string | undefined = userCountry()): HTMLElement | null {
   const countries = foodCountries(s);
-  const shown = shownCountry(countries);
+  const shown = shownCountry(countries, home);
   if (!shown) return null;
   const others = countries.filter((c) => c !== shown);
   const verb = isGenericSource(s.ref.source) ? "From" : "Sold in";

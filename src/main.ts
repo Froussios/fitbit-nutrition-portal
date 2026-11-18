@@ -4,6 +4,7 @@ import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_S
 import { canReload, foodLabel } from "./core/food";
 import { copiedEntryId, idFromName, newEntryId } from "./core/ids";
 import { addCivilDays, civilDate, dayLabel, onCivilDate } from "./core/time";
+import { userCountry } from "./core/countries";
 import { dayFromUrl, urlWithDay } from "./core/day-url";
 import type { BaseUnit } from "./core/units";
 import { LocalFoodCatalog, type FoodCatalog } from "./food/catalog";
@@ -1504,7 +1505,7 @@ const FOOD_INDEX_URL = new URL(
 
 /** Products from the Open Food Facts index if it is deployed, otherwise the built-in sample foods. */
 async function openProducts(): Promise<FoodCatalog> {
-  const index = new StaticFoodCatalog(FOOD_INDEX_URL);
+  const index = new StaticFoodCatalog(FOOD_INDEX_URL, undefined, userCountry());
   try {
     const { meta } = await index.open();
     appLog.info("Food index loaded", { url: FOOD_INDEX_URL, version: meta.version, products: meta.docs, builtAt: meta.builtAt });
@@ -1516,8 +1517,9 @@ async function openProducts(): Promise<FoodCatalog> {
 }
 
 async function openCatalog(): Promise<LoggedFoodsCatalog> {
-  const catalog = new CombinedCatalog(genericsUrl, await openProducts(), `${import.meta.env.BASE_URL}generics-LICENSE.txt`);
+  const catalog = new CombinedCatalog(genericsUrl, await openProducts(), `${import.meta.env.BASE_URL}generics-LICENSE.txt`, undefined, userCountry());
   catalog.load().catch((e: unknown) => appLog.warn("Generic foods are unavailable", { error: describeError(e) }));
+  appLog.info("Search favours foods from the user's country", { country: userCountry() ?? "unknown" });
   return new LoggedFoodsCatalog(catalog);
 }
 

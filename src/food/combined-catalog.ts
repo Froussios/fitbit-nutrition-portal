@@ -51,6 +51,8 @@ export class CombinedCatalog implements FoodCatalog {
     private readonly products: FoodCatalog,
     private readonly licenceUrl: string,
     private readonly fetchImpl: typeof fetch = (...a) => fetch(...a),
+    /** The user's country, whose generic foods come first (GenericIndex). */
+    private readonly home?: string,
   ) {}
 
   get label(): string {
@@ -71,7 +73,7 @@ export class CombinedCatalog implements FoodCatalog {
       if (!res.ok) throw new Error(`Generic foods request failed (${res.status})`);
       const file = (await res.json()) as GenericsFile;
       if (file.format !== GENERICS_FORMAT) throw new Error(`Generic foods format ${file.format} is not supported`);
-      this.ready = new GenericIndex(file.foods);
+      this.ready = new GenericIndex(file.foods, this.home);
       return this.ready;
     })();
     this.index.catch(() => {

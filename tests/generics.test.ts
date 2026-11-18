@@ -89,7 +89,9 @@ describe("generic foods builder", () => {
 const row = (source: FoodSource, id: string, name: string, kcal = 100): GenericRow => [source, id, name, "g", kcal, [], null, []];
 
 describe("generic search", () => {
-  const names = (rows: readonly GenericRow[], query: string) => new GenericIndex(rows).search(query).map((r) => r[2]);
+  /** `home` null: the user's country is unknown. */
+  const names = (rows: readonly GenericRow[], query: string, home: string | null = "AU") =>
+    new GenericIndex(rows, home ?? undefined).search(query).map((r) => r[2]);
 
   it("treats the words before the first comma as the food", () => {
     const rows = [row("afcd", "1", "Bread, banana, commercial"), row("afcd", "2", "Chocolate, milk"), row("afcd", "3", "Milk, cow, fluid"), row("afcd", "4", "Banana, cavendish, peeled, raw")];
@@ -126,19 +128,35 @@ describe("generic search", () => {
     expect(names([row("afcd", "1", "Coke, flavoured"), row("afcd", "2", "Cokelat, bar")], "coke")).toEqual(["Coke, flavoured", "Cokelat, bar"]);
   });
 
-  it("shows fallback sources only when the Australian foods are few", () => {
+  it("shows other countries' sources only when the user's country's foods are few", () => {
     const au = Array.from({ length: MIN_PRIMARY_FOODS }, (_, i) => row("afcd", `${i}`, `Yoghurt, kind ${"abc"[i]}`));
     expect(names([...au, row("fndds", "9", "Yogurt, Greek")], "yoghurt")).toHaveLength(MIN_PRIMARY_FOODS);
     expect(names([...au.slice(1), row("fndds", "9", "Yoghurt, Greek")], "yoghurt")).toContain("Yoghurt, Greek");
     expect(names([row("fndds", "9", "Pad thai")], "pad thai")).toEqual(["Pad thai"]);
   });
 
-  it("ranks an Australian food above a US one", () => {
-    expect(names([row("fndds", "1", "Honey, raw"), row("afcd", "2", "Honey, floral")], "honey")).toEqual(["Honey, floral", "Honey, raw"]);
+  it("ranks a food from the user's country above one from elsewhere", () => {
+    const honey = [row("fndds", "1", "Honey, raw"), row("afcd", "2", "Honey, floral")];
+    expect(names(honey, "honey", "AU")).toEqual(["Honey, floral", "Honey, raw"]);
+    expect(names(honey, "honey", "US")).toEqual(["Honey, raw", "Honey, floral"]);
+  });
+
+  it("puts the user's country's source first, wherever that is", () => {
+    const us = Array.from({ length: MIN_PRIMARY_FOODS }, (_, i) => row("fndds", `${i}`, `Yogurt, kind ${"abc"[i]}`));
+    expect(names([row("afcd", "9", "Yoghurt, Greek"), ...us], "yoghurt", "US")).not.toContain("Yoghurt, Greek");
+    expect(names([row("afcd", "9", "Yoghurt, Greek"), ...us], "yoghurt", "AU")[0]).toBe("Yoghurt, Greek");
+  });
+
+  it("favours no source when none is from the user's country, or the country is unknown", () => {
+    const au = Array.from({ length: MIN_PRIMARY_FOODS }, (_, i) => row("afcd", `${i}`, `Yoghurt, kind ${"abc"[i]}`));
+    for (const home of ["GB", null]) {
+      expect(names([...au, row("fndds", "9", "Yogurt, Greek")], "yoghurt", home)).toHaveLength(MIN_PRIMARY_FOODS + 1);
+      expect(names([row("afcd", "1", "Honey, floral"), row("fndds", "2", "Honey")], "honey", home)).toEqual(["Honey", "Honey, floral"]);
+    }
   });
 
   it("drops a fallback food with exactly the same name, but never merges values", () => {
-    const hits = new GenericIndex([row("fndds", "1", "Honey", 304), row("afcd", "2", "Honey", 278)]).search("honey");
+    const hits = new GenericIndex([row("fndds", "1", "Honey", 304), row("afcd", "2", "Honey", 278)], "AU").search("honey");
     expect(hits.map((r) => [r[0], r[4]])).toEqual([["afcd", 278]]);
   });
 
@@ -342,7 +360,7 @@ describe("the committed generic foods file", () => {
     expect(count("fndds")).toBeGreaterThan(5000);
     expect(f.foods.every((r) => r[4] >= 0 && r[4] <= 950 && r[2].length > 0)).toBe(true);
     expect(new Set(f.foods.map((r) => `${r[0]}:${r[1]}`)).size).toBe(f.foods.length);
-    const milk = new GenericIndex(f.foods).search("milk")[0]!;
+    const milk = new GenericIndex(f.foods, "AU").search("milk")[0]!;
     expect(milk[2]).toMatch(/^Milk, cow, fluid, regular fat/);
     expect(milk[4]).toBeGreaterThan(55);
     expect(milk[4]).toBeLessThan(75);

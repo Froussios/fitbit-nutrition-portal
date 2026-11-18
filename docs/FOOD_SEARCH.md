@@ -112,7 +112,7 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 * **Line 2:** brand · pack size (Open Food Facts `quantity`), or **Generic** for a food from an authoritative
   source, or **No brand listed** for an Open Food Facts product with no brand. Then a tag naming the row's source,
   so a bad value can be traced to its database: `Open Food Facts`, `AFCD` or `FNDDS`. Then a small flag for where the
-  food is sold: Australia's if the product lists it, else the first country listed, then `+N` for the others; the
+  food is sold: the user's country (DR-34) if the product lists it, else the first country listed, then `+N` for the others; the
   tooltip names them all. Generic foods show their database's country (AFCD 🇦🇺, FNDDS 🇺🇸). No flag when Open Food
   Facts lists no country, which doesn't mean the product isn't sold here (section 5). Flags are emoji, which Windows
   draws as two letters (`AU`). Right: energy per serving when the product has a serving size, e.g. `107 kcal / 2 biscuits (30 g)`.
@@ -197,12 +197,12 @@ build the rule: 90% correct, against 45% for treating every match as the food. K
 * **English word order only**, for now.
 
 Popularity is estimated in two steps. First the **number of entries with exactly this name**, of any brand, with
-entries sold in Australia counting 10 times. Few records have a scan count, while every record has a name, and this
+entries sold in the index's country (`INDEX_COUNTRY`, Australia) counting 10 times. Few records have a scan count, while every record has a name, and this
 is what brings `Milk chocolate` (334 entries) above `Probiotic chocolate`. Ties then fall to:
 
 ```
 popularity = log10(1 + unique_scans_n)       how often Open Food Facts apps have scanned it
-           + 2 if sold in Australia          (countries_tags has en:australia)
+           + 2 if sold in INDEX_COUNTRY      (countries_tags has en:australia)
            + completeness                    0..1, Open Food Facts' own score
 ```
 
@@ -695,10 +695,12 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
 * **Reconciling products.** Identical Open Food Facts entries still disagree (`Vegemite (Vegemite)`: 6 and 177
   kcal). Generic foods now cover the worst cases, and they no longer carry the unbranded ones' values
   ([#41](https://github.com/Froussios/fitbit-nutrition-portal/issues/41)).
-* **Australian weighting.** Entries sold in Australia count 10 times when estimating popularity, because plain
-  counts lean American (`Whole milk` 350 entries, `Full cream milk` 71). The factor of 10 is a judgement call that
-  has not been checked against real data; the first real build should show whether it is right. The country should
-  come from the client's locale instead: [#42](https://github.com/Froussios/fitbit-nutrition-portal/issues/42).
+* **Index country weighting.** Entries sold in the index's country (`INDEX_COUNTRY` in `pipeline/index-builder.ts`,
+  Australia) count 10 times when estimating popularity, because plain counts lean American (`Whole milk` 350 entries,
+  `Full cream milk` 71). The factor of 10 is a judgement call that has not been checked against real data; the first
+  real build should show whether it is right. The user's own country (DR-34) only reorders equally good matches among
+  the products a search fetched; a user elsewhere still gets candidates chosen in the index's order
+  ([#42](https://github.com/Froussios/fitbit-nutrition-portal/issues/42)).
 * **Data per search.** Over budget and accepted for now: section 9.1.
 * **Candidate limit.** After other words, a 2- or 3-letter last word that starts more than 16 dictionary words may
   check up to 100 candidates against their text (section 6.2), which can miss matches while the word is half typed
@@ -766,8 +768,10 @@ join key either: AFCD and AUSNUT share 1,201 food keys, and only 482 of those ha
 1. **Whole words** before a longer word that starts the same. The last word may be half typed. Plurals are ignored.
 2. **The food before its flavour.** These names put the food first, so it is the words before the first comma:
    `Milk, cow, fluid` is a milk, `Chocolate, milk` is not. The opposite of product names (section 4.3).
-3. **Australian before US.** FNDDS foods appear only when AFCD has fewer than 3 foods where a query word is the
-   food by rule 2. `Biscuit, chocolate` doesn't count towards the 3 for `chocolate`.
+3. **The user's country first** (DR-34). When a source is from the user's country (AFCD for Australia, FNDDS for the
+   US), the other sources' foods appear only when it has fewer than 3 foods where a query word is the food by rule 2.
+   `Biscuit, chocolate` doesn't count towards the 3 for `chocolate`. When no source is from the user's country, or it
+   is unknown, every source counts the same.
 4. **The plain form:** fewest words other than plain ones such as `raw` and `regular fat`, then names with such a word.
 
 A row with exactly the same name as a higher-priority row is dropped. Its values are not merged.

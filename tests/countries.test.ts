@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { IndexBuilder, type RawProduct } from "../pipeline/index-builder";
 import { offCountries } from "../pipeline/off-countries";
-import { countryName, flagEmoji, foodCountries, shownCountry } from "../src/core/countries";
+import { countryName, detectCountry, flagEmoji, foodCountries, languageCountry, shownCountry, timeZoneCountry } from "../src/core/countries";
 import type { FoodSummary } from "../src/core/food-summary";
 import { fromSummaryRow, toFoodItem, type DetailRow, type SummaryRow } from "../src/food/index-format";
 import { countryFlag } from "../src/ui/food-combobox";
@@ -41,17 +41,58 @@ describe("countries in the index", () => {
     expect(toFoodItem(sum[milk]!, det[milk]!).countries).toEqual(["AU", "NZ"]);
   });
 
-  it("still boost products sold in Australia", () => {
+  it("still boost products sold in the index's country", () => {
     const { sum } = rows([product("1", "Whole milk", { brands: "Acme" }), product("2", "Whole milk", { brands: "Bolt", countries_tags: ["en:australia"] })]);
     expect(sum[0]![0]).toBe("2");
   });
 });
 
+describe("the user's country", () => {
+  it("comes from the time zone", () => {
+    expect(timeZoneCountry("Australia/Sydney")).toBe("AU");
+    expect(timeZoneCountry("Europe/London")).toBe("GB");
+    expect(timeZoneCountry("America/New_York")).toBe("US");
+    expect(timeZoneCountry("Pacific/Auckland")).toBe("NZ");
+  });
+
+  it("knows the old zone names browsers still report", () => {
+    expect(timeZoneCountry("Asia/Calcutta")).toBe("IN");
+    expect(timeZoneCountry("Australia/ACT")).toBe("AU");
+    expect(timeZoneCountry("US/Pacific")).toBe("US");
+  });
+
+  it("knows every zone this runtime knows", () => {
+    expect(Intl.supportedValuesOf("timeZone").filter((z) => !timeZoneCountry(z))).toEqual([]);
+  });
+
+  it("takes no country from zones that are not places", () => {
+    for (const z of ["UTC", "Etc/UTC", "Etc/GMT+10", "GMT", "EST", "PST8PDT", "Nowhere/Special"]) expect(timeZoneCountry(z)).toBeUndefined();
+  });
+
+  it("reads the region of a language tag, when it is a country", () => {
+    expect(languageCountry("en-AU")).toBe("AU");
+    expect(languageCountry("pt-BR")).toBe("BR");
+    expect(languageCountry("zh-Hant-TW")).toBe("TW");
+    expect(languageCountry("en")).toBeUndefined();
+    expect(languageCountry("es-419")).toBeUndefined();
+    expect(languageCountry("not a tag")).toBeUndefined();
+  });
+
+  it("trusts the time zone over the language, which is only a preference", () => {
+    expect(detectCountry("Australia/Perth", ["en-US"])).toBe("AU");
+    expect(detectCountry("UTC", ["en", "fr-CA"])).toBe("CA");
+    expect(detectCountry(undefined, ["de-DE"])).toBe("DE");
+    expect(detectCountry("UTC", ["en"])).toBeUndefined();
+  });
+});
+
 describe("the dropdown's country flag", () => {
-  it("prefers Australia when listed, else the first country", () => {
-    expect(shownCountry(["FR", "AU"])).toBe("AU");
-    expect(shownCountry(["FR", "BE"])).toBe("FR");
-    expect(shownCountry([])).toBeUndefined();
+  it("prefers the user's country when listed, else the first country", () => {
+    expect(shownCountry(["FR", "AU"], "AU")).toBe("AU");
+    expect(shownCountry(["FR", "AU"], "BE")).toBe("FR");
+    expect(shownCountry(["FR", "BE"], "BE")).toBe("BE");
+    expect(shownCountry(["FR", "BE"], undefined)).toBe("FR");
+    expect(shownCountry([], "AU")).toBeUndefined();
   });
 
   it("knows where generic databases are from", () => {
@@ -67,9 +108,10 @@ describe("the dropdown's country flag", () => {
   });
 
   it("shows one flag, how many other countries, and all of them in the tooltip", () => {
-    const flag = countryFlag(summary({ countries: ["US", "AU", "CA"] }))!;
+    const flag = countryFlag(summary({ countries: ["US", "AU", "CA"] }), "AU")!;
     expect(flag.textContent).toBe("🇦🇺 +2");
     expect(flag.title).toBe("Sold in Australia, United States, Canada");
+    expect(countryFlag(summary({ countries: ["US", "AU", "CA"] }), "CA")!.textContent).toBe("🇨🇦 +2");
     expect(flag.getAttribute("aria-label")).toBe(flag.title);
     expect(countryFlag(summary({ countries: ["FR"] }))!.textContent).toBe("🇫🇷");
   });
