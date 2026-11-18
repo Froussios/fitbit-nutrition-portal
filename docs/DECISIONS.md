@@ -209,7 +209,7 @@ default because it is what Google Health stores and what the food search already
 ### DR-22 Editing replaces the entry, and recalculates from the food's record when it can
 **Decision.** An entry's amount and meal can be edited, on this app's own entries, in the diary row itself. Its nutrient
 cells follow what is typed, and a Save button and a Cancel link replace the edit and delete buttons: in words, so that
-Cancel never looks like Delete. Time and food cannot be
+Cancel never looks like Delete. Escape or a click outside the row cancels too. Time and food cannot be
 edited. Saving writes a corrected copy under a new ID, then deletes the original. For a new amount, nutrients are calculated again from the food's
 record, found through the reference in the entry's ID. With no record (a custom food, or a failed lookup), the logged values
 are scaled. A meal-only edit copies the logged values. Any entry offers the units of the kind it was logged in; a food found
