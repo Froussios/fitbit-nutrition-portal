@@ -616,7 +616,6 @@ export function createLogForm(
         portion.value = "";
         timeTouched = false;
         time.value = toDateTimeLocalValue(defaultTime());
-        mealSelect.value = "";
       }
     } catch (e) {
       say(errorMessage(e), true);
@@ -661,7 +660,6 @@ export function createLogForm(
       if (meal === m) resetMeal();
       timeTouched = false;
       time.value = toDateTimeLocalValue(defaultTime());
-      mealSelect.value = "";
     } catch (e) {
       say(errorMessage(e), true);
     } finally {
@@ -711,7 +709,6 @@ export function createLogForm(
       amount.forgetTyping();
       timeTouched = false;
       time.value = toDateTimeLocalValue(defaultTime());
-      mealSelect.value = "";
     } catch (e) {
       say(errorMessage(e), true);
     } finally {

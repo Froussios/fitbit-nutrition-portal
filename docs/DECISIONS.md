@@ -148,10 +148,12 @@ Only the Australian foods have few serving measures until AUSNUT is added.
 
 ### DR-17 An entry has no meal unless the user picks one
 **Decision.** The form preselects "No meal" and the app then leaves `mealType` out of the entry. Breakfast, lunch,
-dinner and snack stay available, and the form returns to "No meal" after each entry, so a meal never carries over
-unnoticed. The app no longer guesses the meal from the time of day, and no longer offers or writes `ANYTIME`.
+dinner and snack stay available. The meal picked stays picked for the next entry, until the user changes it or
+reloads the page, since consecutive entries are usually from the same meal. The app no longer guesses the meal from
+the time of day, and no longer offers or writes `ANYTIME`.
 **Why.** Owner decision (6 November 2026). The API marks `mealType` as optional, and describes `ANYTIME` as legacy
-while listing only the other four values for this field.
+while listing only the other four values for this field. The form first returned to "No meal" after each entry; the
+owner reversed that (18 November 2026), because logging a meal usually takes several entries in a row.
 **Consequence.** Google does not allow editing logs created from a typed-in food, so giving an entry a meal later
 replaces it with a copy (DR-22). The diary shows entries with no meal with a dash.
 **Reopen if.** Google Health rejects or misplaces entries with no meal.
