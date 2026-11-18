@@ -211,7 +211,10 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
       const { key, target } = ev as KeyboardEvent;
       // On a dropdown, Escape may be closing its list, which must not discard what was typed.
       if (key === "Escape" && !saving && !(target instanceof HTMLSelectElement)) onCancel("cancel");
-      if (key === "Enter" && (target === quantity || target === dayInput)) submit();
+      if (key !== "Enter") return;
+      if (target === quantity || target === dayInput) submit();
+      // A dropdown's open list may take this Enter to pick an option, so the save reads the value once it has.
+      else if (target === mealSelect || target === unitSelect) setTimeout(() => !outside.signal.aborted && submit());
     });
   }
 

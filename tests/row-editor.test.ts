@@ -82,6 +82,42 @@ describe("row editor", () => {
     expect(e.point.nutritionLog?.serving?.amount).toBe(amount);
   });
 
+  it("saves a new meal on Enter, as the other fields do", async () => {
+    const { editor, onSave } = open(entry(), catalog(undefined).catalog);
+    const meal = editor.meal as HTMLSelectElement;
+    meal.value = "DINNER";
+    meal.dispatchEvent(new Event("input", { bubbles: true }));
+    meal.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await settle();
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ mealType: "DINNER" });
+  });
+
+  it("saves on Enter in the unit dropdown too", async () => {
+    // No food to look up, so the new amount can be saved at once.
+    const { unit, type, onSave } = open(entry(undefined, "1234567890"), catalog(undefined).catalog);
+    type("80");
+    unit.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await settle();
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ amount: { quantity: 80, unit: "g" } });
+  });
+
+  it("reads the meal after the Enter that picked it, and saves nothing once the editor is gone", async () => {
+    const { editor, onSave } = open(entry(), catalog(undefined).catalog);
+    const meal = editor.meal as HTMLSelectElement;
+    // An open list takes the Enter first, then the option it picked becomes the value.
+    meal.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    meal.value = "LUNCH";
+    meal.dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ mealType: "LUNCH" });
+    meal.value = "DINNER";
+    meal.dispatchEvent(new Event("input", { bubbles: true }));
+    meal.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    editor.dispose();
+    await settle();
+    expect(onSave).toHaveBeenCalledOnce();
+  });
+
   it("moves the entry to another day, keeping its amount and meal", () => {
     const e = entry();
     const { day, pickDay, save, onSave } = open(e, catalog(undefined).catalog);
