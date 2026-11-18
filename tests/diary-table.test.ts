@@ -57,6 +57,14 @@ describe("diary table double-click", () => {
     }
   });
 
+  it("does nothing on a meal prep share, which has no Edit button", () => {
+    const e: DiaryEntry = { ...entry(), ref: { source: "prep", id: "p1" } };
+    const { onEdit, row } = render(e);
+    expect(row.querySelector("[data-entry-edit]")).toBeNull();
+    dblclick(row.querySelectorAll("td")[1]!);
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
   it("does nothing on an entry from another app", () => {
     const e = { ...entry(), own: false };
     const { onEdit, row } = render(e);

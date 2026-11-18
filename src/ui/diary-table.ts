@@ -91,8 +91,11 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
         {},
         ...[...entries, ...deleted].sort(byMeal).map((e) => {
           const editor = editing?.id === e.id ? editing : undefined;
-          // The same conditions that enable the row's Edit button.
-          const editable = e.own && !deletedIds.has(e.id) && e.ref?.source !== "prep" && !offline && !busy.has(e.id) && !editing;
+          // Whether the row has an Edit button (a meal prep share is changed from its batch), and whether it is enabled.
+          // A double-click on the row opens the editor under the same conditions.
+          const hasEdit = e.own && !deletedIds.has(e.id) && e.ref?.source !== "prep";
+          const canEdit = !offline && !busy.has(e.id) && !editing;
+          const editable = hasEdit && canEdit;
           return el(
             "tr",
             {
@@ -133,10 +136,10 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
                         "↩\uFE0E",
                       )
                     : [
-                        e.ref?.source !== "prep" &&
+                        hasEdit &&
                         el(
                           "button",
-                          { type: "button", class: "icon edit", "data-entry-edit": e.id, title: offline ? "Editing needs a connection" : editing ? "Finish the edit you started first" : "Edit entry", "aria-label": `Edit ${e.displayName}`, disabled: offline || busy.has(e.id) || Boolean(editing), onclick: () => onEdit(e) },
+                          { type: "button", class: "icon edit", "data-entry-edit": e.id, title: offline ? "Editing needs a connection" : editing ? "Finish the edit you started first" : "Edit entry", "aria-label": `Edit ${e.displayName}`, disabled: !canEdit, onclick: () => onEdit(e) },
                           pencilIcon(),
                         ),
                         el(
