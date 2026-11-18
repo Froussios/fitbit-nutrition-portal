@@ -2,7 +2,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FoodItem, FoodRef } from "../src/core/food";
 import type { FoodCatalog } from "../src/food/catalog";
-import { AS_LOGGED_UNIT, buildNutritionLogPoint, toDiaryEntry, type DiaryEntry, type EntryEdit } from "../src/health/mapping";
+import { addCivilDays, civilDate } from "../src/core/time";
+import { AS_LOGGED_UNIT, buildNutritionLogPoint, entryDay, toDiaryEntry, type DiaryEntry, type EntryEdit } from "../src/health/mapping";
 import type { DataPoint } from "../src/health/types";
 import { createRowEditor } from "../src/ui/row-editor";
 
@@ -38,7 +39,7 @@ function open(e: DiaryEntry, cat: FoodCatalog) {
   const onSave = vi.fn<(edit: EntryEdit) => void>();
   const editor = createRowEditor({ catalog: cat, entry: e, unitNames, offline: false, onSave, onCancel: vi.fn() });
   const row = document.createElement("tr");
-  for (const part of [editor.meal, editor.amount, editor.energy, editor.actions]) {
+  for (const part of [editor.meal, editor.day, editor.amount, editor.energy, editor.actions]) {
     const cell = document.createElement("td");
     cell.append(part);
     row.append(cell);
@@ -48,11 +49,16 @@ function open(e: DiaryEntry, cat: FoodCatalog) {
   const unit = editor.amount.querySelector<HTMLSelectElement>("select")!;
   const save = editor.actions.querySelector<HTMLButtonElement>(".edit-save")!;
   const cancel = editor.actions.querySelector<HTMLButtonElement>(".edit-cancel")!;
+  const day = editor.day.querySelector<HTMLInputElement>("input[type=date]")!;
+  const pickDay = (value: string) => {
+    day.value = value;
+    day.dispatchEvent(new Event("input", { bubbles: true }));
+  };
   const type = (text: string) => {
     qty.value = text;
     qty.dispatchEvent(new Event("input", { bubbles: true }));
   };
-  return { editor, onSave, qty, unit, save, cancel, type };
+  return { editor, onSave, qty, unit, save, cancel, type, day, pickDay };
 }
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -73,6 +79,35 @@ describe("row editor", () => {
     save.click();
     expect(onSave).toHaveBeenCalledWith({ mealType: "LUNCH" });
     expect(e.point.nutritionLog?.serving?.amount).toBe(amount);
+  });
+
+  it("moves the entry to another day, keeping its amount and meal", () => {
+    const e = entry();
+    const { day, pickDay, save, onSave } = open(e, catalog(undefined).catalog);
+    expect(day.value).toBe(entryDay(e));
+    expect(day.max).toBe(civilDate(new Date()));
+    expect(save.disabled).toBe(true);
+    const earlier = addCivilDays(entryDay(e), -2);
+    pickDay(earlier);
+    expect(save.disabled).toBe(false);
+    save.click();
+    expect(onSave).toHaveBeenCalledWith({ day: earlier });
+    // Back on its own day, there is nothing to save.
+    pickDay(entryDay(e));
+    expect(save.disabled).toBe(true);
+  });
+
+  it("won't move an entry to a day after today, or to no day", () => {
+    const { pickDay, save, editor, day } = open(entry(), catalog(undefined).catalog);
+    pickDay(addCivilDays(civilDate(new Date()), 1));
+    expect(save.disabled).toBe(true);
+    expect(editor.day.querySelector(".edit-error")!.textContent).toBe("An entry can't go on a day after today.");
+    expect(day.getAttribute("aria-invalid")).toBe("true");
+    pickDay("");
+    expect(save.disabled).toBe(true);
+    expect(editor.day.querySelector(".edit-error")!.textContent).toBe("Enter a day.");
+    // The amount's own problems stay under the amount.
+    expect(editor.amount.querySelector<HTMLElement>(".edit-error")!.hidden).toBe(true);
   });
 
   it("shows Save and Cancel as words, never the delete symbol", () => {

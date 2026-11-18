@@ -2,7 +2,7 @@ import { canReload, foodLabel, nutrientsForAmount, type FoodItem, type FoodRef }
 import { idFromName, parseEntryId } from "../core/ids";
 import type { LoggedFood } from "../core/logged-foods";
 import { NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "../core/nutrients";
-import { utcOffsetDuration } from "../core/time";
+import { civilDate, onCivilDate, utcOffsetDuration } from "../core/time";
 import { formatAmount, formatMeasurementLabel, formatNumber, metricAmount, PORTION_PREFIX, toBaseAmount, type BaseUnit, type Measurable } from "../core/units";
 import type { DataPoint, EnergyQuantity, MealType, NutrientQuantity, NutritionLog, WeightQuantity } from "./types";
 
@@ -208,6 +208,8 @@ export interface EntryEdit {
   readonly mealType?: MealType;
   /** Left out when the amount stays as logged, so the nutrients do too. */
   readonly amount?: AmountEdit;
+  /** The civil day (YYYY-MM-DD) to move the entry to, at the same clock time. Left out when it stays on its day. */
+  readonly day?: string;
 }
 
 export interface EditOptions extends BuildOptions {
@@ -261,11 +263,28 @@ function atNewAmount(log: NutritionLog, edit: AmountEdit, opts: EditOptions): Nu
   return out;
 }
 
-/** The entry that replaces one the user edited. Time and name stay as logged; only a new amount changes the nutrients. */
+/** The day an entry is on, as the diary lists it: the local civil date of its start. */
+export function entryDay(entry: Pick<DiaryEntry, "start">): string {
+  return civilDate(entry.start);
+}
+
+/**
+ * The same interval on civil day `day`, at the same local clock time and for as long. The offsets are the local ones on
+ * the new day, as for a new entry, so a move across a daylight saving change keeps the clock time.
+ */
+function onDay(interval: NutritionLog["interval"], day: string): NutritionLog["interval"] {
+  const start = new Date(interval.startTime);
+  const moved = new Date(onCivilDate(day, start).getTime() + start.getMilliseconds());
+  const end = new Date(moved.getTime() + (Date.parse(interval.endTime) - start.getTime()));
+  return { startTime: moved.toISOString(), endTime: end.toISOString(), startUtcOffset: utcOffsetDuration(moved), endUtcOffset: utcOffsetDuration(end) };
+}
+
+/** The entry that replaces one the user edited. The name and clock time stay as logged; only a new amount changes the nutrients. */
 export function editedNutritionLogPoint(log: NutritionLog, edit: EntryEdit, opts: EditOptions): DataPoint {
   const nutritionLog = edit.amount ? atNewAmount(log, edit.amount, opts) : copyNutritionLogPoint(log, opts.id).nutritionLog!;
   if (edit.mealType) nutritionLog.mealType = edit.mealType;
   else delete nutritionLog.mealType;
+  if (edit.day) nutritionLog.interval = onDay(nutritionLog.interval, edit.day);
   return { name: `${NUTRITION_LOG_PARENT}/dataPoints/${opts.id}`, nutritionLog };
 }
 

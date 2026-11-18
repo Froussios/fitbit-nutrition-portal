@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { FoodItem } from "../src/core/food";
 import { PORTION_PREFIX, selectableUnits } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, byMeal, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
+import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, byMeal, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryDay, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
 import type { DataPoint, MealType, NutritionLog } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
@@ -523,6 +523,38 @@ describe("editing an entry", () => {
       expect(entryFingerprint(replacement)).toBe(entryFingerprint(original));
       const listed = withoutEntries([original], new Set(["e-old-0001-off-123"]));
       expect(reconcilePending(new Map([[opts.id, replacement]]), listed).stillPending).toEqual([opts.id]);
+    });
+  });
+
+  describe("moving to another day", () => {
+    const tz = process.env.TZ;
+    afterEach(() => {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    });
+
+    it("keeps the clock time, the length, the meal and the nutrients", () => {
+      const log = logFood(milk, 100, "ml", units, "LUNCH");
+      const moved = editedNutritionLogPoint(log, { mealType: "LUNCH", day: "2026-10-28" }, opts).nutritionLog!;
+      const start = new Date(moved.interval.startTime);
+      expect(entryDay({ start })).toBe("2026-10-28");
+      expect([start.getHours(), start.getMinutes(), start.getSeconds()]).toEqual([time.getHours(), time.getMinutes(), time.getSeconds()]);
+      expect(Date.parse(moved.interval.endTime) - start.getTime()).toBe(Date.parse(log.interval.endTime) - Date.parse(log.interval.startTime));
+      expect({ ...moved, interval: log.interval }).toEqual(log);
+    });
+
+    it("moves with a new amount too", () => {
+      const moved = editedNutritionLogPoint(logFood(milk, 100, "ml"), { amount: { quantity: 200, unit: "ml", food: milk }, day: "2026-10-30" }, opts).nutritionLog!;
+      expect(entryDay({ start: new Date(moved.interval.startTime) })).toBe("2026-10-30");
+      expect(moved.serving?.amount).toBe(200);
+    });
+
+    it("takes the offset of the new day, so the clock time holds across daylight saving", () => {
+      process.env.TZ = "Australia/Sydney";
+      const log = logFood(milk, 100, "ml");
+      expect(log.interval.startUtcOffset).toBe("39600s");
+      const moved = editedNutritionLogPoint(log, { day: "2026-09-20" }, opts).nutritionLog!;
+      expect(moved.interval).toEqual({ startTime: "2026-09-19T21:30:00.000Z", endTime: "2026-09-19T21:31:00.000Z", startUtcOffset: "36000s", endUtcOffset: "36000s" });
     });
   });
 

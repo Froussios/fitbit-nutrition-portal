@@ -207,6 +207,7 @@ default because it is what Google Health stores and what the food search already
 **Reopen if.** The app gets more settings than the header can hold, or the choice needs to follow the user across devices.
 
 ### DR-22 Editing replaces the entry, and recalculates from the food's record when it can
+Revised by DR-33: the day can be edited too.
 **Decision.** An entry's amount and meal can be edited, on this app's own entries, in the diary row itself. Its nutrient
 cells follow what is typed, and a Save button and a Cancel link replace the edit and delete buttons: in words, so that
 Cancel never looks like Delete. Time and food cannot be
@@ -367,3 +368,16 @@ The table was added with DR-16 to bridge spelling conventions that split the sou
 beyond that.
 **Consequence.** `cookie` finds FNDDS cookies, and `biscuit` finds only AFCD biscuits.
 **Reopen if.** Ranking takes the user's region into account, so a regional name could map to its local meaning.
+
+### DR-33 The log button names a day other than today, and an edit can move an entry to another day
+**Decision.** When an entry would go on another day than today (the day shown, or a time typed for another day), the log
+button turns amber and names the day: "Log entry for yesterday", "Log meal for Monday, 16 Nov 2026". The row editor
+(DR-22) has a date field under the meal, up to today. A new day keeps the entry's local clock time and length, with the
+local UTC offsets of the new day, so a move across a daylight saving change keeps the clock time; the clock time itself
+still cannot be edited. A moved entry leaves the day shown, and a note under the heading says where it went, with a
+button that shows that day.
+**Why.** Owner request (18 November 2026): entries were logged on the wrong day by mistake, which nothing pointed out,
+and the only fix was to delete the entry and log it again on the right day.
+**Consequence.** A move is an edit like any other: a copy under a new ID, then a delete of the original (DR-22). The note
+goes when the day shown changes. A meal prep share still cannot be edited, so it cannot be moved.
+**Reopen if.** Moving needs the clock time too, or entries are moved often enough to want it from the log form.

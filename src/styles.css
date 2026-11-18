@@ -10,6 +10,9 @@
   --notice-bg: #fff6dc;
   --notice-border: #e6cf8a;
   --row-alt: #f9faf8;
+  /* The log button when the entry goes on another day than today. */
+  --other-day: #8a4f00;
+  --other-day-text: #ffffff;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 16px;
   line-height: 1.45;
@@ -29,6 +32,8 @@
     --notice-bg: #2f2a16;
     --notice-border: #66592b;
     --row-alt: #20251f;
+    --other-day: #e8a93c;
+    --other-day-text: #1d1405;
   }
 }
 
@@ -123,6 +128,8 @@ button.primary {
   color: var(--accent-text);
   font-weight: 600;
 }
+/* Another colour and the day in words, so that logging on a day other than today can't go unnoticed. */
+button.primary.other-day { background: var(--other-day); border-color: var(--other-day); color: var(--other-day-text); }
 button.link { border: none; background: none; color: var(--accent); text-decoration: underline; }
 /*
  * One size for every icon, so that swapping Delete and Undo moves nothing in the table. A full 44 px tap area
@@ -198,6 +205,9 @@ tr.editing td:last-child { position: sticky; right: 0; background: var(--surface
 tr.editing .row-actions { gap: 4px; align-items: center; min-height: 2.75rem; }
 tr.editing .row-actions button { padding: 3px 8px; font-size: 0.85rem; }
 tr.editing .row-actions button.link { padding-inline: 4px; }
+/* The meal and, under it, the day, which moves the entry to another. */
+.when-edit { display: flex; flex-direction: column; gap: 4px; padding-block: 4px; }
+tr.editing .when-edit input[type="date"] { width: auto; text-align: left; }
 .amount-edit { display: flex; justify-content: flex-end; gap: 4px; }
 tr.editing .amount-edit select { max-width: 4.5rem; }
 .amount-edit[hidden] { display: none; }
