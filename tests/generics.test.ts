@@ -3,7 +3,7 @@ import { fromAfcd, fromFndds, type TableRow } from "../pipeline/generics-builder
 import { CombinedCatalog, GENERICS_WAIT_MS, MAX_GENERIC_ROWS } from "../src/food/combined-catalog";
 import { LocalFoodCatalog, searchWithFallback, type FoodCatalog } from "../src/food/catalog";
 import { genericToFoodItem, GENERICS_FORMAT, type GenericRow, type GenericsFile } from "../src/food/generics-format";
-import { GenericIndex, MIN_PRIMARY_FOODS, queryVariants, singular } from "../src/food/generic-search";
+import { GenericIndex, queryVariants, singular } from "../src/food/generic-search";
 import { parseQuery } from "../src/core/tokens";
 import { fromOffProduct, type OffProduct } from "../src/core/off";
 import { SOURCE_TAGS, type FoodSource } from "../src/core/food";
@@ -89,7 +89,7 @@ describe("generic foods builder", () => {
 const row = (source: FoodSource, id: string, name: string, kcal = 100): GenericRow => [source, id, name, "g", kcal, [], null, []];
 
 describe("generic search", () => {
-  /** `home` null: the user's country is unknown. */
+  /** For a user in Australia unless `home` says otherwise; null when the user's country is unknown. */
   const names = (rows: readonly GenericRow[], query: string, home: string | null = "AU") =>
     new GenericIndex(rows, home ?? undefined).search(query).map((r) => r[2]);
 
@@ -117,6 +117,7 @@ describe("generic search", () => {
     expect(singular("smoothies")).toBe("smoothie");
     expect(singular("bries")).toBe("brie");
     expect(singular("patties")).toBe("patty");
+    expect(singular("crisps")).toBe("crisps");
     expect(names([row("fndds", "1", "Cookie, chocolate chip")], "cookies")).toEqual(["Cookie, chocolate chip"]);
     expect(names(rows, "bananas")).toEqual(["Banana, raw"]);
     expect(names(rows, "tomatoes")).toEqual(["Tomato, raw"]);
@@ -128,36 +129,88 @@ describe("generic search", () => {
     expect(names([row("afcd", "1", "Coke, flavoured"), row("afcd", "2", "Cokelat, bar")], "coke")).toEqual(["Coke, flavoured", "Cokelat, bar"]);
   });
 
-  it("shows other countries' sources only when the user's country's foods are few", () => {
-    const au = Array.from({ length: MIN_PRIMARY_FOODS }, (_, i) => row("afcd", `${i}`, `Yoghurt, kind ${"abc"[i]}`));
-    expect(names([...au, row("fndds", "9", "Yogurt, Greek")], "yoghurt")).toHaveLength(MIN_PRIMARY_FOODS);
-    expect(names([...au.slice(1), row("fndds", "9", "Yoghurt, Greek")], "yoghurt")).toContain("Yoghurt, Greek");
-    expect(names([row("fndds", "9", "Pad thai")], "pad thai")).toEqual(["Pad thai"]);
+  it("puts the food asked for before one made from it, wherever it is from", () => {
+    const peanuts = [row("afcd", "1", "Peanut butter, smooth & crunchy, added sugar & salt"), row("fndds", "2", "Peanuts, NFS"), row("afcd", "3", "Oil, peanut")];
+    expect(names(peanuts, "peanuts")).toEqual(["Peanuts, NFS", "Peanut butter, smooth & crunchy, added sugar & salt", "Oil, peanut"]);
+    expect(names(peanuts, "peanut butter")[0]).toBe("Peanut butter, smooth & crunchy, added sugar & salt");
+    const oats = [row("afcd", "1", "Oat beverage, fluid, unfortified"), row("afcd", "2", "Oats, rolled, uncooked")];
+    expect(names(oats, "oats")).toEqual(["Oats, rolled, uncooked", "Oat beverage, fluid, unfortified"]);
+    expect(names([row("fndds", "1", "Walnut oil"), row("fndds", "2", "Walnuts, honey roasted")], "walnuts")[0]).toBe("Walnuts, honey roasted");
   });
 
-  it("ranks a food from the user's country above one from elsewhere", () => {
+  it("ranks an Australian food above a US one that answers as well, however much more its name spells out", () => {
+    expect(names([row("fndds", "1", "Honey, raw"), row("afcd", "2", "Honey, floral")], "honey")).toEqual(["Honey, floral", "Honey, raw"]);
+    expect(names([row("fndds", "1", "Peanut butter"), row("afcd", "2", "Peanut butter, smooth & crunchy, added sugar & salt")], "peanut butter")[0]).toBe("Peanut butter, smooth & crunchy, added sugar & salt");
+    // Both are crisps, so region decides; the apple crisp only matches the singular.
+    const crisps = [row("fndds", "1", "Crisp, apple"), row("afcd", "2", "Potato crisps or chips, plain, salted")];
+    expect(names(crisps, "crisps")).toEqual(["Potato crisps or chips, plain, salted"]);
+    expect(names(crisps, "chips")).toEqual(["Potato crisps or chips, plain, salted"]);
+    expect(names(crisps, "apple crisp")).toEqual(["Crisp, apple"]);
+  });
+
+  it("takes region from the user's country, wherever that is", () => {
     const honey = [row("fndds", "1", "Honey, raw"), row("afcd", "2", "Honey, floral")];
     expect(names(honey, "honey", "AU")).toEqual(["Honey, floral", "Honey, raw"]);
     expect(names(honey, "honey", "US")).toEqual(["Honey, raw", "Honey, floral"]);
-  });
-
-  it("puts the user's country's source first, wherever that is", () => {
-    const us = Array.from({ length: MIN_PRIMARY_FOODS }, (_, i) => row("fndds", `${i}`, `Yogurt, kind ${"abc"[i]}`));
-    expect(names([row("afcd", "9", "Yoghurt, Greek"), ...us], "yoghurt", "US")).not.toContain("Yoghurt, Greek");
-    expect(names([row("afcd", "9", "Yoghurt, Greek"), ...us], "yoghurt", "AU")[0]).toBe("Yoghurt, Greek");
+    // For a US user, the Australian copy of a US food is the one left out.
+    const same = [row("fndds", "1", "Honey", 304), row("afcd", "2", "Honey", 278)];
+    expect(new GenericIndex(same, "US").search("honey").map((r) => r[0])).toEqual(["fndds"]);
   });
 
   it("favours no source when none is from the user's country, or the country is unknown", () => {
-    const au = Array.from({ length: MIN_PRIMARY_FOODS }, (_, i) => row("afcd", `${i}`, `Yoghurt, kind ${"abc"[i]}`));
     for (const home of ["GB", null]) {
-      expect(names([...au, row("fndds", "9", "Yogurt, Greek")], "yoghurt", home)).toHaveLength(MIN_PRIMARY_FOODS + 1);
+      // Ties fall to the other rules: "Honey" leaves nothing unsaid.
       expect(names([row("afcd", "1", "Honey, floral"), row("fndds", "2", "Honey")], "honey", home)).toEqual(["Honey", "Honey, floral"]);
+      // Rows with the same words from different sources are both kept, unless the whole name is the same.
+      const milk = [row("fndds", "1", "Milk, whole", 61), row("afcd", "2", "Milk, cow, fluid, whole")];
+      expect(names(milk, "milk", home)).toHaveLength(2);
     }
   });
 
-  it("drops a fallback food with exactly the same name, but never merges values", () => {
+  it("shows US foods however many Australian foods match", () => {
+    const au = Array.from({ length: 6 }, (_, i) => row("afcd", `${i}`, `Yoghurt, kind ${"abcdef"[i]}`));
+    expect(names([...au, row("fndds", "9", "Yogurt, Greek")], "yoghurt")).toContain("Yogurt, Greek");
+    expect(names([row("fndds", "9", "Pad thai")], "pad thai")).toEqual(["Pad thai"]);
+  });
+
+  it("reads \"Nut, peanut\" as a peanut, but not \"Seed, pumpkin\" where the source has pumpkins", () => {
+    const rows = [row("afcd", "1", "Nut, peanut, with skin, raw, unsalted"), row("fndds", "2", "Peanuts, NFS"), row("afcd", "3", "Peanut butter, smooth")];
+    expect(names(rows, "peanuts")).toEqual(["Nut, peanut, with skin, raw, unsalted", "Peanuts, NFS", "Peanut butter, smooth"]);
+    expect(names(rows, "nuts")).toEqual(["Nut, peanut, with skin, raw, unsalted"]);
+    const pumpkin = [row("afcd", "1", "Seed, pumpkin, dried"), row("afcd", "2", "Pumpkin, butternut, raw"), row("afcd", "3", "Seed, chia, dried"), row("fndds", "4", "Chia seeds")];
+    expect(names(pumpkin, "pumpkin")).toEqual(["Pumpkin, butternut, raw", "Seed, pumpkin, dried"]);
+    expect(names(pumpkin, "chia")).toEqual(["Seed, chia, dried", "Chia seeds"]);
+    const honey = [row("afcd", "1", "Melon, honey dew, peeled, raw"), row("afcd", "2", "Honey"), row("fndds", "3", "Honey butter")];
+    expect(names(honey, "honey")).toEqual(["Honey", "Honey butter", "Melon, honey dew, peeled, raw"]);
+  });
+
+  it("puts the food the query's last word names first, after region", () => {
+    const rows = [row("afcd", "1", "Chocolate, milk"), row("afcd", "2", "Milk, cow, fluid, flavoured, chocolate")];
+    expect(names(rows, "chocolate milk")[0]).toBe("Milk, cow, fluid, flavoured, chocolate");
+    expect(names(rows, "milk chocolate")[0]).toBe("Chocolate, milk");
+    // AFCD names the cut after the comma, so this only decides between foods from the same region.
+    expect(names([row("fndds", "1", "Pork chop, NFS"), row("afcd", "2", "Pork, loin chop, lean, raw")], "pork chop")[0]).toBe("Pork, loin chop, lean, raw");
+  });
+
+  it("finds what a joined name is: the last word, shared between alternatives", () => {
+    const onion = [row("afcd", "1", "Braised steak & onions, canned"), row("afcd", "2", "Onion, mature, brown skinned, peeled, raw")];
+    expect(names(onion, "onion")).toEqual(["Onion, mature, brown skinned, peeled, raw", "Braised steak & onions, canned"]);
+    const ham = [row("fndds", "1", "Ham or pork salad"), row("fndds", "2", "Ham, canned"), row("fndds", "3", "Sandwich with ham")];
+    expect(names(ham, "ham")).toEqual(["Ham, canned", "Ham or pork salad", "Sandwich with ham"]);
+    expect(names([row("fndds", "1", "Hot chocolate / cocoa, NFS"), row("afcd", "2", "Cocoa powder")], "cocoa")[0]).toBe("Cocoa powder");
+    expect(names([row("fndds", "1", "Chicken breast, baked"), row("fndds", "2", "Chicken nuggets")], "chicken")[0]).toBe("Chicken breast, baked");
+  });
+
+  it("drops a US food with the same words as an Australian one that matched, but never merges values", () => {
     const hits = new GenericIndex([row("fndds", "1", "Honey", 304), row("afcd", "2", "Honey", 278)], "AU").search("honey");
     expect(hits.map((r) => [r[0], r[4]])).toEqual([["afcd", 278]]);
+    const milk = [row("fndds", "1", "Milk, whole", 61), row("afcd", "2", "Milk, cow, fluid, regular fat (~3.5%)", 64), row("fndds", "3", "Milk, reduced sodium")];
+    expect(new GenericIndex(milk, "AU").search("milk").map((r) => [r[2], r[4]])).toEqual([["Milk, cow, fluid, regular fat (~3.5%)", 64], ["Milk, reduced sodium", 100]]);
+    // The comma counts: AFCD's milk chocolate bar is not FNDDS's chocolate milk drink.
+    expect(names([row("afcd", "1", "Chocolate, milk"), row("fndds", "2", "Chocolate milk, NFS")], "chocolate milk")).toHaveLength(2);
+    // Within one source, rows that differ only in plain words are different foods.
+    const apples = [row("afcd", "1", "Apple, fuji, peeled, raw"), row("afcd", "2", "Apple, fuji, unpeeled, raw")];
+    expect(names(apples, "apple")).toHaveLength(2);
   });
 
   it("finds a food under either spelling convention", () => {
@@ -171,9 +224,9 @@ describe("generic search", () => {
   });
 
   it("does not treat a cookie as a biscuit", () => {
-    const au = Array.from({ length: MIN_PRIMARY_FOODS }, (_, i) => row("afcd", `${i}`, `Biscuit, savoury, kind ${"abc"[i]}`));
+    const au = Array.from({ length: 3 }, (_, i) => row("afcd", `${i}`, `Biscuit, savoury, kind ${"abc"[i]}`));
     expect(names([...au, row("fndds", "9", "Cookie, NFS")], "cookie")).toEqual(["Cookie, NFS"]);
-    expect(names([...au, row("fndds", "9", "Cookie, NFS")], "biscuit")).toHaveLength(MIN_PRIMARY_FOODS);
+    expect(names([...au, row("fndds", "9", "Cookie, NFS")], "biscuit")).toHaveLength(au.length);
   });
 
   it("finds prefixes and variants of every word in a loose search", () => {
@@ -360,10 +413,20 @@ describe("the committed generic foods file", () => {
     expect(count("fndds")).toBeGreaterThan(5000);
     expect(f.foods.every((r) => r[4] >= 0 && r[4] <= 950 && r[2].length > 0)).toBe(true);
     expect(new Set(f.foods.map((r) => `${r[0]}:${r[1]}`)).size).toBe(f.foods.length);
-    const milk = new GenericIndex(f.foods, "AU").search("milk")[0]!;
+    const index = new GenericIndex(f.foods, "AU");
+    const milk = index.search("milk")[0]!;
     expect(milk[2]).toMatch(/^Milk, cow, fluid, regular fat/);
     expect(milk[4]).toBeGreaterThan(55);
     expect(milk[4]).toBeLessThan(75);
+    // The owner's examples on the real names: nuts, not what is made from them, Australian first.
+    const top = (query: string, n: number) => index.search(query).slice(0, n).map((r) => r[2]);
+    for (const [query, food] of [["peanuts", /^Nut, peanut,/], ["almonds", /^Nut, almond,/], ["walnuts", /^Nut, walnut,/], ["oats", /^Oats,/], ["watermelon", /^Melon, watermelon/]] as const) {
+      expect(top(query, 1)[0], query).toMatch(food);
+    }
+    expect(top("crisps", 5).some((n) => /^Potato crisps/.test(n))).toBe(true);
+    expect(top("crisps", 5).some((n) => /^Crisp,/.test(n))).toBe(false);
+    expect(top("peanuts", 5).some((n) => /butter/i.test(n))).toBe(false);
+    expect(top("cookie", 3).every((n) => /^Cookie/.test(n))).toBe(true);
   });
 });
 

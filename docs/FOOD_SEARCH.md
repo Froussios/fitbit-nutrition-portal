@@ -112,7 +112,7 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 * **Line 2:** brand · pack size (Open Food Facts `quantity`), or **Generic** for a food from an authoritative
   source, or **No brand listed** for an Open Food Facts product with no brand. Then a tag naming the row's source,
   so a bad value can be traced to its database: `Open Food Facts`, `AFCD` or `FNDDS`. Then a small flag for where the
-  food is sold: the user's country (DR-34) if the product lists it, else the first country listed, then `+N` for the others; the
+  food is sold: the user's country (DR-35) if the product lists it, else the first country listed, then `+N` for the others; the
   tooltip names them all. Generic foods show their database's country (AFCD 🇦🇺, FNDDS 🇺🇸). No flag when Open Food
   Facts lists no country, which doesn't mean the product isn't sold here (section 5). Flags are emoji, which Windows
   draws as two letters (`AU`). Right: energy per serving when the product has a serving size, e.g. `107 kcal / 2 biscuits (30 g)`.
@@ -698,7 +698,7 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
 * **Index country weighting.** Entries sold in the index's country (`INDEX_COUNTRY` in `pipeline/index-builder.ts`,
   Australia) count 10 times when estimating popularity, because plain counts lean American (`Whole milk` 350 entries,
   `Full cream milk` 71). The factor of 10 is a judgement call that has not been checked against real data; the first
-  real build should show whether it is right. The user's own country (DR-34) only reorders equally good matches among
+  real build should show whether it is right. The user's own country (DR-35) only reorders equally good matches among
   the products a search fetched; a user elsewhere still gets candidates chosen in the index's order
   ([#42](https://github.com/Froussios/fitbit-nutrition-portal/issues/42)).
 * **Data per search.** Over budget and accepted for now: section 9.1.
@@ -763,18 +763,55 @@ join key either: AFCD and AUSNUT share 1,201 food keys, and only 482 of those ha
 
 ### 13.3 Searching
 
-`GenericIndex` in `src/food/generic-search.ts`, in order:
+`GenericIndex` in `src/food/generic-search.ts` ranks by these rules, each one only breaking ties in the one before
+(DR-34):
 
-1. **Whole words** before a longer word that starts the same. The last word may be half typed. Plurals are ignored.
-2. **The food before its flavour.** These names put the food first, so it is the words before the first comma:
-   `Milk, cow, fluid` is a milk, `Chocolate, milk` is not. The opposite of product names (section 4.3).
-3. **The user's country first** (DR-34). When a source is from the user's country (AFCD for Australia, FNDDS for the
-   US), the other sources' foods appear only when it has fewer than 3 foods where a query word is the food by rule 2.
-   `Biscuit, chocolate` doesn't count towards the 3 for `chocolate`. When no source is from the user's country, or it
-   is unknown, every source counts the same.
-4. **The plain form:** fewest words other than plain ones such as `raw` and `regular fat`, then names with such a word.
+1. **What the food is.** These names say what the food is before the first comma and how it is prepared after it.
+   Before the comma, English puts the food last, as in product names (section 4.3): `Peanut butter` is a butter and
+   `Potato crisps or chips` are crisps. So a query word that names the food comes first (`peanuts`: `Peanuts, NFS`),
+   then one that only modifies it (`Peanut butter`), then one after the comma (`Oil, peanut`, `Bread, banana`).
+   * Words joined by `or` share their other words: `Ham or pork salad` is a salad, and `Potato crisps or chips` is
+     potato crisps or potato chips. Joined by `&` or `and`, both are the food: `Steak & vegetables`.
+   * The food's name ends at `with`, `in`, `on`, `from` or `for`: `Spaghetti in tomato & cheese sauce` is spaghetti.
+   * A form word passes the role to the word before it: `Chicken breast`, `Egg white`, `Cocoa powder`,
+     `Margarine spread`. Unlike product search, `butter` and `oil` are not form words here: peanut butter is not peanuts.
+   * AFCD writes some foods class first: `Nut, peanut`, `Seed, chia`, `Melon, watermelon`. For the classes `nut`, `seed`
+     and `melon`, the word after the comma names the food too, unless the source also has a food named by that word
+     alone: `Seed, pumpkin` is not a pumpkin, because AFCD has `Pumpkin, butternut, raw`. Only classes whose second
+     word names the food itself are listed: in `Oil, peanut` it names what the food is made from.
+2. **Whole words** before a longer word that starts the same. The last word may be half typed. Plurals are ignored,
+   except a plural that names another food: potato `crisps` are a snack, an apple `crisp` a dessert. Because rule 1
+   comes first, a half-typed word that names the food beats a whole word that only modifies one: `tom` finds tomatoes
+   before a Tom Collins.
+3. **The user's country first** (DR-35): for a user in Australia AFCD before FNDDS, in the US the other way round.
+   When no source is from the user's country, or it is unknown, this rule and the dropping of copies below don't
+   apply. Region only chooses between foods that are equally what was asked for. For an Australian user it can't put
+   AFCD's peanut butter above FNDDS's peanuts, but it puts AFCD's peanuts above FNDDS's, and potato crisps above apple
+   crisp. No food is ever hidden for being from another country. The examples below are for an Australian user.
+4. **The query's own noun.** Of foods equal so far, the one whose food is the query's last word: `chocolate milk`
+   finds AFCD's milk drink before its bar `Chocolate, milk`, and `milk chocolate` the bar first. It comes after
+   region, not before it, because AFCD often names a cut after the comma (`Pork, loin chop`, `Beef, mince`), where
+   it is not the food by rule 1: earlier, it would put every US `Pork chop` above every Australian one.
+5. **The fewest words left unsaid,** first of the words before the comma, which say what the food is
+   (`Banana, cavendish` before `Banana chip`), then of the others, which say how it is prepared. Plain words such as
+   `raw` and `regular fat`, and numbers, don't count. Region and the query's noun come before this rule because AFCD
+   names spell out what FNDDS leaves unsaid: `Peanut butter, smooth & crunchy, added sugar & salt` against
+   `Peanut butter`, and `Milk, cow, fluid, flavoured, chocolate` against `Chocolate, milk`.
+6. **The plain form:** a name with a plain word, then the shortest name.
 
-A row with exactly the same name as a higher-priority row is dropped. Its values are not merged.
+A food from another country is dropped when one from the user's country that matched has the same words before the first comma and the same
+words after it, apart from plain words and numbers: `Milk, whole` adds nothing to `Milk, cow, fluid, regular fat
+(~3.5%)`, nor `Cheese, Cheddar` to `Cheese, cheddar, natural, regular fat`. The comma counts: AFCD's bar
+`Chocolate, milk` doesn't hide FNDDS's drink `Chocolate milk, NFS`. Numbers are left out on purpose, so a regional
+equivalent stands in for the US food: `Milk, reduced fat (2%)` gives way to `Milk, cow, fluid, reduced fat (~1%)`.
+Typing `2%` still finds the US row, because the Australian one then doesn't match. Rows of one source that differ
+only in plain words (`peeled`, `unpeeled`) are different foods, and are all kept. Values are never merged.
+
+Known limits:
+
+* A half-typed word that is a whole word of another food finds that food first, until the next letter: `mush` finds
+  cornmeal mush before mushrooms, and `ice` finds Italian ice before ice cream, which is a cream.
+* Searching just a class (`nuts`) finds AFCD's nuts one by one rather than a mixed-nuts row first.
 
 An index built before DR-16 has products with no brand first, so until it is rebuilt those are the candidates a search
 finds first; the 10 chosen are still put in the order above, so the order looks mixed.
