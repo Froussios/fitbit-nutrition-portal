@@ -784,14 +784,15 @@ join key either: AFCD and AUSNUT share 1,201 food keys, and only 482 of those ha
 3. **Australian before US.** Region only chooses between foods that are equally what was asked for. It can't put
    AFCD's peanut butter above FNDDS's peanuts, but it puts AFCD's peanuts above FNDDS's, and potato crisps above apple
    crisp. FNDDS foods are never hidden for being from the US.
-4. **The fewest words left unsaid,** first of the words before the comma, which say what the food is
-   (`Banana, cavendish` before `Banana chip`), then of the others, which say how it is prepared. Plain words such as
-   `raw` and `regular fat`, and numbers, don't count. Region comes before this rule because AFCD names spell out what
-   FNDDS leaves unsaid: `Peanut butter, smooth & crunchy, added sugar & salt` against `Peanut butter`.
-5. **The query's own noun.** Of foods equal so far, the one whose food is the query's last word: `chocolate milk`
+4. **The query's own noun.** Of foods equal so far, the one whose food is the query's last word: `chocolate milk`
    finds AFCD's milk drink before its bar `Chocolate, milk`, and `milk chocolate` the bar first. It comes after
    region, not before it, because AFCD often names a cut after the comma (`Pork, loin chop`, `Beef, mince`), where
    it is not the food by rule 1: earlier, it would put every US `Pork chop` above every Australian one.
+5. **The fewest words left unsaid,** first of the words before the comma, which say what the food is
+   (`Banana, cavendish` before `Banana chip`), then of the others, which say how it is prepared. Plain words such as
+   `raw` and `regular fat`, and numbers, don't count. Region and the query's noun come before this rule because AFCD
+   names spell out what FNDDS leaves unsaid: `Peanut butter, smooth & crunchy, added sugar & salt` against
+   `Peanut butter`, and `Milk, cow, fluid, flavoured, chocolate` against `Chocolate, milk`.
 6. **The plain form:** a name with a plain word, then the shortest name.
 
 A US food is dropped when an Australian food that matched has the same words before the first comma and the same

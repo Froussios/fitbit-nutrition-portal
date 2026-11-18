@@ -392,8 +392,9 @@ last, so `Peanut butter` is a butter), then a word that modifies it, then a word
 Australian before US, then the food the query's last word names, then the fewest words of the name the query leaves
 unsaid. USDA foods are never hidden for being from the US: one is left out only when an Australian food that matched
 has the same words before and after the first comma, apart from plain words and numbers, so a regional equivalent
-(`reduced fat (~1%)` for `reduced fat (2%)`) stands in for it. AFCD's class-first names (`Nut, peanut`, `Seed, chia`, `Melon, watermelon`) count as the food they name, and
-`crisps` is no longer read as `crisp` ([FOOD_SEARCH.md](FOOD_SEARCH.md#133-searching)).
+(`reduced fat (~1%)` for `reduced fat (2%)`) stands in for it. AFCD's class-first names (`Nut, peanut`, `Seed, chia`,
+`Melon, watermelon`) count as the food they name, and `crisps` is no longer read as `crisp`
+([FOOD_SEARCH.md](FOOD_SEARCH.md#133-searching)).
 **Why.** Owner decision (18 November 2026). `peanuts` showed `Peanut butter, smooth & crunchy, added sugar & salt` first.
 The source ranked above how much of the name the query covered, and every word before the comma counted as the food.
 AFCD's own peanuts, written `Nut, peanut`, didn't count at all. The rule that hid USDA foods also caused the cookie bug in
