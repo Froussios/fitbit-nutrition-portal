@@ -91,9 +91,22 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
         {},
         ...[...entries, ...deleted].sort(byMeal).map((e) => {
           const editor = editing?.id === e.id ? editing : undefined;
+          // The same conditions that enable the row's Edit button.
+          const editable = e.own && !deletedIds.has(e.id) && e.ref?.source !== "prep" && !offline && !busy.has(e.id) && !editing;
           return el(
             "tr",
-            { class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busy.has(e.id)) && "pending", editor && "editing"].filter(Boolean).join(" ") || undefined },
+            {
+              class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busy.has(e.id)) && "pending", editor && "editing"].filter(Boolean).join(" ") || undefined,
+              // A double-click anywhere on the row but its buttons opens it for editing, like its Edit button.
+              ondblclick: editable
+                ? (ev: Event) => {
+                    if (ev.target instanceof Element && ev.target.closest("button, [popover]")) return;
+                    // The double-click also selected a word, which would stay highlighted behind the editor.
+                    window.getSelection()?.removeAllRanges();
+                    onEdit(e);
+                  }
+                : undefined,
+            },
             el("td", {}, editor ? editor.meal : mealLabel(e.mealType)),
             el("td", {}, e.displayName, rowTag(e.id, deletedIds, busy, pendingIds)),
             el("td", { class: "num" }, editor ? editor.amount : (e.amount ?? "–")),

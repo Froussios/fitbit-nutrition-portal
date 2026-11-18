@@ -12,7 +12,7 @@ This is the MVP, a proof of concept (milestone M0):
    read what the app's rules refuse, such as a mistyped unit, and you check the result before it is logged.
 3. See a day's whole Google Health nutrition diary, whichever app logged each entry, with amounts and
    totals. Arrows beside the day step back to earlier days, a calendar button jumps to any day, a Today button jumps back, and new entries go on the day shown.
-   The page URL names the day (`?day=2026-11-09`), so a day can be linked to; without it the diary shows today. Entries made by this app can be edited (amount and meal) and deleted. Deleting asks for no confirmation: a
+   The page URL names the day (`?day=2026-11-09`), so a day can be linked to; without it the diary shows today. Entries made by this app can be edited (amount and meal), with the pencil button or a double-click on the row, and deleted. Deleting asks for no confirmation: a
    deleted entry stays crossed out with an undo button until the page is reloaded.
 4. Where the site serves its API, cook a batch and eat it in shares (**Meal prep**), or keep meals you eat often
    (**Saved meals**). A saved meal is logged as one entry under its name. Its ingredients can be changed for that
