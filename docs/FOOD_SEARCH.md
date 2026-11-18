@@ -762,7 +762,7 @@ join key either: AFCD and AUSNUT share 1,201 food keys, and only 482 of those ha
 ### 13.3 Searching
 
 `GenericIndex` in `src/food/generic-search.ts` ranks by these rules, each one only breaking ties in the one before
-(DR-33):
+(DR-34):
 
 1. **What the food is.** These names say what the food is before the first comma and how it is prepared after it.
    Before the comma, English puts the food last, as in product names (section 4.3): `Peanut butter` is a butter and

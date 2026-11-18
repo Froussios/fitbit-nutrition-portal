@@ -132,8 +132,8 @@ the write scope covers only data the app added. Other apps' entries show a lock 
 the app that logged them (the Google Health app or another app's package name), or saying another app did if the
 writer is unknown. Deleting asks nothing: the row stays crossed out and out of the totals, with an
 Undo that logs an equivalent entry under a new ID (DR-20). If a delete or undo fails, the row is enabled again and
-an alert says so until it is dismissed or the action is tried again. Editing changes an entry's amount and meal in its
-own row, which replaces the entry with a corrected copy under a new ID (DR-22). It shows one day, today unless the
+an alert says so until it is dismissed or the action is tried again. Editing changes an entry's amount, meal and day in its
+own row, which replaces the entry with a corrected copy under a new ID (DR-22, DR-33). It shows one day, today unless the
 arrows beside its heading step to another (#19); there is no step past today. A calendar icon
 button opens the browser's own date picker (`showPicker()` on a hidden date field, `max` today), and a Today button jumps back. The day is
 in the page URL as `?day=YYYY-MM-DD`, a query parameter because GitHub Pages has no fallback for unknown paths. The URL is

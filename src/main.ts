@@ -14,7 +14,7 @@ import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
 import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, actionRefused, connectionBanner, deleteFailed, editNotConfirmed, oldEntryNotRemoved, undoNotConfirmed, type ConnectionState } from "./health/connection";
 import { LoggedFoodsCatalog } from "./food/logged-catalog";
-import { buildNutritionLogPoint, buildPortionPoint, byTime, copyNutritionLogPoint, NUTRITION_LOG_PARENT, editedNutritionLogPoint, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
+import { buildNutritionLogPoint, buildPortionPoint, byTime, copyNutritionLogPoint, NUTRITION_LOG_PARENT, editedNutritionLogPoint, entryDay, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
@@ -154,6 +154,8 @@ class App {
     (day) => this.showDay(day),
   );
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
+  /** Says where an entry went after an edit moved it to another day, with a button to that day. Cleared when the day changes. */
+  private readonly movedNotice = el("p", { class: "status moved-notice", role: "status", hidden: true });
   private readonly rowFailureList = el("div");
   /** Kept across renders, and messages come and go one at a time, so that screen readers announce only what is new. */
   private readonly rowAlert = el(
@@ -455,6 +457,7 @@ class App {
     this.viewedDay = day !== undefined && day < today ? day : undefined;
     this.syncUrl();
     this.stopEditing();
+    this.clearMoved();
     this.entries = [];
     this.loadedDay = undefined;
     this.listError = "";
@@ -653,9 +656,12 @@ class App {
       unitNames: this.unitNames,
       offline: this.connection.state === "offline",
       onSave: (edit) => void this.saveEdit(entry, edit),
-      onCancel: () => {
+      onCancel: (how) => {
         this.stopEditing();
-        this.renderDiary(undefined, entry.id);
+        // After Cancel or Escape the focus moves to the row's Edit button. After a click outside the row it stays where
+        // the user put it, such as the food search or another row's Delete.
+        if (how === "cancel") this.renderDiary(undefined, entry.id);
+        else this.renderDiary();
       },
     });
     this.renderDiary();
@@ -687,7 +693,7 @@ class App {
     const editor = this.editor;
     editor?.setSaving(true);
     const stillEditing = () => editor !== undefined && this.editor === editor;
-    appLog.info(`Editing ${entry.name}`, { replacement: point.name, mealType: edit.mealType, quantity: edit.amount?.quantity, unit: edit.amount?.unit, fromFoodRecord: Boolean(edit.amount?.food) });
+    appLog.info(`Editing ${entry.name}`, { replacement: point.name, mealType: edit.mealType, quantity: edit.amount?.quantity, unit: edit.amount?.unit, fromFoodRecord: Boolean(edit.amount?.food), day: edit.day });
     // The replacement has no name for its unit until the API lists it, but the original did.
     if (log.serving?.foodMeasurementUnitDisplayName) this.unitNames.set(log.serving.foodMeasurementUnit, log.serving.foodMeasurementUnitDisplayName);
     let written: { key: string; created: DataPoint };
@@ -708,14 +714,32 @@ class App {
     this.deletedIds.add(entry.id);
     this.catalog.merge(toLoggedFoods([created], this.clientId));
     const replacement = toDiaryEntry(created, this.diaryContext());
-    this.entries = [...this.entries.filter((e) => e.id !== entry.id), ...(replacement ? [replacement] : [])].sort(byTime);
+    // Moved to another day, it leaves this one: the listing for that day shows it, pending until the API does.
+    const here = replacement && entryDay(replacement) === this.day() ? replacement : undefined;
+    this.entries = [...this.entries.filter((e) => e.id !== entry.id), ...(here ? [here] : [])].sort(byTime);
+    if (replacement && !here) this.showMoved(entry.displayName, entryDay(replacement));
     if (stillEditing()) {
       this.stopEditing();
       this.renderDiary(undefined, key);
+      // The row has gone, so the focus goes to the way to follow it.
+      if (!here) this.movedNotice.querySelector("button")?.focus();
     } else {
       this.renderDiary();
     }
     void this.removeReplaced(entry);
+  }
+
+  /** Says that `name` is now on `day`, with a button that shows that day. */
+  private showMoved(name: string, day: string) {
+    const label = dayLabel(day, civilDate(new Date()));
+    const on = label === "Today" || label === "Yesterday" ? label.toLowerCase() : label;
+    replaceChildren(this.movedNotice, `Moved ${name} to ${on}. `, el("button", { type: "button", class: "link", onclick: () => this.showDay(day) }, `Show ${on}`));
+    this.movedNotice.hidden = false;
+  }
+
+  private clearMoved() {
+    this.movedNotice.replaceChildren();
+    this.movedNotice.hidden = true;
   }
 
   /** Deletes the entry an edit replaced. If that fails both exist, so the old row comes back and an alert says so. */
@@ -729,7 +753,8 @@ class App {
       appLog.error("Removing the entry an edit replaced failed", describeError(e));
       this.handleError(e, false);
       this.deletedIds.delete(entry.id);
-      this.entries = [...this.entries.filter((other) => other.id !== entry.id), entry].sort(byTime);
+      // Only onto its own day: after a move, the user may already be looking at the new one.
+      if (entryDay(entry) === this.day()) this.entries = [...this.entries.filter((other) => other.id !== entry.id), entry].sort(byTime);
       this.showRowFailure(entry, oldEntryNotRemoved(entry.displayName));
     }
     this.busy.delete(entry.id);
@@ -1286,6 +1311,7 @@ class App {
             el("button", { type: "button", onclick: () => void this.loadDay() }, "Refresh"),
           ),
           this.diaryStatus,
+          this.movedNotice,
           this.rowAlert,
           this.diary,
           el(

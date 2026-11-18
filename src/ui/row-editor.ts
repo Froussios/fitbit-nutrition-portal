@@ -1,12 +1,14 @@
 import { amountAi } from "../ai/amount-ai";
+import { isCivilDate } from "../core/day-url";
 import { canReload, type FoodItem } from "../core/food";
+import { civilDate } from "../core/time";
 import { convertQuantity, type Measurable } from "../core/units";
 import { describeError, logger } from "../debug/log";
 import type { FoodCatalog } from "../food/catalog";
-import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, canConvertLogged, editedNutritionLogPoint, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, toDiaryEntry, type AmountEdit, type DiaryEntry, type EntryEdit } from "../health/mapping";
+import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, canConvertLogged, editedNutritionLogPoint, entryDay, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, toDiaryEntry, type AmountEdit, type DiaryEntry, type EntryEdit } from "../health/mapping";
 import type { MealType } from "../health/types";
 import { createAmountField } from "./amount-field";
-import { el, errorMessage } from "./dom";
+import { el, errorMessage, singleTabStop } from "./dom";
 import { fmtEnergy, fmtGrams, summary } from "./format";
 
 const log = logger("edit");
@@ -14,13 +16,17 @@ const log = logger("edit");
 /** The amount cannot be used yet, and it is too early to call it wrong. */
 class StillTyping extends Error {}
 
+/** The day chosen cannot be used; said under the day, not the amount. */
+class DayProblem extends Error {}
+
 export interface RowEditorOptions {
   readonly catalog: FoodCatalog;
   readonly entry: DiaryEntry;
   readonly unitNames: ReadonlyMap<string, string>;
   readonly offline: boolean;
   readonly onSave: (edit: EntryEdit) => void;
-  readonly onCancel: () => void;
+  /** `outside` when a click outside the row closed the editor, so the focus belongs where the user clicked. */
+  readonly onCancel: (how: "cancel" | "outside") => void;
 }
 
 /** The controls that replace a diary row's contents while it is edited (DR-22). The table puts them in its cells. */
@@ -28,6 +34,8 @@ export interface RowEditor {
   /** The entry's ID. */
   readonly id: string;
   readonly meal: HTMLElement;
+  /** The day the entry is on, which can move it to another. Shown with the meal. */
+  readonly day: HTMLElement;
   readonly amount: HTMLElement;
   readonly energy: HTMLElement;
   readonly protein: HTMLElement;
@@ -92,6 +100,13 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   );
   mealSelect.value = meal0 ?? "";
 
+  // There is no diary after today, so an entry can't be moved there. The date field enforces it only in its picker.
+  const day0 = entryDay(entry);
+  const dayInput = el("input", { id: "edit-day", type: "date", value: day0, max: civilDate(new Date()), required: true, "aria-label": `Day for ${entry.displayName}` });
+  singleTabStop(dayInput);
+  const dayProblem = el("div", { class: "edit-error", hidden: true });
+  const dayCell = el("div", { class: "day-edit" }, dayInput, dayProblem);
+
   const energy = el("span");
   const protein = el("span");
   const carbs = el("span");
@@ -101,7 +116,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
 
   // Words, not icons: Cancel must never look like the delete button it replaces.
   const save = el("button", { type: "button", class: "primary edit-save", "aria-label": `Save changes to ${entry.displayName}`, onclick: () => submit() }, "Save");
-  const cancel = el("button", { type: "button", class: "link edit-cancel", "aria-label": `Cancel editing ${entry.displayName}`, onclick: () => onCancel() }, "Cancel");
+  const cancel = el("button", { type: "button", class: "link edit-cancel", "aria-label": `Cancel editing ${entry.displayName}`, onclick: () => onCancel("cancel") }, "Cancel");
   const actions = el("div", { class: "row-actions" }, save, cancel, announce);
 
   const measure = (): Measurable => food ?? (logged ? basicMeasure(logged.unit) : asLogged);
@@ -120,16 +135,27 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
 
   const chosenMeal = (): MealType | undefined => (mealSelect.value ? (mealSelect.value as MealType) : undefined);
 
+  /** The day to move the entry to, or undefined when it stays on its own. Throws why the day can't be used. */
+  const dayEdit = (): string | undefined => {
+    const day = dayInput.value;
+    if (!isCivilDate(day)) throw new DayProblem("Enter a day.");
+    if (day === day0) return undefined;
+    if (day > civilDate(new Date())) throw new DayProblem("An entry can't go on a day after today.");
+    return day;
+  };
+
   const currentEdit = (): EntryEdit => {
     const mealType = chosenMeal();
     const amount = amountEdit();
-    return { ...(mealType ? { mealType } : {}), ...(amount ? { amount } : {}) };
+    const day = dayEdit();
+    return { ...(mealType ? { mealType } : {}), ...(amount ? { amount } : {}), ...(day ? { day } : {}) };
   };
 
   /** Shows what would be saved in the row's own cells, and whether it can be saved. */
   const refresh = () => {
     let blocked = true;
     let error = "";
+    let dayError = "";
     let waiting = false;
     let shown = undefined as ReturnType<typeof toDiaryEntry>;
     try {
@@ -138,10 +164,11 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
       waiting = Boolean(edit.amount && lookingUp);
       if (!waiting) {
         shown = toDiaryEntry(editedNutritionLogPoint(nutritionLog, edit, { id: "preview", unitNames }));
-        blocked = !edit.amount && chosenMeal() === meal0;
+        blocked = !edit.amount && !edit.day && chosenMeal() === meal0;
       }
     } catch (e) {
       if (e instanceof StillTyping) waiting = true;
+      else if (e instanceof DayProblem) dayError = e.message;
       else error = errorMessage(e);
     }
     const blank = waiting ? "…" : "–";
@@ -151,13 +178,17 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     fat.textContent = shown ? fmtGrams(shown.profile.nutrients.fat) : blank;
     problem.textContent = error;
     problem.hidden = !error;
-    announce.textContent = error || (shown ? summary(shown.profile) : "");
+    dayProblem.textContent = dayError;
+    dayProblem.hidden = !dayError;
+    announce.textContent = error || dayError || (shown ? summary(shown.profile) : "");
     quantity.setAttribute("aria-invalid", String(Boolean(error)));
+    dayInput.setAttribute("aria-invalid", String(Boolean(dayError)));
     save.disabled = blocked || saving || offline;
     cancel.disabled = saving;
     quantity.disabled = saving;
     unitSelect.disabled = saving;
     mealSelect.disabled = saving;
+    dayInput.disabled = saving;
   };
 
   /** An entry that stated no amount starts from its food's own unit with the field empty, so nothing changes until the user types. */
@@ -171,17 +202,40 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   }
 
   mealSelect.addEventListener("input", refresh);
+  dayInput.addEventListener("input", refresh);
   quantity.addEventListener("input", () => (touched = true));
   unitSelect.addEventListener("input", () => (touched = true));
 
-  for (const control of [mealSelect, amountCell, actions]) {
+  for (const control of [mealSelect, dayCell, amountCell, actions]) {
     control.addEventListener("keydown", (ev) => {
       const { key, target } = ev as KeyboardEvent;
       // On a dropdown, Escape may be closing its list, which must not discard what was typed.
-      if (key === "Escape" && !saving && !(target instanceof HTMLSelectElement)) onCancel();
-      if (key === "Enter" && target === quantity) submit();
+      if (key === "Escape" && !saving && !(target instanceof HTMLSelectElement)) onCancel("cancel");
+      if (key === "Enter" && (target === quantity || target === dayInput)) submit();
     });
   }
+
+  // A click outside the row closes the editor, as Cancel does. Only a click whose press also began outside counts: not the
+  // click that opened the editor, nor a text selection dragged out of a field. Keyboard focus leaving the row closes nothing.
+  // The listener captures, so the table is redrawn before the clicked control's own handler runs. That handler still fires,
+  // on the replaced element (the event's path is fixed at dispatch), so another row's Delete or Edit must not depend on
+  // its button still being in the page.
+  const outside = new AbortController();
+  let pressedOutside = false;
+  const isOutside = (target: EventTarget | null) => {
+    const row = actions.closest("tr");
+    return Boolean(row?.isConnected && target instanceof Node && !row.contains(target));
+  };
+  document.addEventListener("pointerdown", (ev) => (pressedOutside = isOutside(ev.target)), { capture: true, signal: outside.signal });
+  document.addEventListener(
+    "click",
+    (ev) => {
+      const pressed = pressedOutside;
+      pressedOutside = false;
+      if (pressed && !saving && isOutside(ev.target)) onCancel("outside");
+    },
+    { capture: true, signal: outside.signal },
+  );
 
   if (logged) {
     amountField.set(String(logged.amount), logged.unit);
@@ -220,6 +274,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   return {
     id: entry.id,
     meal: mealSelect,
+    day: dayCell,
     amount: amountCell,
     energy,
     protein,
@@ -243,6 +298,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
       refresh();
     },
     dispose() {
+      outside.abort();
       lookup.abort();
       amountField.dispose();
     },

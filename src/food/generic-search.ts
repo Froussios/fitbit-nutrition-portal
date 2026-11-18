@@ -5,12 +5,12 @@ import { genericToFoodItem, type GenericRow } from "./generics-format";
  * Searches the generic foods in the browser (docs/FOOD_SEARCH.md section 13).
  * These names say what the food is before the first comma and how it is
  * prepared after it: "Milk, cow, fluid". Before the comma, English puts the
- * food last, as in product names: "Peanut butter" is a butter (DR-33).
+ * food last, as in product names: "Peanut butter" is a butter (DR-34).
  */
 
 /**
  * Sources from outside Australia. Region only breaks ties between foods that answer the query equally well
- * (DR-33): it never hides a food, and never lifts a worse match above a better one.
+ * (DR-34): it never hides a food, and never lifts a worse match above a better one.
  */
 const OVERSEAS_SOURCES: ReadonlySet<string> = new Set(["fndds", "usda"]);
 

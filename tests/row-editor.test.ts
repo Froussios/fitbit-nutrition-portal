@@ -2,7 +2,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FoodItem, FoodRef } from "../src/core/food";
 import type { FoodCatalog } from "../src/food/catalog";
-import { AS_LOGGED_UNIT, buildNutritionLogPoint, toDiaryEntry, type DiaryEntry, type EntryEdit } from "../src/health/mapping";
+import { addCivilDays, civilDate } from "../src/core/time";
+import { AS_LOGGED_UNIT, buildNutritionLogPoint, entryDay, toDiaryEntry, type DiaryEntry, type EntryEdit } from "../src/health/mapping";
 import type { DataPoint } from "../src/health/types";
 import { createRowEditor } from "../src/ui/row-editor";
 
@@ -36,9 +37,10 @@ function catalog(found: FoodItem | undefined) {
 
 function open(e: DiaryEntry, cat: FoodCatalog) {
   const onSave = vi.fn<(edit: EntryEdit) => void>();
-  const editor = createRowEditor({ catalog: cat, entry: e, unitNames, offline: false, onSave, onCancel: vi.fn() });
+  const onCancel = vi.fn();
+  const editor = createRowEditor({ catalog: cat, entry: e, unitNames, offline: false, onSave, onCancel });
   const row = document.createElement("tr");
-  for (const part of [editor.meal, editor.amount, editor.energy, editor.actions]) {
+  for (const part of [editor.meal, editor.day, editor.amount, editor.energy, editor.actions]) {
     const cell = document.createElement("td");
     cell.append(part);
     row.append(cell);
@@ -48,11 +50,16 @@ function open(e: DiaryEntry, cat: FoodCatalog) {
   const unit = editor.amount.querySelector<HTMLSelectElement>("select")!;
   const save = editor.actions.querySelector<HTMLButtonElement>(".edit-save")!;
   const cancel = editor.actions.querySelector<HTMLButtonElement>(".edit-cancel")!;
+  const day = editor.day.querySelector<HTMLInputElement>("input[type=date]")!;
+  const pickDay = (value: string) => {
+    day.value = value;
+    day.dispatchEvent(new Event("input", { bubbles: true }));
+  };
   const type = (text: string) => {
     qty.value = text;
     qty.dispatchEvent(new Event("input", { bubbles: true }));
   };
-  return { editor, onSave, qty, unit, save, cancel, type };
+  return { editor, onSave, onCancel, row, qty, unit, save, cancel, type, day, pickDay };
 }
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -73,6 +80,35 @@ describe("row editor", () => {
     save.click();
     expect(onSave).toHaveBeenCalledWith({ mealType: "LUNCH" });
     expect(e.point.nutritionLog?.serving?.amount).toBe(amount);
+  });
+
+  it("moves the entry to another day, keeping its amount and meal", () => {
+    const e = entry();
+    const { day, pickDay, save, onSave } = open(e, catalog(undefined).catalog);
+    expect(day.value).toBe(entryDay(e));
+    expect(day.max).toBe(civilDate(new Date()));
+    expect(save.disabled).toBe(true);
+    const earlier = addCivilDays(entryDay(e), -2);
+    pickDay(earlier);
+    expect(save.disabled).toBe(false);
+    save.click();
+    expect(onSave).toHaveBeenCalledWith({ day: earlier });
+    // Back on its own day, there is nothing to save.
+    pickDay(entryDay(e));
+    expect(save.disabled).toBe(true);
+  });
+
+  it("won't move an entry to a day after today, or to no day", () => {
+    const { pickDay, save, editor, day } = open(entry(), catalog(undefined).catalog);
+    pickDay(addCivilDays(civilDate(new Date()), 1));
+    expect(save.disabled).toBe(true);
+    expect(editor.day.querySelector(".edit-error")!.textContent).toBe("An entry can't go on a day after today.");
+    expect(day.getAttribute("aria-invalid")).toBe("true");
+    pickDay("");
+    expect(save.disabled).toBe(true);
+    expect(editor.day.querySelector(".edit-error")!.textContent).toBe("Enter a day.");
+    // The amount's own problems stay under the amount.
+    expect(editor.amount.querySelector<HTMLElement>(".edit-error")!.hidden).toBe(true);
   });
 
   it("shows Save and Cancel as words, never the delete symbol", () => {
@@ -137,5 +173,64 @@ describe("row editor", () => {
     await settle();
     expect([...unit.options].map((o) => o.textContent)).toContain("× 1/2 cup");
     expect(save.disabled).toBe(true);
+  });
+});
+
+describe("row editor, clicking outside the row", () => {
+  /** A press and release on `down` and `up`, as a mouse or a tap would make them. */
+  const press = (down: Element, up: Element = down) => {
+    down.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    up.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  };
+  const elsewhere = () => {
+    const other = document.createElement("button");
+    document.body.append(other);
+    return other;
+  };
+
+  it("cancels the edit", () => {
+    const { onCancel } = open(entry(), catalog(undefined).catalog);
+    press(elsewhere());
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith("outside");
+  });
+
+  it("tells Cancel and Escape apart from a click outside", () => {
+    const { onCancel, cancel, qty } = open(entry(), catalog(undefined).catalog);
+    cancel.click();
+    qty.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(onCancel.mock.calls).toEqual([["cancel"], ["cancel"]]);
+  });
+
+  it("keeps the edit for clicks inside the row", () => {
+    const { onCancel, qty, row } = open(entry(), catalog(undefined).catalog);
+    press(qty);
+    press(row.firstElementChild!);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("ignores the click that opened the editor, whose press came before it", () => {
+    const { onCancel } = open(entry(), catalog(undefined).catalog);
+    elsewhere().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("keeps the edit when a press in the row ends outside it, such as selecting text", () => {
+    const { onCancel, qty } = open(entry(), catalog(undefined).catalog);
+    press(qty, elsewhere());
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("keeps the edit while it is saving", () => {
+    const { onCancel, editor } = open(entry(), catalog(undefined).catalog);
+    editor.setSaving(true);
+    press(elsewhere());
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("stops listening once disposed", () => {
+    const { onCancel, editor } = open(entry(), catalog(undefined).catalog);
+    editor.dispose();
+    press(elsewhere());
+    expect(onCancel).not.toHaveBeenCalled();
   });
 });

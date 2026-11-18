@@ -129,7 +129,7 @@ without fetching their text. Index format 3. "No brand" is the only available si
 ([#38](https://github.com/Froussios/fitbit-nutrition-portal/issues/38)) would be the next step.
 
 ### DR-16 Generic foods come from authoritative sources, in a small file searched in the browser
-Which USDA foods are shown, and their order, revised by DR-33.
+Which USDA foods are shown, and their order, revised by DR-34.
 **Decision.** Generic foods come from AFCD (FSANZ) and USDA FNDDS, concatenated into one committed file of about
 310 KB gzipped that the browser downloads once and searches locally, and they are shown first. Open Food Facts holds
 products: those with no brand are labelled "No brand listed", rank below branded ones, and no longer count as
@@ -149,10 +149,12 @@ Only the Australian foods have few serving measures until AUSNUT is added.
 
 ### DR-17 An entry has no meal unless the user picks one
 **Decision.** The form preselects "No meal" and the app then leaves `mealType` out of the entry. Breakfast, lunch,
-dinner and snack stay available, and the form returns to "No meal" after each entry, so a meal never carries over
-unnoticed. The app no longer guesses the meal from the time of day, and no longer offers or writes `ANYTIME`.
+dinner and snack stay available. The meal picked stays picked for the next entry, until the user changes it or
+reloads the page, since consecutive entries are usually from the same meal. The app no longer guesses the meal from
+the time of day, and no longer offers or writes `ANYTIME`.
 **Why.** Owner decision (6 November 2026). The API marks `mealType` as optional, and describes `ANYTIME` as legacy
-while listing only the other four values for this field.
+while listing only the other four values for this field. The form first returned to "No meal" after each entry; the
+owner reversed that (18 November 2026), because logging a meal usually takes several entries in a row.
 **Consequence.** Google does not allow editing logs created from a typed-in food, so giving an entry a meal later
 replaces it with a copy (DR-22). The diary shows entries with no meal with a dash.
 **Reopen if.** Google Health rejects or misplaces entries with no meal.
@@ -206,9 +208,10 @@ default because it is what Google Health stores and what the food search already
 **Reopen if.** The app gets more settings than the header can hold, or the choice needs to follow the user across devices.
 
 ### DR-22 Editing replaces the entry, and recalculates from the food's record when it can
+Revised by DR-33: the day can be edited too.
 **Decision.** An entry's amount and meal can be edited, on this app's own entries, in the diary row itself. Its nutrient
 cells follow what is typed, and a Save button and a Cancel link replace the edit and delete buttons: in words, so that
-Cancel never looks like Delete. Time and food cannot be
+Cancel never looks like Delete. Escape or a click outside the row cancels too. Time and food cannot be
 edited. Saving writes a corrected copy under a new ID, then deletes the original. For a new amount, nutrients are calculated again from the food's
 record, found through the reference in the entry's ID. With no record (a custom food, or a failed lookup), the logged values
 are scaled. A meal-only edit copies the logged values. Any entry offers the units of the kind it was logged in; a food found
@@ -367,7 +370,22 @@ beyond that.
 **Consequence.** `cookie` finds FNDDS cookies, and `biscuit` finds only AFCD biscuits.
 **Reopen if.** Ranking takes the user's region into account, so a regional name could map to its local meaning.
 
-### DR-33 Generic foods rank by what the food is; region only breaks ties
+### DR-33 The log button names a day other than today, and an edit can move an entry to another day
+**Decision.** When an entry would go on another day than today (the day shown, or a time typed for another day), the log
+button turns amber and names the day: "Log entry for yesterday", "Log meal for Monday, 16 Nov 2026". The row editor
+(DR-22) has a date field under the meal, up to today. A new day keeps the entry's local clock time and length, with the
+local UTC offsets of the new day, so a move across a daylight saving change keeps the clock time; the clock time itself
+still cannot be edited. A moved entry leaves the day shown, and a note under the heading says where it went, with a
+button that shows that day.
+**Why.** Owner request (18 November 2026): entries were logged on the wrong day by mistake, which nothing pointed out,
+and the only fix was to delete the entry and log it again on the right day.
+**Consequence.** A move is an edit like any other: a copy under a new ID, then a delete of the original (DR-22). The note
+goes when the day shown changes. A meal prep share still cannot be edited, so it cannot be moved. A clock time that
+does not exist on the new day, in the hour skipped when daylight saving starts, moves an hour later (02:30 becomes
+03:30). Moving a late entry to today can put it later than now, as a time typed in the log form can.
+**Reopen if.** Moving needs the clock time too, or entries are moved often enough to want it from the log form.
+
+### DR-34 Generic foods rank by what the food is; region only breaks ties
 Revises DR-16, where USDA foods appeared only when AFCD had fewer than 3 matches.
 **Decision.** The generic food search ranks first by what the food is: a query word that names it (English puts the food
 last, so `Peanut butter` is a butter), then a word that modifies it, then a word after the comma. Then whole words, then
