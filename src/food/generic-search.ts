@@ -3,18 +3,52 @@ import { genericToFoodItem, type GenericRow } from "./generics-format";
 
 /**
  * Searches the generic foods in the browser (docs/FOOD_SEARCH.md section 13).
- * These names put the food first, "Milk, cow, fluid", the opposite of product
- * names, so they get their own rule for which word is the food: the words
- * before the first comma.
+ * These names say what the food is before the first comma and how it is
+ * prepared after it: "Milk, cow, fluid". Before the comma, English puts the
+ * food last, as in product names: "Peanut butter" is a butter (DR-33).
  */
 
-/** Australian sources come first; these show only when the Australian ones have too little. */
-const FALLBACK_SOURCES: ReadonlySet<string> = new Set(["fndds", "usda"]);
-/** Below this many Australian foods where a query word is the food, foods from the fallback sources are shown too. */
-export const MIN_PRIMARY_FOODS = 3;
+/**
+ * Sources from outside Australia. Region only breaks ties between foods that answer the query equally well
+ * (DR-33): it never hides a food, and never lifts a worse match above a better one.
+ */
+const OVERSEAS_SOURCES: ReadonlySet<string> = new Set(["fndds", "usda"]);
+
+/**
+ * Class words that a name can put before the food itself: AFCD writes peanuts as "Nut, peanut" and chia as
+ * "Seed, chia", where FNDDS writes "Peanuts". Only classes where the word after the comma names the food on
+ * its own: in "Oil, peanut" or "Bread, banana" it names what the food is made from, so those are not here.
+ */
+const KIND_CLASSES: ReadonlySet<string> = new Set(["nut", "seed", "melon"]);
+
+/**
+ * Words ending in "ie" whose plural keeps it: "cookies" is "cookie", not "cooky". The ones in the generic food
+ * names; "pattie" is left out, so that "patties" still finds the "Patty" rows.
+ */
+const IE_WORDS: ReadonlySet<string> = new Set(["brie", "brownie", "calorie", "cookie", "hoagie", "movie", "rotisserie", "smoothie", "veggie"]);
+
+/** Plurals that name another food than their singular: potato "crisps" are a snack, an apple "crisp" a dessert. */
+const OWN_PLURALS: ReadonlySet<string> = new Set(["crisps"]);
+
+/** A simple singular, enough to make "bananas" find "Banana" and "tomatoes" find "Tomato". */
+export function singular(word: string): string {
+  if (word.length <= 3 || word.endsWith("ss") || OWN_PLURALS.has(word)) return word;
+  // "berries" is "berry", but "pies" is "pie" and "cookies" is "cookie".
+  if (word.endsWith("ies")) return word.length > 4 && !IE_WORDS.has(word.slice(0, -1)) ? `${word.slice(0, -3)}y` : word.slice(0, -1);
+  if (word.endsWith("oes")) return word.slice(0, -2);
+  return word.endsWith("s") ? word.slice(0, -1) : word;
+}
+
+/**
+ * Words after a food that only say which part or form of it this is, so the word before them is the food:
+ * "Chicken breast", "Egg white", "Cocoa powder", "Margarine spread". Not "butter" or "oil": peanut butter is not peanuts.
+ */
+const FORM_WORDS: ReadonlySet<string> = new Set(["breast", "thigh", "drumstick", "wing", "leg", "fillet", "white", "yolk", "powder", "extract", "essence", "spread"]);
 
 /** Words that describe the plain form of a food, so they don't count against a match, and a name with one wins a tie. */
 const PLAIN_WORDS: ReadonlySet<string> = new Set(["raw", "plain", "fresh", "regular", "fat", "fluid", "whole", "natural", "commercial", "cow", "nfs", "unflavoured", "flesh", "lean", "peeled", "unpeeled"].map(singular));
+/** Words a match need not account for: plain words and numbers ("~3.5%"). */
+const isMinor = (w: string) => PLAIN_WORDS.has(w) || /^\d/.test(w);
 
 /**
  * Same food whatever the spelling or regional name. Applied to the query only: nothing is ever joined on these.
@@ -41,21 +75,6 @@ const SYNONYMS: readonly (readonly string[])[] = [
   ["soy milk", "soy beverage"],
   ["oat milk", "oat beverage"],
 ];
-
-/**
- * Words ending in "ie" whose plural keeps it: "cookies" is "cookie", not "cooky". The ones in the generic food
- * names; "pattie" is left out, so that "patties" still finds the "Patty" rows.
- */
-const IE_WORDS: ReadonlySet<string> = new Set(["brie", "brownie", "calorie", "cookie", "hoagie", "movie", "rotisserie", "smoothie", "veggie"]);
-
-/** A simple singular, enough to make "bananas" find "Banana" and "tomatoes" find "Tomato". */
-export function singular(word: string): string {
-  if (word.length <= 3 || word.endsWith("ss")) return word;
-  // "berries" is "berry", but "pies" is "pie" and "cookies" is "cookie".
-  if (word.endsWith("ies")) return word.length > 4 && !IE_WORDS.has(word.slice(0, -1)) ? `${word.slice(0, -3)}y` : word.slice(0, -1);
-  if (word.endsWith("oes")) return word.slice(0, -2);
-  return word.endsWith("s") ? word.slice(0, -1) : word;
-}
 
 const wordsOf = (text: string) =>
   (fold(text).match(CHUNK_FOR_WORDS) ?? []).filter((w) => !STOP_WORDS.has(w) && (w.length > 1 || /\d/.test(w))).map(singular);
@@ -101,32 +120,91 @@ export function queryVariants(q: ParsedQuery): readonly (readonly Term[])[] {
 interface Indexed {
   readonly row: GenericRow;
   readonly words: readonly string[];
-  /** The words before the first comma: what the food is. */
-  readonly head: ReadonlySet<string>;
-  readonly fallback: boolean;
+  /**
+   * What the food is, from the words before the first comma: the words of each name it goes by. "Potato crisps
+   * or chips" is [potato, crisps] or [potato, chips], "Nut, peanut" is [nut] or [peanut].
+   */
+  readonly head: readonly (readonly string[])[];
+  /** The words that say what the food is: "butter" in "Peanut butter", both in "Steak & onions". */
+  readonly nouns: readonly string[];
+  /** The other words: how the food is prepared, or which variety it is. */
+  readonly rest: readonly string[];
+  readonly overseas: boolean;
+  /** Its words apart from plain words and numbers, in order: two sources' rows with the same key are the same food. */
+  readonly key: string;
 }
 
-function indexRow(row: GenericRow): Indexed {
-  const name = row[2];
-  return { row, words: wordsOf(name), head: new Set(wordsOf(name.split(/[,(]/)[0] ?? "")), fallback: FALLBACK_SOURCES.has(row[0]) };
-}
+/** What each source's names start with ("Honey", "Pumpkin" from "Pumpkin, butternut, raw"), to tell "Nut, peanut" from "Seed, pumpkin". */
+type HeadsBySource = ReadonlyMap<string, ReadonlySet<string>>;
 
-/** How well a food answers one version of the query; lower is better. Undefined if it doesn't match. */
-function rankFood(food: Indexed, terms: readonly Term[]): readonly number[] | undefined {
-  let partial = 0;
-  let isFood = false;
-  for (const t of terms) {
-    const whole = food.words.includes(t.word);
-    if (!whole && !food.words.some((w) => termMatches(t, w))) return undefined;
-    if (!whole) partial = 1;
-    if ([...food.head].some((w) => termMatches(t, w))) isFood = true;
+/** Where a name's head ends and its qualifiers begin: "Milk, cow", "Bread (pita)". */
+const SEGMENT = /[,(]/;
+/** Where the food's own name ends inside the head: "Spaghetti in tomato & cheese sauce", "Pasta with tomato-based sauce". */
+const QUALIFIED = /\s(?:with|in|on|from|for)\s/i;
+/** Between alternatives, either of which the food is: "Potato crisps or chips", "Hot chocolate / cocoa". */
+const ALTERNATIVE = /\sor\s|\//i;
+/** Between foods that are both in it: "Braised steak & onions", "Macaroni and cheese". */
+const BOTH = /\s(?:and|&)\s/i;
+
+/** The words of a food's name that say what it is: the last, and the one before a form word ("Cocoa powder"). */
+function nounsOf(words: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = words.length - 1; i >= 0; i--) {
+    out.push(words[i]!);
+    if (!FORM_WORDS.has(words[i]!)) break;
   }
-  // A loose term accounts for the words it matched ("iced" for "ice"); otherwise only whole words count.
-  const taken = (w: string) => terms.some((t) => w === t.word || (t.forms !== undefined && termMatches(t, w)));
-  const other = food.words.filter((w) => !taken(w));
-  const extras = other.filter((w) => !PLAIN_WORDS.has(w) && !/^\d/.test(w)).length;
-  const plain = other.some((w) => PLAIN_WORDS.has(w));
-  return [partial, isFood ? 0 : 1, food.fallback ? 1 : 0, extras, plain ? 0 : 1, other.length];
+  return out;
+}
+
+/**
+ * Joined names share their other words: "Ham or pork salad" is a ham salad or a pork salad, and "Potato crisps or
+ * chips" potato crisps or potato chips.
+ */
+function distribute(names: readonly (readonly string[])[]): (readonly string[])[] {
+  const first = names[0]!;
+  const last = names[names.length - 1]!;
+  return names.map((n, i) => {
+    if (n.length !== 1) return n;
+    if (i < names.length - 1 && last.length > 1) return [n[0]!, ...last.slice(1)];
+    if (i > 0 && first.length > 1) return [...first.slice(0, -1), n[0]!];
+    return n;
+  });
+}
+
+/** Splits text on a joining word and gives the words of each part, leaving out empty ones. */
+const partsOf = (text: string, joiner: RegExp) => text.split(joiner).map(wordsOf).filter((p) => p.length > 0);
+
+const firstSegment = (name: string) => wordsOf(name.split(SEGMENT)[0] ?? "");
+
+function indexRow(row: GenericRow, heads: HeadsBySource): Indexed {
+  const name = row[2];
+  const [headText = "", ...after] = name.split(SEGMENT);
+  const words = wordsOf(name);
+  const base = { row, words, overseas: OVERSEAS_SOURCES.has(row[0]), key: words.filter((w) => !isMinor(w)).join(" ") };
+  const first = wordsOf(headText);
+  const second = wordsOf(after[0] ?? "");
+  // "Nut, peanut" is a nut and a peanut, unless the source also has a food named by that word alone: AFCD's
+  // "Seed, pumpkin" is not a pumpkin, because AFCD has "Pumpkin, butternut, raw", and "Melon, honey dew" is not honey.
+  const own = heads.get(row[0]);
+  if (first.length === 1 && KIND_CLASSES.has(first[0]!) && second.length > 0 && !second.some((w) => own?.has(w))) {
+    // Searching "nuts", the kind says which nut it is, as a variety does: "Apple, fuji".
+    return { ...base, head: [first, second], nouns: [...first, ...nounsOf(second)], rest: after.flatMap(wordsOf) };
+  }
+  const cut = headText.search(QUALIFIED);
+  const food = cut > 0 ? headText.slice(0, cut) : headText;
+  const alternatives = food.split(ALTERNATIVE).filter((alt) => wordsOf(alt).length > 0);
+  const names = distribute(alternatives.map(wordsOf));
+  // An alternative can hold several foods, all in it: "Steak & vegetables", "Macaroni and cheese".
+  const foods = alternatives.flatMap((alt, i) => {
+    const parts = distribute(partsOf(alt, BOTH));
+    return parts.length > 1 ? parts : [names[i]!];
+  });
+  return {
+    ...base,
+    head: names.length > 0 ? names : [first],
+    nouns: foods.flatMap(nounsOf),
+    rest: [...(cut > 0 ? wordsOf(headText.slice(cut)) : []), ...after.flatMap(wordsOf)],
+  };
 }
 
 const compare = (a: readonly number[], b: readonly number[]) => {
@@ -137,16 +215,67 @@ const compare = (a: readonly number[], b: readonly number[]) => {
   return 0;
 };
 
+/**
+ * How well a food answers one version of the query; lower is better. Undefined if it doesn't match. In order:
+ *
+ * 1. What the food is: a query word is the noun that names it (English puts it last, so "Peanut butter" is a
+ *    butter and "Potato crisps" are crisps), then a word that modifies it (the peanut of "Peanut butter"),
+ *    then neither ("Bread, banana" is a bread).
+ * 2. Every query word is whole, rather than the start of a longer word: "Coke" before "Cokelat". A half-typed
+ *    word that names the food still comes before a whole word that only modifies it: "tom" finds tomatoes
+ *    before a Tom Collins.
+ * 3. Australian before overseas. This only chooses between foods that are equally what was asked for: it can't
+ *    put "Peanut butter" above "Peanuts" for "peanuts", but it can put potato crisps above apple crisp.
+ * 4. The fewest words of the food's name that the query leaves unsaid: "Peanuts" before "Peanuts, honey roasted".
+ *    Words before the first comma first, because they say what the food is ("Banana chip"), the others only
+ *    how it is prepared ("Banana, lady finger, peeled").
+ * 5. The plain form, then the shortest name.
+ */
+function rankFood(food: Indexed, terms: readonly Term[]): readonly number[] | undefined {
+  const roleOf = (w: string) => (food.nouns.includes(w) ? 0 : food.head.some((alt) => alt.includes(w)) ? 1 : 2);
+  // Each query word counts by the best word it matched, so "pot" is half of "Potato", not the "pot" of "pot roast".
+  let role = 2;
+  let partial = 0;
+  for (const t of terms) {
+    let best: readonly [number, number] | undefined;
+    for (const w of food.words) {
+      if (!termMatches(t, w)) continue;
+      const m = [roleOf(w), w === t.word ? 0 : 1] as const;
+      if (!best || compare(m, best) < 0) best = m;
+    }
+    if (!best) return undefined;
+    role = Math.min(role, best[0]);
+    partial = Math.max(partial, best[1]);
+  }
+  const said = (w: string) => terms.some((t) => termMatches(t, w));
+  // A loose term accounts for the words it matched ("iced" for "ice"); otherwise only whole words count.
+  const taken = (w: string) => terms.some((t) => w === t.word || (t.forms !== undefined && termMatches(t, w)));
+  const unsaid = (w: string) => !taken(w) && !isMinor(w);
+  // A food is judged by the name of it that the query says most of: "peanut" says all of "Nut, peanut".
+  const named = food.head.filter((alt) => alt.some(said));
+  const headExtras = Math.min(...(named.length > 0 ? named : food.head).map((alt) => new Set(alt.filter(unsaid)).size));
+  const restExtras = food.rest.filter(unsaid).length;
+  const other = food.words.filter((w) => !taken(w));
+  const plain = other.some((w) => PLAIN_WORDS.has(w));
+  return [role, partial, food.overseas ? 1 : 0, headExtras, restExtras, plain ? 0 : 1, other.length];
+}
+
 export class GenericIndex {
   private readonly foods: readonly Indexed[];
   private readonly byId = new Map<string, GenericRow>();
 
   constructor(rows: readonly GenericRow[]) {
-    this.foods = rows.map(indexRow);
+    const heads = new Map<string, Set<string>>();
+    for (const r of rows) {
+      const first = firstSegment(r[2]).join(" ");
+      if (!heads.has(r[0])) heads.set(r[0], new Set());
+      heads.get(r[0])!.add(first);
+    }
+    this.foods = rows.map((r) => indexRow(r, heads));
     for (const r of rows) this.byId.set(`${r[0]}:${r[1].toLowerCase()}`, r);
   }
 
-  /** The best foods for a query. Australian foods first; fallback ones only when few Australian foods are what was asked for. */
+  /** The best foods for a query, Australian first among equally good matches (rankFood). */
   search(query: string | ParsedQuery): GenericRow[] {
     const q = typeof query === "string" ? parseQuery(query) : query;
     const variants = queryVariants(q);
@@ -160,14 +289,18 @@ export class GenericIndex {
       }
       if (best) found.push({ food, rank: best });
     }
-    const primaryFoods = found.filter((f) => !f.food.fallback && f.rank[1] === 0).length;
+    // An overseas food is left out when an Australian one that matched has the same words, apart from plain
+    // words and numbers: "Milk, whole" adds nothing to "Milk, cow, fluid, regular fat (~3.5%)". Its values
+    // are never merged into the Australian food's.
+    const local = new Set(found.filter((f) => !f.food.overseas).map((f) => f.food.key));
     const seen = new Set<string>();
     const out: GenericRow[] = [];
-    for (const { food } of found.filter((f) => !f.food.fallback || primaryFoods < MIN_PRIMARY_FOODS).sort((a, b) => compare(a.rank, b.rank))) {
-      // A lower-priority source's row with exactly the same name adds nothing to choose between.
-      const key = sameNameKey(food.row[2]);
-      if (seen.has(key)) continue;
-      seen.add(key);
+    for (const { food } of found.sort((a, b) => compare(a.rank, b.rank))) {
+      if (food.overseas && local.has(food.key)) continue;
+      // A lower-priority row with exactly the same name adds nothing to choose between.
+      const name = sameNameKey(food.row[2]);
+      if (seen.has(name)) continue;
+      seen.add(name);
       out.push(food.row);
     }
     return out;
