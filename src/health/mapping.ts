@@ -270,7 +270,8 @@ export function entryDay(entry: Pick<DiaryEntry, "start">): string {
 
 /**
  * The same interval on civil day `day`, at the same local clock time and for as long. The offsets are the local ones on
- * the new day, as for a new entry, so a move across a daylight saving change keeps the clock time.
+ * the new day, as for a new entry, so a move across a daylight saving change keeps the clock time (a time the new day
+ * skips, when daylight saving starts, moves an hour later).
  */
 function onDay(interval: NutritionLog["interval"], day: string): NutritionLog["interval"] {
   const start = new Date(interval.startTime);
