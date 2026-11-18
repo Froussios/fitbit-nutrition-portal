@@ -656,9 +656,12 @@ class App {
       unitNames: this.unitNames,
       offline: this.connection.state === "offline",
       onSave: (edit) => void this.saveEdit(entry, edit),
-      onCancel: () => {
+      onCancel: (how) => {
         this.stopEditing();
-        this.renderDiary(undefined, entry.id);
+        // After Cancel or Escape the focus moves to the row's Edit button. After a click outside the row it stays where
+        // the user put it, such as the food search or another row's Delete.
+        if (how === "cancel") this.renderDiary(undefined, entry.id);
+        else this.renderDiary();
       },
     });
     this.renderDiary();

@@ -37,7 +37,8 @@ function catalog(found: FoodItem | undefined) {
 
 function open(e: DiaryEntry, cat: FoodCatalog) {
   const onSave = vi.fn<(edit: EntryEdit) => void>();
-  const editor = createRowEditor({ catalog: cat, entry: e, unitNames, offline: false, onSave, onCancel: vi.fn() });
+  const onCancel = vi.fn();
+  const editor = createRowEditor({ catalog: cat, entry: e, unitNames, offline: false, onSave, onCancel });
   const row = document.createElement("tr");
   for (const part of [editor.meal, editor.day, editor.amount, editor.energy, editor.actions]) {
     const cell = document.createElement("td");
@@ -58,7 +59,7 @@ function open(e: DiaryEntry, cat: FoodCatalog) {
     qty.value = text;
     qty.dispatchEvent(new Event("input", { bubbles: true }));
   };
-  return { editor, onSave, qty, unit, save, cancel, type, day, pickDay };
+  return { editor, onSave, onCancel, row, qty, unit, save, cancel, type, day, pickDay };
 }
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -172,5 +173,64 @@ describe("row editor", () => {
     await settle();
     expect([...unit.options].map((o) => o.textContent)).toContain("× 1/2 cup");
     expect(save.disabled).toBe(true);
+  });
+});
+
+describe("row editor, clicking outside the row", () => {
+  /** A press and release on `down` and `up`, as a mouse or a tap would make them. */
+  const press = (down: Element, up: Element = down) => {
+    down.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    up.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  };
+  const elsewhere = () => {
+    const other = document.createElement("button");
+    document.body.append(other);
+    return other;
+  };
+
+  it("cancels the edit", () => {
+    const { onCancel } = open(entry(), catalog(undefined).catalog);
+    press(elsewhere());
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith("outside");
+  });
+
+  it("tells Cancel and Escape apart from a click outside", () => {
+    const { onCancel, cancel, qty } = open(entry(), catalog(undefined).catalog);
+    cancel.click();
+    qty.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(onCancel.mock.calls).toEqual([["cancel"], ["cancel"]]);
+  });
+
+  it("keeps the edit for clicks inside the row", () => {
+    const { onCancel, qty, row } = open(entry(), catalog(undefined).catalog);
+    press(qty);
+    press(row.firstElementChild!);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("ignores the click that opened the editor, whose press came before it", () => {
+    const { onCancel } = open(entry(), catalog(undefined).catalog);
+    elsewhere().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("keeps the edit when a press in the row ends outside it, such as selecting text", () => {
+    const { onCancel, qty } = open(entry(), catalog(undefined).catalog);
+    press(qty, elsewhere());
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("keeps the edit while it is saving", () => {
+    const { onCancel, editor } = open(entry(), catalog(undefined).catalog);
+    editor.setSaving(true);
+    press(elsewhere());
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("stops listening once disposed", () => {
+    const { onCancel, editor } = open(entry(), catalog(undefined).catalog);
+    editor.dispose();
+    press(elsewhere());
+    expect(onCancel).not.toHaveBeenCalled();
   });
 });
