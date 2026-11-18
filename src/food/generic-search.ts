@@ -130,7 +130,10 @@ interface Indexed {
   /** The other words: how the food is prepared, or which variety it is. */
   readonly rest: readonly string[];
   readonly overseas: boolean;
-  /** Its words apart from plain words and numbers, in order: two sources' rows with the same key are the same food. */
+  /**
+   * Its words apart from plain words and numbers, in order, before and after the first comma: two sources' rows
+   * with the same key are the same food. The comma counts: "Chocolate, milk" is a bar, "Chocolate milk" a drink.
+   */
   readonly key: string;
 }
 
@@ -180,7 +183,9 @@ function indexRow(row: GenericRow, heads: HeadsBySource): Indexed {
   const name = row[2];
   const [headText = "", ...after] = name.split(SEGMENT);
   const words = wordsOf(name);
-  const base = { row, words, overseas: OVERSEAS_SOURCES.has(row[0]), key: words.filter((w) => !isMinor(w)).join(" ") };
+  const keyOf = (text: string) => wordsOf(text).filter((w) => !isMinor(w)).join(" ");
+  const key = `${keyOf(headText)}|${keyOf(after.join(","))}`;
+  const base = { row, words, overseas: OVERSEAS_SOURCES.has(row[0]), key };
   const first = wordsOf(headText);
   const second = wordsOf(after[0] ?? "");
   // "Nut, peanut" is a nut and a peanut, unless the source also has a food named by that word alone: AFCD's
@@ -226,15 +231,25 @@ const compare = (a: readonly number[], b: readonly number[]) => {
  *    before a Tom Collins.
  * 3. Australian before overseas. This only chooses between foods that are equally what was asked for: it can't
  *    put "Peanut butter" above "Peanuts" for "peanuts", but it can put potato crisps above apple crisp.
- * 4. The fewest words of the food's name that the query leaves unsaid: "Peanuts" before "Peanuts, honey roasted".
+ * 4. The query's own noun, its last word, is the food's: "chocolate milk" finds the milk drink before the bar
+ *    "Chocolate, milk". Only after region: AFCD often names the cut after the comma ("Pork, loin chop"), so as the
+ *    first rule it would put US names above every Australian one.
+ * 5. The fewest words of the food's name that the query leaves unsaid: "Peanuts" before "Peanuts, honey roasted".
  *    Words before the first comma first, because they say what the food is ("Banana chip"), the others only
  *    how it is prepared ("Banana, lady finger, peeled").
- * 5. The plain form, then the shortest name.
+ * 6. The plain form, then the shortest name.
  */
 function rankFood(food: Indexed, terms: readonly Term[]): readonly number[] | undefined {
   const roleOf = (w: string) => (food.nouns.includes(w) ? 0 : food.head.some((alt) => alt.includes(w)) ? 1 : 2);
   // Each query word counts by the best word it matched, so "pot" is half of "Potato", not the "pot" of "pot roast".
+  // The query's own noun: its last word, and the one before a form word ("chicken breast").
+  const nounTerms = new Set<Term>();
+  for (let i = terms.length - 1; i >= 0; i--) {
+    nounTerms.add(terms[i]!);
+    if (!FORM_WORDS.has(terms[i]!.word)) break;
+  }
   let role = 2;
+  let nounRole = 2;
   let partial = 0;
   for (const t of terms) {
     let best: readonly [number, number] | undefined;
@@ -245,6 +260,7 @@ function rankFood(food: Indexed, terms: readonly Term[]): readonly number[] | un
     }
     if (!best) return undefined;
     role = Math.min(role, best[0]);
+    if (nounTerms.has(t)) nounRole = Math.min(nounRole, best[0]);
     partial = Math.max(partial, best[1]);
   }
   const said = (w: string) => terms.some((t) => termMatches(t, w));
@@ -257,7 +273,7 @@ function rankFood(food: Indexed, terms: readonly Term[]): readonly number[] | un
   const restExtras = food.rest.filter(unsaid).length;
   const other = food.words.filter((w) => !taken(w));
   const plain = other.some((w) => PLAIN_WORDS.has(w));
-  return [role, partial, food.overseas ? 1 : 0, headExtras, restExtras, plain ? 0 : 1, other.length];
+  return [role, partial, food.overseas ? 1 : 0, nounRole, headExtras, restExtras, plain ? 0 : 1, other.length];
 }
 
 export class GenericIndex {
@@ -289,9 +305,9 @@ export class GenericIndex {
       }
       if (best) found.push({ food, rank: best });
     }
-    // An overseas food is left out when an Australian one that matched has the same words, apart from plain
-    // words and numbers: "Milk, whole" adds nothing to "Milk, cow, fluid, regular fat (~3.5%)". Its values
-    // are never merged into the Australian food's.
+    // An overseas food is left out when an Australian one that matched has the same words on each side of the
+    // first comma, apart from plain words and numbers: "Milk, whole" adds nothing to "Milk, cow, fluid, regular
+    // fat (~3.5%)". Its values are never merged into the Australian food's.
     const local = new Set(found.filter((f) => !f.food.overseas).map((f) => f.food.key));
     const seen = new Set<string>();
     const out: GenericRow[] = [];

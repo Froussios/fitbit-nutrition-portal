@@ -788,12 +788,19 @@ join key either: AFCD and AUSNUT share 1,201 food keys, and only 482 of those ha
    (`Banana, cavendish` before `Banana chip`), then of the others, which say how it is prepared. Plain words such as
    `raw` and `regular fat`, and numbers, don't count. Region comes before this rule because AFCD names spell out what
    FNDDS leaves unsaid: `Peanut butter, smooth & crunchy, added sugar & salt` against `Peanut butter`.
-5. **The plain form:** a name with a plain word, then the shortest name.
+5. **The query's own noun.** Of foods equal so far, the one whose food is the query's last word: `chocolate milk`
+   finds AFCD's milk drink before its bar `Chocolate, milk`, and `milk chocolate` the bar first. It comes after
+   region, not before it, because AFCD often names a cut after the comma (`Pork, loin chop`, `Beef, mince`), where
+   it is not the food by rule 1: earlier, it would put every US `Pork chop` above every Australian one.
+6. **The plain form:** a name with a plain word, then the shortest name.
 
-A US food is dropped when an Australian food that matched has the same words, apart from plain words and numbers:
-`Milk, whole` adds nothing to `Milk, cow, fluid, regular fat (~3.5%)`, nor `Cheese, Cheddar` to
-`Cheese, cheddar, natural, regular fat`. Rows of one source that differ only in plain words (`peeled`, `unpeeled`) are
-different foods, and are all kept. Values are never merged.
+A US food is dropped when an Australian food that matched has the same words before the first comma and the same
+words after it, apart from plain words and numbers: `Milk, whole` adds nothing to `Milk, cow, fluid, regular fat
+(~3.5%)`, nor `Cheese, Cheddar` to `Cheese, cheddar, natural, regular fat`. The comma counts: AFCD's bar
+`Chocolate, milk` doesn't hide FNDDS's drink `Chocolate milk, NFS`. Numbers are left out on purpose, so a regional
+equivalent stands in for the US food: `Milk, reduced fat (2%)` gives way to `Milk, cow, fluid, reduced fat (~1%)`.
+Typing `2%` still finds the US row, because the Australian one then doesn't match. Rows of one source that differ
+only in plain words (`peeled`, `unpeeled`) are different foods, and are all kept. Values are never merged.
 
 Known limits:
 

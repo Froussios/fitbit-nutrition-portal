@@ -163,6 +163,14 @@ describe("generic search", () => {
     expect(names(honey, "honey")).toEqual(["Honey", "Honey butter", "Melon, honey dew, peeled, raw"]);
   });
 
+  it("puts the food the query's last word names first, after region", () => {
+    const rows = [row("afcd", "1", "Chocolate, milk"), row("afcd", "2", "Milk, cow, fluid, flavoured, chocolate")];
+    expect(names(rows, "chocolate milk")[0]).toBe("Milk, cow, fluid, flavoured, chocolate");
+    expect(names(rows, "milk chocolate")[0]).toBe("Chocolate, milk");
+    // AFCD names the cut after the comma, so this only decides between foods from the same region.
+    expect(names([row("fndds", "1", "Pork chop, NFS"), row("afcd", "2", "Pork, loin chop, lean, raw")], "pork chop")[0]).toBe("Pork, loin chop, lean, raw");
+  });
+
   it("finds what a joined name is: the last word, shared between alternatives", () => {
     const onion = [row("afcd", "1", "Braised steak & onions, canned"), row("afcd", "2", "Onion, mature, brown skinned, peeled, raw")];
     expect(names(onion, "onion")).toEqual(["Onion, mature, brown skinned, peeled, raw", "Braised steak & onions, canned"]);
@@ -177,6 +185,8 @@ describe("generic search", () => {
     expect(hits.map((r) => [r[0], r[4]])).toEqual([["afcd", 278]]);
     const milk = [row("fndds", "1", "Milk, whole", 61), row("afcd", "2", "Milk, cow, fluid, regular fat (~3.5%)", 64), row("fndds", "3", "Milk, reduced sodium")];
     expect(new GenericIndex(milk).search("milk").map((r) => [r[2], r[4]])).toEqual([["Milk, cow, fluid, regular fat (~3.5%)", 64], ["Milk, reduced sodium", 100]]);
+    // The comma counts: AFCD's milk chocolate bar is not FNDDS's chocolate milk drink.
+    expect(names([row("afcd", "1", "Chocolate, milk"), row("fndds", "2", "Chocolate milk, NFS")], "chocolate milk")).toHaveLength(2);
     // Within one source, rows that differ only in plain words are different foods.
     const apples = [row("afcd", "1", "Apple, fuji, peeled, raw"), row("afcd", "2", "Apple, fuji, unpeeled, raw")];
     expect(names(apples, "apple")).toHaveLength(2);
