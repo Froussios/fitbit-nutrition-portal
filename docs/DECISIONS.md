@@ -379,5 +379,7 @@ button that shows that day.
 **Why.** Owner request (18 November 2026): entries were logged on the wrong day by mistake, which nothing pointed out,
 and the only fix was to delete the entry and log it again on the right day.
 **Consequence.** A move is an edit like any other: a copy under a new ID, then a delete of the original (DR-22). The note
-goes when the day shown changes. A meal prep share still cannot be edited, so it cannot be moved.
+goes when the day shown changes. A meal prep share still cannot be edited, so it cannot be moved. A clock time that
+does not exist on the new day, in the hour skipped when daylight saving starts, moves an hour later (02:30 becomes
+03:30). Moving a late entry to today can put it later than now, as a time typed in the log form can.
 **Reopen if.** Moving needs the clock time too, or entries are moved often enough to want it from the log form.

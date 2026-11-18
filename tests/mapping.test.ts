@@ -556,6 +556,15 @@ describe("editing an entry", () => {
       const moved = editedNutritionLogPoint(log, { day: "2026-09-20" }, opts).nutritionLog!;
       expect(moved.interval).toEqual({ startTime: "2026-09-19T21:30:00.000Z", endTime: "2026-09-19T21:31:00.000Z", startUtcOffset: "36000s", endUtcOffset: "36000s" });
     });
+
+    it("moves a clock time the new day skips, when daylight saving starts, an hour later", () => {
+      process.env.TZ = "Australia/Sydney";
+      const log = buildNutritionLogPoint({ food: milk, quantity: 100, unit: "ml", time: new Date("2026-11-01T02:30:00+11:00") }, { id: "e-test-0001-off-123", servingUnits: units }).nutritionLog!;
+      const moved = editedNutritionLogPoint(log, { day: "2026-10-04" }, opts).nutritionLog!;
+      expect(moved.interval.startTime).toBe("2026-10-03T16:30:00.000Z");
+      expect(moved.interval.startUtcOffset).toBe("39600s");
+      expect(entryDay({ start: new Date(moved.interval.startTime) })).toBe("2026-10-04");
+    });
   });
 
   describe("isLoggedAmount and canConvertLogged", () => {

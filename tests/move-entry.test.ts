@@ -12,6 +12,11 @@ const CLIENT = "test-client";
 const custom: FoodItem = { ref: { source: "manual", id: "custom" }, name: "Toast", basis: "g", per100: { energyKcal: 250, nutrients: { protein: 9 } }, portions: [] };
 
 function fakeGoogleHealth() {
+  /** When set, a delete waits for it and then fails. */
+  let failDelete: Promise<void> | undefined;
+  /** When set, the listings after a failed delete wait for it, so the test sees the diary before the reload. */
+  let holdLists: Promise<void> | undefined;
+  let deleteFailed = false;
   const diary = new Map<string, Record<string, unknown>>();
   const now = new Date();
   now.setHours(9, 15, 0, 0);
@@ -27,6 +32,11 @@ function fakeGoogleHealth() {
     if (url.pathname.endsWith("/identity")) return reply(200, { healthUserId: "1" });
     if (url.pathname.includes("food-measurement-unit")) return reply(200, { dataPoints: [] });
     if (url.pathname.endsWith(":batchDelete")) {
+      if (failDelete) {
+        await failDelete;
+        deleteFailed = true;
+        return reply(500, { error: { code: 500, message: "Backend error", status: "INTERNAL" } });
+      }
       for (const name of body.names as string[]) diary.delete(name.split("/").pop()!);
       return reply(200, { done: true });
     }
@@ -36,11 +46,26 @@ function fakeGoogleHealth() {
       diary.set(id, stored);
       return reply(200, { done: true, response: stored });
     }
+    if (deleteFailed && holdLists) await holdLists;
     const day = /"(\d{4}-\d{2}-\d{2})"/.exec(url.searchParams.get("filter") ?? "")?.[1];
     const points = [...diary.values()].filter((p) => !day || civilDate(new Date((p["nutritionLog"] as { interval: { startTime: string } }).interval.startTime)) === day);
     return reply(200, { dataPoints: points });
   }
-  return { fetch, diary };
+  return {
+    fetch,
+    diary,
+    /** Makes the next deletes fail once the returned function is called. */
+    holdDeletes: () => {
+      let release = () => {};
+      failDelete = new Promise((r) => (release = r));
+      return () => release();
+    },
+    holdListsAfterFailure: () => {
+      let release = () => {};
+      holdLists = new Promise((r) => (release = r));
+      return () => release();
+    },
+  };
 }
 
 const settle = async () => {
@@ -116,5 +141,28 @@ describe("moving an entry to another day", () => {
     expect(document.querySelector(".day-nav h2")?.textContent).toBe("Yesterday");
     expect(rows()).toEqual(["Toast (60 g)"]);
     expect((document.querySelector(".moved-notice") as HTMLElement).hidden).toBe(true);
+  });
+
+  it("keeps the original off the new day when its delete fails after the user follows the move", async () => {
+    const services = await startApp();
+    const failNow = services.holdDeletes();
+    const reloadNow = services.holdListsAfterFailure();
+    button(/^Edit Toast/)!.click();
+    const day = document.querySelector<HTMLInputElement>("#edit-day")!;
+    day.value = addCivilDays(civilDate(new Date()), -1);
+    day.dispatchEvent(new Event("input", { bubbles: true }));
+    button(/^Save changes to Toast/)!.click();
+    await settle();
+    button(/^Show yesterday$/)!.click();
+    await settle();
+    failNow();
+    await settle();
+    // Before the reload after the failure, as well as after it.
+    expect(document.querySelector(".day-nav h2")?.textContent).toBe("Yesterday");
+    expect(rows()).toEqual(["Toast (60 g)"]);
+    expect(document.querySelector(".row-alert")?.textContent).toContain("Toast");
+    reloadNow();
+    await settle();
+    expect(rows()).toEqual(["Toast (60 g)"]);
   });
 });

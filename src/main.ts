@@ -753,7 +753,8 @@ class App {
       appLog.error("Removing the entry an edit replaced failed", describeError(e));
       this.handleError(e, false);
       this.deletedIds.delete(entry.id);
-      this.entries = [...this.entries.filter((other) => other.id !== entry.id), entry].sort(byTime);
+      // Only onto its own day: after a move, the user may already be looking at the new one.
+      if (entryDay(entry) === this.day()) this.entries = [...this.entries.filter((other) => other.id !== entry.id), entry].sort(byTime);
       this.showRowFailure(entry, oldEntryNotRemoved(entry.displayName));
     }
     this.busy.delete(entry.id);
