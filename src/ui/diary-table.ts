@@ -110,7 +110,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
                   }
                 : undefined,
             },
-            el("td", {}, editor ? editor.meal : mealLabel(e.mealType)),
+            el("td", {}, editor ? el("div", { class: "when-edit" }, editor.meal, editor.day) : mealLabel(e.mealType)),
             el("td", {}, e.displayName, rowTag(e.id, deletedIds, busy, pendingIds)),
             el("td", { class: "num" }, editor ? editor.amount : (e.amount ?? "–")),
             el("td", { class: "num" }, editor ? editor.energy : fmtEnergy(e.profile.energyKcal)),

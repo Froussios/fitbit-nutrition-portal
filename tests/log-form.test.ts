@@ -52,7 +52,11 @@ function setUp(preps: readonly Prep[] | null = PREPS, meals: readonly SavedMeal[
   return { form, actions, logMeal, onSubmit, $, visible, type, options };
 }
 
-beforeEach(() => vi.useFakeTimers());
+beforeEach(() => {
+  vi.useFakeTimers();
+  // The form's default time (11 Nov, 19:05) is today, unless a test moves the clock.
+  vi.setSystemTime(new Date(2026, 10, 11, 20, 0));
+});
 afterEach(() => {
   vi.useRealTimers();
   document.body.replaceChildren();
@@ -119,6 +123,38 @@ describe("log form", () => {
     expect(portion.value).toBe("");
     // The next entry is likely from the same meal.
     expect($<HTMLSelectElement>("#meal").value).toBe("DINNER");
+  });
+
+  it("marks the log button, and names the day, when the entry is not for today", async () => {
+    const { form, $, type } = setUp();
+    await type("Chickpeas");
+    [...form.element.querySelectorAll<HTMLElement>("[role=option]")].find((o) => o.textContent?.includes("Chickpeas"))!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    const submit = $<HTMLButtonElement>("[type=submit]");
+    expect(submit.textContent).toBe("Log entry");
+    expect(submit.classList.contains("other-day")).toBe(false);
+
+    // A time typed for another day.
+    const time = $<HTMLInputElement>("#time");
+    time.value = "2026-11-09T08:30";
+    time.dispatchEvent(new Event("input"));
+    expect(submit.textContent).toBe("Log entry for Monday, 9 Nov 2026");
+    expect(submit.classList.contains("other-day")).toBe(true);
+    time.value = "2026-11-11T08:30";
+    time.dispatchEvent(new Event("input"));
+    expect(submit.textContent).toBe("Log entry");
+    expect(submit.classList.contains("other-day")).toBe(false);
+  });
+
+  it("marks the log button when the viewed day is not today, and follows the clock past midnight", async () => {
+    const { form, $ } = setUp();
+    form.choosePrep(PREPS[0]!);
+    const submit = $<HTMLButtonElement>("[type=submit]");
+    expect(submit.textContent).toBe("Log portion");
+    vi.setSystemTime(new Date(2026, 10, 12, 0, 5));
+    form.element.dispatchEvent(new FocusEvent("focusin"));
+    expect(submit.textContent).toBe("Log portion for yesterday");
+    expect(submit.classList.contains("other-day")).toBe(true);
   });
 
   it("keeps the meal for the next food logged", async () => {
