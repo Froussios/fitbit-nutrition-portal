@@ -181,7 +181,8 @@ shown next (section 13, DR-16). Open Food Facts products follow, ordered by thes
 | 5 | **Fewer extra words:** name words that are not query words. | `Vanilla (Queen)` before `Vanilla extract (Queen)` |
 | 6 | **More query words in the name.** | `Vanilla queen (Other)` before `Vanilla extract (Queen)`, searching `vanilla queen` |
 | 7 | **More query words in the brand as well.** | `Vanilla (Vanilla Queen)` before `Vanilla (Queen)` |
-| 8 | **More popular** (below). | |
+| 8 | **Sold in the user's country** (DR-35), among the products a search fetched. It comes before popularity. | Searching `oat milk` in the UK: `Oat milk (Bolt)`, sold in the UK, before `Oat milk (Acme)`, sold in the US, however often Acme is scanned |
+| 9 | **More popular** (below). | |
 
 **Food or flavour (rule 3).** `headWords` in `src/core/tokens.ts` uses word position. English puts the food last, so
 `Dark chocolate` is a chocolate and `Chocolate milk` is a milk. Sizes (`455g`) and anything after `with`, `in`, a
@@ -206,7 +207,7 @@ popularity = log10(1 + unique_scans_n)       how often Open Food Facts apps have
            + completeness                    0..1, Open Food Facts' own score
 ```
 
-**Pre-sorted index.** Rules 4, 5 and 8 mostly do not depend on the query, so the builder numbers the products in
+**Pre-sorted index.** Rules 4, 5 and 9 mostly do not depend on the query, so the builder numbers the products in
 this fixed order: branded first, then fewer distinct name words, then fewer distinct words in the name and brand
 together, then more entries with the same name, then more popular. A word has three sorted lists of product IDs:
 products where it says what the food is, products with it elsewhere in the name, and products with it only in the
@@ -217,12 +218,14 @@ has, is used up (rule 2), so the engine can jump straight to those IDs.
 
 Each tier is one pass over the lists (section 6.2). A pass stops as soon as no later product could beat the
 10 it has: a later product's extra words are at least its word count minus the number of query words. For a
-one-word search that is simply the first 10 IDs after any used-up products. Rule 7 needs the brand text, so it
-only orders the 10 chosen products; it cannot bring a product into them. Popularity only separates products with
+one-word search that is simply the first 10 IDs after any used-up products. Rules 7 and 8 need the summary
+text (the brand, and the countries a product is sold in), so they only order the 10 chosen products; they cannot
+bring a product into them. Rule 8 is the only one that depends on the user, so the index's own order still favours
+the country it was built for (`INDEX_COUNTRY`, section 12). Popularity only separates products with
 the same word counts, so among equally good matches a shorter brand comes first.
 
 The order is approximate in two cases: a last word of 2 or 3
-letters that many words start with (`milk ch`) checks at most 100 candidates (section 6.2), and rule 7 above.
+letters that many words start with (`milk ch`) checks at most 100 candidates (section 6.2), and rules 7 and 8 above.
 Tests compare the engine with a brute-force ranking of every product.
 
 ### 4.4 If exact words prove too strict
@@ -472,8 +475,8 @@ For a query `dark choc`:
    cut the median search from 325 KB to 155 KB for common names, and found 95% of rare names, up from 90%. Rare names
    cost a little more, a median of 165 KB up from 143 KB.
 5. **Brand only (third tier), if there is still room.** Intersect the brand-only lists. Fixed order is exact here.
-6. **Summaries.** Fetch the summary files holding the chosen IDs, put them in final order (`matchRank`) and
-   compute highlight runs from the query words.
+6. **Summaries.** Fetch the summary files holding the chosen IDs, put them in final order (`matchRank`, then sold in
+   the user's country, then ID: rules 7 to 9 in section 4.3) and compute highlight runs from the query words.
 7. **On choosing a row**, `get()` fetches that product's detail file and assembles the `FoodItem`.
 
 The engine also reads format 2 indexes, where a word has a single list, so the app can ship before the index is

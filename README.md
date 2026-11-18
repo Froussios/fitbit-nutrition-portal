@@ -73,7 +73,7 @@ client ID instead.
 | `npm run typecheck` | `tsc --noEmit` for the app and the index builder |
 | `npm run build:index -- --input <export.jsonl.gz>` | Build the food index into `public/food-index/` (ignored by git) from an Open Food Facts export, for local development |
 | `npm run build:generics` | Rebuild `src/food/data/generics.json` (committed) from the AFCD and USDA FNDDS downloads |
-| `npm run build:time-zones` | Rebuild `src/core/time-zone-countries.ts` (committed), which says which country each time zone is in, from the system's IANA time zone database |
+| `npm run build:time-zones` | Rebuild `src/core/time-zone-countries.ts` (committed), which says which country each time zone is in, from the IANA time zone database in `/usr/share/zoneinfo`, or the folder given after `--` (it needs `zone.tab` and `tzdata.zi`, which macOS doesn't ship) |
 | `npm run build` | Type-check and build the static site into `dist/` |
 | `npm run preview` | Serve `dist/` on port 4173 |
 

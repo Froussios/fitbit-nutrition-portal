@@ -61,8 +61,9 @@ describe("the user's country", () => {
     expect(timeZoneCountry("US/Pacific")).toBe("US");
   });
 
+  // Depends on the runtime's time zone data: after a Node or ICU upgrade adds a zone, run `npm run build:time-zones`.
   it("knows every zone this runtime knows", () => {
-    expect(Intl.supportedValuesOf("timeZone").filter((z) => !timeZoneCountry(z))).toEqual([]);
+    expect(Intl.supportedValuesOf("timeZone").filter((z) => !timeZoneCountry(z)), "missing: run npm run build:time-zones").toEqual([]);
   });
 
   it("takes no country from zones that are not places", () => {
