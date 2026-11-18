@@ -156,7 +156,14 @@ describe("row editor, clicking outside the row", () => {
   it("cancels the edit", () => {
     const { onCancel } = open(entry(), catalog(undefined).catalog);
     press(elsewhere());
-    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith("outside");
+  });
+
+  it("tells Cancel and Escape apart from a click outside", () => {
+    const { onCancel, cancel, qty } = open(entry(), catalog(undefined).catalog);
+    cancel.click();
+    qty.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(onCancel.mock.calls).toEqual([["cancel"], ["cancel"]]);
   });
 
   it("keeps the edit for clicks inside the row", () => {

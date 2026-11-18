@@ -653,12 +653,11 @@ class App {
       unitNames: this.unitNames,
       offline: this.connection.state === "offline",
       onSave: (edit) => void this.saveEdit(entry, edit),
-      onCancel: () => {
-        // Cancel and Escape leave the focus in the row, so it moves to the row's Edit button. After a click outside the
-        // row it stays where the user put it, such as the food search.
-        const focusInDiary = document.activeElement instanceof Node && this.diary.contains(document.activeElement);
+      onCancel: (how) => {
         this.stopEditing();
-        if (focusInDiary) this.renderDiary(undefined, entry.id);
+        // After Cancel or Escape the focus moves to the row's Edit button. After a click outside the row it stays where
+        // the user put it, such as the food search or another row's Delete.
+        if (how === "cancel") this.renderDiary(undefined, entry.id);
         else this.renderDiary();
       },
     });

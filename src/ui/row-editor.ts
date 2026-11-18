@@ -20,7 +20,8 @@ export interface RowEditorOptions {
   readonly unitNames: ReadonlyMap<string, string>;
   readonly offline: boolean;
   readonly onSave: (edit: EntryEdit) => void;
-  readonly onCancel: () => void;
+  /** `outside` when a click outside the row closed the editor, so the focus belongs where the user clicked. */
+  readonly onCancel: (how: "cancel" | "outside") => void;
 }
 
 /** The controls that replace a diary row's contents while it is edited (DR-22). The table puts them in its cells. */
@@ -101,7 +102,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
 
   // Words, not icons: Cancel must never look like the delete button it replaces.
   const save = el("button", { type: "button", class: "primary edit-save", "aria-label": `Save changes to ${entry.displayName}`, onclick: () => submit() }, "Save");
-  const cancel = el("button", { type: "button", class: "link edit-cancel", "aria-label": `Cancel editing ${entry.displayName}`, onclick: () => onCancel() }, "Cancel");
+  const cancel = el("button", { type: "button", class: "link edit-cancel", "aria-label": `Cancel editing ${entry.displayName}`, onclick: () => onCancel("cancel") }, "Cancel");
   const actions = el("div", { class: "row-actions" }, save, cancel, announce);
 
   const measure = (): Measurable => food ?? (logged ? basicMeasure(logged.unit) : asLogged);
@@ -178,13 +179,16 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     control.addEventListener("keydown", (ev) => {
       const { key, target } = ev as KeyboardEvent;
       // On a dropdown, Escape may be closing its list, which must not discard what was typed.
-      if (key === "Escape" && !saving && !(target instanceof HTMLSelectElement)) onCancel();
+      if (key === "Escape" && !saving && !(target instanceof HTMLSelectElement)) onCancel("cancel");
       if (key === "Enter" && target === quantity) submit();
     });
   }
 
   // A click outside the row closes the editor, as Cancel does. Only a click whose press also began outside counts: not the
   // click that opened the editor, nor a text selection dragged out of a field. Keyboard focus leaving the row closes nothing.
+  // The listener captures, so the table is redrawn before the clicked control's own handler runs. That handler still fires,
+  // on the replaced element (the event's path is fixed at dispatch), so another row's Delete or Edit must not depend on
+  // its button still being in the page.
   const outside = new AbortController();
   let pressedOutside = false;
   const isOutside = (target: EventTarget | null) => {
@@ -197,7 +201,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
     (ev) => {
       const pressed = pressedOutside;
       pressedOutside = false;
-      if (pressed && !saving && isOutside(ev.target)) onCancel();
+      if (pressed && !saving && isOutside(ev.target)) onCancel("outside");
     },
     { capture: true, signal: outside.signal },
   );
