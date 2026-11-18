@@ -92,6 +92,15 @@ describe("row editor", () => {
     expect(onSave).toHaveBeenCalledExactlyOnceWith({ mealType: "DINNER" });
   });
 
+  it("saves on Enter in the unit dropdown too", async () => {
+    // No food to look up, so the new amount can be saved at once.
+    const { unit, type, onSave } = open(entry(undefined, "1234567890"), catalog(undefined).catalog);
+    type("80");
+    unit.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await settle();
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({ amount: { quantity: 80, unit: "g" } });
+  });
+
   it("reads the meal after the Enter that picked it, and saves nothing once the editor is gone", async () => {
     const { editor, onSave } = open(entry(), catalog(undefined).catalog);
     const meal = editor.meal as HTMLSelectElement;
