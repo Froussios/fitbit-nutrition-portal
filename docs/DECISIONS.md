@@ -444,3 +444,22 @@ breakfast, repeated in the evening, is still breakfast); the diary groups by mea
 edited like any other entry. Repeating an entry already on today logs a second one.
 **Reopen if.** Copies need another time (the original's clock time, or one picked), or several entries, such as a whole
 meal, should be repeated at once.
+
+### DR-37 A dashboard charts the viewed day and the 7 days ending on it
+**Decision.** Under the diary, a Dashboard card shows the day the diary shows: its energy, protein, carbs and fat, a bar
+splitting its energy by macronutrient (by the Atwater factors, 4 kcal a gram of protein and carbohydrate and 9 of fat,
+each part labelled with its share and its grams in the legend) and a bar splitting its energy by meal. Below, the 7 days
+ending on that day: a stacked column per day of protein, carbs and fat in grams, and one of energy by meal, with the
+average energy over the days that have entries. Meals are grouped as Breakfast, Lunch, Dinner, Snacks (Google Health's
+snack times, such as `BEFORE_DINNER`, included) and Other (`ANYTIME` and no meal). The week is one listing of the 7 days
+(`listNutritionLogsBetween`), made after each diary load; the viewed day's own figures come from the diary's listing,
+so this session's writes, edits and deletes show at once. Charts are SVG and HTML drawn by the app, with no chart
+library; each has a legend, a tooltip on hover and keyboard focus, and a table of its figures; colours are checked for
+colour-blind separation in both themes.
+**Why.** Owner request (19 November 2026): graphs for the basic metrics, presented as a dashboard; for the day, a
+breakdown by macro and by meal; for the week, daily totals by macro and by meal.
+**Consequence.** One more request to Google Health per diary load (polling included). Energy by macronutrient can differ
+a little from the energy logged: labels round, fibre gives less energy than other carbohydrate, and alcohol has none of
+the three. A day with nothing logged is an empty column, and does not lower the week's average.
+**Reopen if.** Targets (an energy or protein goal) are wanted, the week should be a calendar week or a longer range, or
+the extra listing costs too much quota.

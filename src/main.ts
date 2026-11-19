@@ -18,6 +18,7 @@ import { LoggedFoodsCatalog } from "./food/logged-catalog";
 import { buildNutritionLogPoint, buildPortionPoint, byTime, copyNutritionLogPoint, NUTRITION_LOG_PARENT, editedNutritionLogPoint, entryDay, findServingUnits, reconcilePending, repeatedNutritionLogPoint, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
+import { renderDashboard } from "./ui/dashboard";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
 import { getEnergyUnit, setEnergyUnit, type EnergyUnit } from "./ui/energy-unit";
 import { createLogForm, type LogForm, type PrepOutcome } from "./ui/log-form";
@@ -146,6 +147,15 @@ class App {
   private editor?: RowEditor;
   private readonly aiSetting = createAiSetting(amountAi);
   private readonly diary = el("div", { class: "diary" });
+  /** The dashboard's charts (DR-37), redrawn with the diary. */
+  private readonly dashboard = el("div");
+  /** The entries of the 7 days ending on `weekDay`, for the dashboard. The viewed day's own come from `entries`. */
+  private weekEntries: DiaryEntry[] = [];
+  private weekDay?: string;
+  private weekLoading = false;
+  /** A week listing was asked for while one was under way: it runs again when that one ends. */
+  private weekReload = false;
+  private weekError = "";
   private readonly dayHeading = el("h2", { "aria-live": "polite" });
   private readonly previousDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Previous day", title: "Previous day", onclick: () => this.stepDay(-1) }, "←");
   private readonly nextDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Next day", title: "Next day", onclick: () => this.stepDay(1) }, "→");
@@ -465,6 +475,7 @@ class App {
     this.entries = [];
     this.loadedDay = undefined;
     this.listError = "";
+    this.weekError = "";
     this.form.refreshTime();
     const hadFocus = document.activeElement === this.nextDayButton || document.activeElement === this.todayButton;
     this.renderDiary();
@@ -515,6 +526,7 @@ class App {
       this.loadedDay = day;
       const listed = new Set([...points.flatMap((p) => (p.name ? [idFromName(p.name)] : [])), ...this.pending.keys()]);
       void this.loadPreps().then(() => this.confirmListed(listed));
+      void this.loadWeek();
       // Deleted in another app, or the day has changed: there is no row left to edit.
       if (this.editor && !this.entries.some((e) => e.id === this.editor?.id)) this.stopEditing();
       const unparsed = points.length - this.entries.length + pending.length;
@@ -534,6 +546,46 @@ class App {
       if (this.reloadAfterLoad) {
         this.reloadAfterLoad = false;
         if (this.auth.isSignedIn) void this.loadDay();
+      }
+    }
+  }
+
+  /**
+   * Lists the 7 days ending on the viewed day, in one request, for the dashboard (DR-37). Entries written this session
+   * and not listed yet count on their day; deleted ones don't. A failure leaves the diary as it is and only the
+   * dashboard's week says so.
+   */
+  private async loadWeek() {
+    if (this.weekLoading) {
+      this.weekReload = true;
+      return;
+    }
+    this.weekLoading = true;
+    const day = this.day();
+    const first = addCivilDays(day, -6);
+    try {
+      const points = withoutEntries(await this.api.listNutritionLogsBetween(first, day), this.deletedIds);
+      if (day !== this.day()) return;
+      const { stillPending } = reconcilePending(this.pending, points, this.clientId);
+      const pending = withoutEntries(
+        stillPending.flatMap((key) => this.pending.get(key) ?? []),
+        this.deletedIds,
+      ).filter((p) => {
+        const start = civilDate(new Date(p.nutritionLog!.interval.startTime));
+        return start >= first && start <= day;
+      });
+      this.weekEntries = toDiaryEntries([...points, ...pending], this.diaryContext());
+      this.weekDay = day;
+      this.weekError = "";
+    } catch (e) {
+      appLog.error("Loading the week for the dashboard failed", describeError(e));
+      if (day === this.day()) this.weekError = isConnectionFailure(e) ? "The week could not be loaded. Check your connection and refresh." : errorMessage(e);
+    } finally {
+      this.weekLoading = false;
+      this.renderDashboard();
+      if (this.weekReload || day !== this.day()) {
+        this.weekReload = false;
+        if (this.auth.isSignedIn) void this.loadWeek();
       }
     }
   }
@@ -1268,6 +1320,9 @@ class App {
     this.loggedFoodsRead = undefined;
     this.entries = [];
     this.loadedDay = undefined;
+    this.weekEntries = [];
+    this.weekDay = undefined;
+    this.weekError = "";
     this.notice = "";
     this.connectError = "";
     this.accountCheck = undefined;
@@ -1358,6 +1413,20 @@ class App {
               "Any entry but a meal prep share can be logged again for today with the button beside it. Only entries made by this app can be edited or deleted here. A deleted entry stays crossed out, with an undo button, until you reload the page.",
           ),
         ),
+      this.ready &&
+        el(
+          "section",
+          { class: "card" },
+          el("h2", {}, "Dashboard"),
+          this.dashboard,
+          el(
+            "p",
+            { class: "hint" },
+            "The day shown in the diary, and the 7 days ending on it, from every app's entries. Energy by macronutrient " +
+              "counts 4 kcal a gram of protein and of carbs and 9 of fat, so it can differ a little from the energy logged. " +
+              "Snacks include Google Health's snack times (such as afternoon snack); Other is entries with no meal.",
+          ),
+        ),
       debugPanel,
     );
     this.renderDiary();
@@ -1445,6 +1514,33 @@ class App {
     else if (editFocus) this.diary.querySelector<HTMLElement>(`[data-entry-edit="${CSS.escape(editFocus)}"]`)?.focus();
     else if (repeatFocus) this.diary.querySelector<HTMLElement>(`[data-entry-repeat="${CSS.escape(repeatFocus)}"]`)?.focus();
     else if (inEditor?.isConnected) inEditor.focus();
+    this.renderDashboard();
+  }
+
+  /** Redraws the dashboard from the loaded day and week. Open tables stay open, and a focused column keeps focus. */
+  private renderDashboard() {
+    const day = this.day();
+    const dayEntries = this.loadedDay === day ? this.entries : undefined;
+    // The viewed day comes from the diary's own listing, which is newer and knows this session's edits.
+    const weekEntries =
+      this.weekDay === day && dayEntries
+        ? [...this.weekEntries.filter((e) => civilDate(e.start) !== day && !this.deletedIds.has(e.id)), ...dayEntries]
+        : undefined;
+    const open = [...this.dashboard.querySelectorAll("details")].map((d) => d.open);
+    const columns = [...this.dashboard.querySelectorAll(".chart-column")];
+    const focused = columns.findIndex((c) => c === document.activeElement);
+    replaceChildren(
+      this.dashboard,
+      renderDashboard({
+        day,
+        today: civilDate(new Date()),
+        dayEntries,
+        weekEntries,
+        weekStatus: this.weekError || (this.listError && !dayEntries ? this.listError : ""),
+      }),
+    );
+    this.dashboard.querySelectorAll("details").forEach((d, i) => (d.open = open[i] ?? false));
+    if (focused >= 0) this.dashboard.querySelectorAll<SVGElement>(".chart-column")[focused]?.focus();
   }
 }
 

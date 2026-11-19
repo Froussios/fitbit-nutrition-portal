@@ -1,5 +1,5 @@
 import type { DataPoint, Identity, ListDataPointsResponse, Operation } from "./types";
-import { nutritionDayFilter } from "../core/time";
+import { nutritionDayFilter, nutritionDaysFilter } from "../core/time";
 import { describeError, logger, truncate } from "../debug/log";
 
 const log = logger("health-api");
@@ -64,6 +64,11 @@ export class HealthClient {
   /** All nutrition-log data points whose local start time falls on `date` (YYYY-MM-DD). */
   async listNutritionLogs(date: string): Promise<DataPoint[]> {
     return this.listAll("users/me/dataTypes/nutrition-log/dataPoints", { filter: nutritionDayFilter(date) });
+  }
+
+  /** Every nutrition log from civil date `first` to `last` (YYYY-MM-DD, both included), in one listing. */
+  async listNutritionLogsBetween(first: string, last: string): Promise<DataPoint[]> {
+    return this.listAll("users/me/dataTypes/nutrition-log/dataPoints", { filter: nutritionDaysFilter(first, last) });
   }
 
   /**
