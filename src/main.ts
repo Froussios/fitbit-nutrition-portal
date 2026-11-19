@@ -851,8 +851,8 @@ class App {
   /**
    * Applies an edit: writes the corrected entry, then deletes the original, so that a failure can
    * never lose the entry (DR-22). If nothing was saved, the row stays open with what the user typed.
+   * Resolves to why the edit failed, or undefined when it was saved. `fromChat` as for `remove`.
    */
-  /** Resolves to why the edit failed, or undefined when it was saved. `fromChat` as for `remove`. */
   private async saveEdit(entry: DiaryEntry, edit: EntryEdit, fromChat = false): Promise<string | undefined> {
     const log = entry.point.nutritionLog;
     if (this.busy.has(entry.id)) return `${entry.displayName} is busy. Try again in a moment.`;
