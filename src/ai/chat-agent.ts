@@ -47,10 +47,13 @@ export class ChatAgent {
     return this.waiting;
   }
 
-  /** A message from the user. Not while a proposal is waiting: the user decides it first. */
-  send(text: string, signal: AbortSignal, onEvent: (event: ChatEvent) => void): Promise<TurnEnd> {
+  /**
+   * A message from the user. Not while a proposal is waiting: the user decides it first. `context` goes just before the
+   * user's words, where a small model is most likely to use it, such as the entry the chat is about.
+   */
+  send(text: string, signal: AbortSignal, onEvent: (event: ChatEvent) => void, context?: string): Promise<TurnEnd> {
     if (this.waiting) throw new Error("Decide the proposed change first.");
-    return this.loop(`User: ${text}`, signal, onEvent);
+    return this.loop(context ? `${context}\nUser: ${text}` : `User: ${text}`, signal, onEvent);
   }
 
   /** The user decided the waiting proposal. `outcome` is what the model is told, and the turn carries on from there. */

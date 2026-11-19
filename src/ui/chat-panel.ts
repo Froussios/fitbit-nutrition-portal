@@ -8,7 +8,7 @@
 import type { AiState } from "../ai/amount-ai";
 import { ChatAgent, type ChatEvent, type TurnEnd } from "../ai/chat-agent";
 import type { ChatModel, ChatSession } from "../ai/chat-model";
-import { chatInstructions, clockTime } from "../ai/chat-protocol";
+import { chatInstructions, clockTime, describeEntry } from "../ai/chat-protocol";
 import { createChatTools, outcomeText, type ChatHost, type ChatTools, type Proposal } from "../ai/chat-tools";
 import { dayLabel } from "../core/time";
 import { describeError, logger } from "../debug/log";
@@ -233,13 +233,24 @@ export function createChatPanel(model: ChatModel, ai: AiSwitch, host: ChatPanelH
     if (!c.agent?.pending) input.focus();
   };
 
+  /**
+   * The entry the chat is about, as the model was last told it, repeated with each message: a small model weighs what is
+   * next to the question more than the system prompt. None once the entry has been changed or deleted.
+   */
+  const focusLine = (c: Conversation): string | undefined => {
+    if (!c.focus) return undefined;
+    const handle = c.tools.handles.handleOf(c.focus.id);
+    const entry = handle && c.tools.handles.entry(handle);
+    return handle && entry ? `This chat is about ${describeEntry(handle, entry, host.energyUnit())}` : undefined;
+  };
+
   const submit = (text: string) => {
     if (!available() || running) return;
     const c = conversation ?? begin();
     if (c.agent?.pending) return;
     add(el("div", { class: "msg msg-user" }, text));
     input.value = "";
-    void turn(c, (agent, signal) => agent.send(text, signal, onEvent(c)));
+    void turn(c, (agent, signal) => agent.send(text, signal, onEvent(c), focusLine(c)));
   };
 
   const decide = async (c: Conversation, card: ProposalCard, proposal: Proposal, accept: boolean) => {

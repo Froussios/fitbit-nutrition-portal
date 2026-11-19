@@ -6,7 +6,7 @@ import type { Proposal } from "../src/ai/chat-tools";
 import { createChatPanel, type AiSwitch, type ApplyResult, type ChatPanelHost } from "../src/ui/chat-panel";
 import { createProposalCard } from "../src/ui/chat-proposal";
 import { renderDiaryTable } from "../src/ui/diary-table";
-import { bread, entryOf, hostWith, oats, TODAY } from "./chat-fixtures";
+import { bread, entryOf, hostWith, oats, TODAY, withoutEnergy } from "./chat-fixtures";
 
 const answer = (fields: Record<string, string>) => JSON.stringify({ text: "", day: "", from: "", to: "", query: "", food: "", entry: "", amount: "", meal: "", ...fields });
 
@@ -28,6 +28,12 @@ describe("proposal card", () => {
     const changes = [...card.element.querySelectorAll(".change")].map((c) => c.textContent);
     expect(changes).toEqual(["40 g →  becomes 90 g", "Breakfast →  becomes Lunch", expect.stringContaining("160 kcal")]);
     expect(text).not.toContain(entry.id);
+  });
+
+  it("says energy is not recorded instead of showing 0", () => {
+    const card = createProposalCard({ kind: "delete", entry: withoutEnergy(breakfast()) }, TODAY, vi.fn());
+    expect(card.element.textContent).toContain("energy not recorded · protein 4 g · carbs 24 g · fat 2 g");
+    expect(card.element.textContent).not.toContain("0 kcal");
   });
 
   it("shows a delete in full and reports the decision", () => {
@@ -177,7 +183,20 @@ describe("chat panel", () => {
     t.say("How much energy?");
     await vi.waitFor(() => expect(t.log().querySelector(".msg-assistant")).not.toBeNull());
     const [system] = t.fake.initial[0] as { content: string }[];
-    expect(system!.content).toContain('"This", "it" and "this entry" mean this one:\nE1: Oats, 40 g, breakfast');
+    expect(system!.content).toContain("from its line below, which each message repeats, without read_day:\nE1: Oats, 40 g, breakfast");
+    // The entry comes again right before the question, where a small model is likeliest to use it.
+    expect(t.fake.prompts[0]).toMatch(/^This chat is about E1: Oats, 40 g, breakfast, .*\nUser: How much energy\?$/);
+  });
+
+  it("stops repeating the entry once the chat has deleted it", async () => {
+    const t = setup([answer({ action: "delete_entry", entry: "E1" }), answer({ action: "reply", text: "Deleted." }), answer({ action: "reply", text: "Sure." })]);
+    t.panel.open(breakfast());
+    t.say("Delete it");
+    await vi.waitFor(() => expect(t.log().querySelector(".proposal")).not.toBeNull());
+    t.log().querySelector<HTMLButtonElement>(".proposal button.primary")!.click();
+    await vi.waitFor(() => expect(t.log().querySelector(".msg-assistant")?.textContent).toBe("Deleted."));
+    t.say("Thanks");
+    await vi.waitFor(() => expect(t.fake.prompts.at(-1)).toBe("User: Thanks"));
   });
 
   it("ends the chat when the AI setting is turned off", async () => {

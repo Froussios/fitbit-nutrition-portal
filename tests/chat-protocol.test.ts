@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ChatHandles, chatInstructions, describeDay, describeDays, describeEntry, mealOf, parseStep, resolveDay, stepSchema } from "../src/ai/chat-protocol";
-import { bread, entryOf, oats, TODAY } from "./chat-fixtures";
+import { bread, entryOf, oats, TODAY, withoutEnergy } from "./chat-fixtures";
 
 const step = (fields: Record<string, string>) => JSON.stringify({ text: "", day: "", from: "", to: "", query: "", food: "", entry: "", amount: "", meal: "", ...fields });
 
@@ -96,8 +96,19 @@ describe("describing the diary", () => {
 
   it("names an entry by what the user sees, never its ID", () => {
     const line = describeEntry("E1", breakfast, "kcal");
-    expect(line).toBe("E1: Oats, 40 g, breakfast, 160 kcal (protein 4 g, carbs 24 g, fat 2 g), at 8:05 am, logged by this app");
+    expect(line).toBe("E1: Oats, 40 g, breakfast, 160 kcal (protein 4 g, carbs 24 g, fat 2 g), complete, at 8:05 am, logged by this app");
     expect(line).not.toContain(breakfast.id);
+  });
+
+  it("says energy is not recorded rather than 0, and that the entry is incomplete", () => {
+    const line = describeEntry("E1", withoutEnergy(breakfast), "kcal");
+    expect(line).toBe("E1: Oats, 40 g, breakfast, energy not recorded (protein 4 g, carbs 24 g, fat 2 g), incomplete, not recorded: energy, at 8:05 am, logged by this app");
+    expect(line).not.toContain("0 kcal");
+  });
+
+  it("says which entries a day's energy total leaves out", () => {
+    const text = describeDay(TODAY, TODAY, [breakfast, withoutEnergy(entryOf(bread, 1, "portion:slice (35 g)", `${TODAY}T08:10:00`, { id: "e-abc-bb22-fnds-555" }))], new ChatHandles(), "kcal");
+    expect(text).toContain("Total: 160 kcal (protein 7.2 g, carbs 39.8 g, fat 3.1 g) (1 entry has no energy recorded, so the energy total leaves it out)");
   });
 
   it("says when another app logged an entry", () => {
@@ -137,6 +148,7 @@ describe("chatInstructions", () => {
     expect(system!.content).toContain("Today is Thursday, 19 Nov 2026.");
     expect(system!.content).toContain("2026-11-18 is Wednesday (yesterday)");
     expect(system!.content).toContain("The diary on the screen shows Tuesday, 17 Nov 2026.");
+    expect(system!.content).toContain('"This", "it" and "this entry" mean E1, not the whole day.');
     expect(system!.content).toContain("E1: Oats, 40 g");
   });
 });

@@ -174,6 +174,11 @@ export class ChatHandles {
     return handle;
   }
 
+  /** The handle an entry has now, without handing one out. Undefined if it has none, or it was taken back. */
+  handleOf(id: string): string | undefined {
+    return this.entryById.get(id);
+  }
+
   foodHandle(food: FoodSummary): string {
     const key = `${food.ref.source}:${food.ref.id}`;
     let handle = this.foodByRef.get(key);
@@ -220,7 +225,28 @@ function energyText(kcal: number, unit: EnergyUnitName): string {
   return unit === "kj" ? `${formatNumber(kcalToKj(kcal), 0)} kJ` : `${formatNumber(kcal, 0)} kcal`;
 }
 
-const grams = (g: number | undefined) => (g === undefined ? "unknown" : `${formatNumber(g, 1)} g`);
+const grams = (g: number | undefined) => (g === undefined ? "not recorded" : `${formatNumber(g, 1)} g`);
+
+/**
+ * Whether an entry states its energy. The diary reads a missing value as 0 kcal, so without this an entry another app
+ * logged with no energy would read as one with none in it.
+ */
+export function energyRecorded(e: DiaryEntry): boolean {
+  return e.point.nutritionLog?.energy !== undefined;
+}
+
+/** What an entry leaves out of energy, protein, carbs and fat. */
+function missingOf(e: DiaryEntry): string[] {
+  const n = e.profile.nutrients;
+  return [!energyRecorded(e) && "energy", n.protein === undefined && "protein", n.carbohydrates === undefined && "carbs", n.fat === undefined && "fat"].filter((x): x is string => Boolean(x));
+}
+
+/** An entry's energy and main nutrients, saying "not recorded" where it has no value rather than 0. */
+function entryProfileText(e: DiaryEntry, unit: EnergyUnitName): string {
+  const n = e.profile.nutrients;
+  const energy = energyRecorded(e) ? energyText(e.profile.energyKcal, unit) : "energy not recorded";
+  return `${energy} (protein ${grams(n.protein)}, carbs ${grams(n.carbohydrates)}, fat ${grams(n.fat)})`;
+}
 
 /** Energy and the three main nutrients, e.g. "156 kcal (protein 4 g, carbs 24 g, fat 2 g)". */
 export function profileText(p: NutrientProfile, unit: EnergyUnitName): string {
@@ -251,7 +277,16 @@ function ownerText(e: DiaryEntry): string {
 /** One line about an entry for the model. Its handle stands in for the ID, which the model never sees. */
 export function describeEntry(handle: string, e: DiaryEntry, unit: EnergyUnitName): string {
   const meal = e.mealType === "MEAL_TYPE_UNSPECIFIED" ? "no meal" : mealLabel(e.mealType).toLowerCase();
-  return `${handle}: ${e.displayName}, ${e.amount ?? "no amount"}, ${meal}, ${profileText(e.profile, unit)}, at ${clockTime(e.start)}, ${ownerText(e)}`;
+  const missing = missingOf(e);
+  const complete = missing.length ? `incomplete, not recorded: ${missing.join(", ")}` : "complete";
+  return `${handle}: ${e.displayName}, ${e.amount ?? "no amount"}, ${meal}, ${entryProfileText(e, unit)}, ${complete}, at ${clockTime(e.start)}, ${ownerText(e)}`;
+}
+
+/** Says how many entries the energy total leaves out, if any. */
+function energyGap(entries: readonly DiaryEntry[]): string {
+  const without = entries.filter((e) => !energyRecorded(e)).length;
+  if (without === 0) return "";
+  return without === 1 ? " (1 entry has no energy recorded, so the energy total leaves it out)" : ` (${without} entries have no energy recorded, so the energy total leaves them out)`;
 }
 
 function totalOf(entries: readonly DiaryEntry[]): NutrientProfile {
@@ -272,12 +307,12 @@ export function describeDay(day: string, today: string, entries: readonly DiaryE
   const head = `${formatCivilDate(day)}${day === today ? " (today)" : day === addCivilDays(today, -1) ? " (yesterday)" : ""}`;
   if (entries.length === 0) return `${head}: nothing logged.`;
   const lines = entries.map((e) => describeEntry(handles.entryHandle(e), e, unit));
-  return [`${head}: ${entries.length} ${entries.length === 1 ? "entry" : "entries"}`, ...lines, `Total: ${profileText(totalOf(entries), unit)}`].join("\n");
+  return [`${head}: ${entries.length} ${entries.length === 1 ? "entry" : "entries"}`, ...lines, `Total: ${profileText(totalOf(entries), unit)}${energyGap(entries)}`].join("\n");
 }
 
 /** Totals for several days, with the average over the days that have entries. */
 export function describeDays(days: readonly { readonly day: string; readonly entries: readonly DiaryEntry[] }[], unit: EnergyUnitName): string {
-  const lines = days.map(({ day, entries }) => (entries.length ? `${formatCivilDate(day)}: ${profileText(totalOf(entries), unit)}, ${entries.length} ${entries.length === 1 ? "entry" : "entries"}` : `${formatCivilDate(day)}: nothing logged`));
+  const lines = days.map(({ day, entries }) => (entries.length ? `${formatCivilDate(day)}: ${profileText(totalOf(entries), unit)}, ${entries.length} ${entries.length === 1 ? "entry" : "entries"}${energyGap(entries)}` : `${formatCivilDate(day)}: nothing logged`));
   const logged = days.filter((d) => d.entries.length > 0);
   if (logged.length > 0) {
     const all = totalOf(logged.flatMap((d) => d.entries));
@@ -333,6 +368,7 @@ export function chatInstructions(ctx: ChatContext): { readonly role: "system" | 
     '- delete_entry: propose deleting "entry".',
     "Rules:",
     "- Never make up entries, foods, numbers or totals. Read them first, and quote the numbers the app gives you.",
+    '- "not recorded" means the entry has no value for it, which is not the same as 0. An entry is complete when energy, protein, carbs and fat are all recorded.',
     "- To log a food, search_food first, then log_food with the handle of the result that fits best. If none fits, reply and ask.",
     "- The amount must say a unit, as the user would type it. Use only units the app lists for the food.",
     "- The app shows each proposed change to the user, who accepts or rejects it. Then you are told what happened. Propose one change at a time.",
@@ -343,7 +379,11 @@ export function chatInstructions(ctx: ChatContext): { readonly role: "system" | 
     `The diary on the screen shows ${ctx.viewed === ctx.today ? "today" : formatCivilDate(ctx.viewed)}.`,
   ];
   if (ctx.focus) {
-    system.push(`The user opened this chat from one entry. "This", "it" and "this entry" mean this one:\n${describeEntry(ctx.focus.handle, ctx.focus.entry, ctx.energyUnit)}`);
+    const h = ctx.focus.handle;
+    system.push(
+      `The user opened this chat from one entry, ${h}. "This", "it" and "this entry" mean ${h}, not the whole day. ` +
+        `Answer questions about ${h} from its line below, which each message repeats, without read_day:\n${describeEntry(h, ctx.focus.entry, ctx.energyUnit)}`,
+    );
   }
   return [
     { role: "system", content: system.join("\n") },
@@ -354,7 +394,14 @@ export function chatInstructions(ctx: ChatContext): { readonly role: "system" | 
     { role: "assistant", content: json({ action: "log_food", food: "X1", amount: "1 medium", day: "today", meal: "breakfast" }) },
     { role: "user", content: "The user accepted, and it was done: logged Banana, raw, 118 g, breakfast, today." },
     { role: "assistant", content: json({ action: "reply", text: "Logged a banana for breakfast." }) },
-    { role: "user", content: "(End of example.)" },
+    // A second example: a question about the entry the chat was opened on is answered from its line, without reading the day.
+    {
+      role: "user",
+      content:
+        "(Example, not the user's diary.) This chat is about X7: Toast, 2 slices, breakfast, energy not recorded (protein 6 g, carbs 30 g, fat 2 g), incomplete, not recorded: energy, at 7:40 am, logged by Google Health app, cannot be changed here\nUser: Is this entry complete?",
+    },
+    { role: "assistant", content: json({ action: "reply", text: "No. The toast at breakfast has no energy recorded, so the day's energy total leaves it out. Its protein, carbs and fat are recorded." }) },
+    { role: "user", content: "(End of examples.)" },
     { role: "assistant", content: json({ action: "reply", text: "Ready." }) },
   ];
 }
