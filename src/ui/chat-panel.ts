@@ -8,7 +8,7 @@
 import type { AiState } from "../ai/amount-ai";
 import { ChatAgent, type ChatEvent, type TurnEnd } from "../ai/chat-agent";
 import type { ChatModel, ChatSession } from "../ai/chat-model";
-import { chatInstructions, clockTime, describeEntry } from "../ai/chat-protocol";
+import { chatInstructions, clockTime, focusPrompt } from "../ai/chat-protocol";
 import { createChatTools, outcomeText, type ChatHost, type ChatTools, type Proposal } from "../ai/chat-tools";
 import { dayLabel } from "../core/time";
 import { describeError, logger } from "../debug/log";
@@ -241,7 +241,7 @@ export function createChatPanel(model: ChatModel, ai: AiSwitch, host: ChatPanelH
     if (!c.focus) return undefined;
     const handle = c.tools.handles.handleOf(c.focus.id);
     const entry = handle && c.tools.handles.entry(handle);
-    return handle && entry ? `This chat is about ${describeEntry(handle, entry, host.energyUnit())}` : undefined;
+    return handle && entry ? focusPrompt(handle, entry, host.energyUnit()) : undefined;
   };
 
   const submit = (text: string) => {

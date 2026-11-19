@@ -116,7 +116,7 @@ describe("describing the diary", () => {
   it("says what a range's average leaves out", () => {
     const toast = withoutEnergy(entryOf(bread, 1, "portion:slice (35 g)", `${TODAY}T08:10:00`, { id: "e-abc-bb22-fnds-555" }));
     const text = describeDays([{ day: TODAY, entries: [breakfast, toast] }], "kcal");
-    expect(text).toMatch(/Average over the 1 day with entries: .* \(leaves out what is not recorded: energy of 1 entry\)$/);
+    expect(text).toMatch(/Average over the 1 day with entries: .* \(leaves out what is not recorded: energy of 1 entry across the range\)$/);
   });
 
   it("says when another app logged an entry", () => {

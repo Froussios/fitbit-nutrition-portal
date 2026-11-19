@@ -286,11 +286,11 @@ export function describeEntry(handle: string, e: DiaryEntry, unit: EnergyUnitNam
  * Says which entries a total leaves out because they record no value for it, if any: energy, protein, carbs or fat.
  * Without it, a total with a gap reads as complete.
  */
-function totalGaps(entries: readonly DiaryEntry[]): string {
+function totalGaps(entries: readonly DiaryEntry[], where = ""): string {
   const counts = new Map<string, number>();
   for (const e of entries) for (const part of missingOf(e)) counts.set(part, (counts.get(part) ?? 0) + 1);
   if (counts.size === 0) return "";
-  const parts = [...counts].map(([part, n]) => `${part} of ${n} ${n === 1 ? "entry" : "entries"}`);
+  const parts = [...counts].map(([part, n]) => `${part} of ${n} ${n === 1 ? "entry" : "entries"}${where}`);
   return ` (leaves out what is not recorded: ${parts.join(", ")})`;
 }
 
@@ -327,7 +327,7 @@ export function describeDays(days: readonly { readonly day: string; readonly ent
       energyKcal: all.energyKcal * factor,
       nutrients: Object.fromEntries(Object.entries(all.nutrients).map(([k, v]) => [k, v === undefined ? v : v * factor])),
     };
-    lines.push(`Average over the ${logged.length} ${logged.length === 1 ? "day" : "days"} with entries: ${profileText(average, unit)}${totalGaps(loggedEntries)}`);
+    lines.push(`Average over the ${logged.length} ${logged.length === 1 ? "day" : "days"} with entries: ${profileText(average, unit)}${totalGaps(loggedEntries, " across the range")}`);
   }
   return lines.join("\n");
 }
@@ -345,6 +345,14 @@ export function describeFood(handle: string, f: FoodSummary, unit: EnergyUnitNam
 const EXAMPLE_TODAY = "2026-03-04";
 
 const json = (step: Partial<ChatStep> & { action: ChatAction }) => JSON.stringify({ action: step.action, ...Object.fromEntries(FIELDS.map((f) => [f, step[f] ?? ""])) });
+
+/** How a message in a chat opened on an entry starts. The worked example uses it too, so the two can't drift apart. */
+export const FOCUS_PREFIX = "This chat is about";
+
+/** The line that starts each message in a chat opened on an entry. */
+export function focusPrompt(handle: string, entry: DiaryEntry, unit: EnergyUnitName): string {
+  return `${FOCUS_PREFIX} ${describeEntry(handle, entry, unit)}`;
+}
 
 export interface ChatContext {
   /** YYYY-MM-DD. */
@@ -404,7 +412,7 @@ export function chatInstructions(ctx: ChatContext): { readonly role: "system" | 
     {
       role: "user",
       content:
-        "(Example, not the user's diary.) This chat is about X7: Toast, 2 slices, breakfast, energy not recorded (protein 6 g, carbs 30 g, fat 2 g), incomplete, not recorded: energy, at 7:40 am, logged by Google Health app, cannot be changed here\nUser: Is this entry complete?",
+        `(Example, not the user's diary.) ${FOCUS_PREFIX} X7: Toast, 2 slices, breakfast, energy not recorded (protein 6 g, carbs 30 g, fat 2 g), incomplete, not recorded: energy, at 7:40 am, logged by Google Health app, cannot be changed here\nUser: Is this entry complete?`,
     },
     { role: "assistant", content: json({ action: "reply", text: "No. The toast at breakfast has no energy recorded, so the day's energy total leaves it out. Its protein, carbs and fat are recorded." }) },
     { role: "user", content: "(End of examples.)" },
