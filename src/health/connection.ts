@@ -78,8 +78,13 @@ export function deleteFailed(name: string): string {
 }
 
 /** A delete, undo or edit that got an answer, and the answer was no. */
-export function actionRefused(action: "delete" | "undo deleting" | "edit", name: string, reason: string): string {
+export function actionRefused(action: "delete" | "undo deleting" | "edit" | "log again", name: string, reason: string): string {
   return `Could not ${action} "${name}": ${reason}`;
+}
+
+/** Like LOG_NOT_CONFIRMED: repeating again sends a new ID, so it could create a second entry. */
+export function repeatNotConfirmed(name: string): string {
+  return `Google Health did not answer, so "${name}" may not have been logged again for today. When the connection is back, check today's diary before trying again.`;
 }
 
 /** Like LOG_NOT_CONFIRMED: undoing again sends a new ID, so it could create a second entry. */

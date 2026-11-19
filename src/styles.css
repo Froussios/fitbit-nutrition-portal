@@ -139,11 +139,14 @@ button.link { border: none; background: none; color: var(--accent); text-decorat
 button.icon { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; padding: 0; border: none; background: none; color: var(--muted); line-height: 1; }
 button.icon:focus-visible { outline-offset: -2px; }
 button.icon:not(:disabled):hover { color: var(--danger); }
-button.icon.undo:not(:disabled):hover, button.icon.edit:not(:disabled):hover { color: var(--accent); }
+button.icon.undo:not(:disabled):hover, button.icon.edit:not(:disabled):hover, button.icon.repeat:not(:disabled):hover { color: var(--accent); }
 button.not-owned:not(:disabled):hover { color: var(--text); }
-.not-owned svg, button.edit svg { display: block; width: 1em; height: 1em; }
-/* Room for two icons on every row, with Delete on the right: Undo and the lock take its place, and nothing moves. */
-.row-actions { display: flex; justify-content: flex-end; min-width: 5.5rem; }
+.not-owned svg, button.edit svg, button.repeat svg { display: block; width: 1em; height: 1em; }
+/*
+ * Room for three icons on every row (Log again, Edit, Delete), with Delete on the right: Undo and the lock take its
+ * place, and nothing moves.
+ */
+.row-actions { display: flex; justify-content: flex-end; min-width: 8.25rem; }
 .not-owned-note {
   max-width: min(22em, calc(100vw - 32px));
   padding: 10px 14px;
