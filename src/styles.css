@@ -335,6 +335,7 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .opt-nobrand { font-style: italic; }
 .opt-source { display: inline-block; margin-left: 8px; padding: 0 5px; border: 1px solid currentColor; border-radius: 3px; font-size: 0.7rem; opacity: 0.75; white-space: nowrap; }
 .opt-country { margin-left: 6px; font-size: 0.7rem; opacity: 0.75; white-space: nowrap; }
+.opt-warning { display: inline-block; margin-left: 8px; padding: 0 5px; border: 1px solid var(--notice-border); border-radius: 3px; background: var(--notice-bg); color: var(--text); font-size: 0.7rem; white-space: nowrap; }
 .opt-flag { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-size: 0.95rem; vertical-align: -1px; }
 .opt-serving { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .opt mark { background: none; color: inherit; font-weight: 700; }
@@ -426,7 +427,7 @@ button.on-hand-item { display: flex; align-items: baseline; gap: 8px; padding: 4
 .ingredient-adder .add-field { flex: 0 0 auto; }
 .ingredient-adder .status:empty { display: none; }
 .ingredient-adder .status { margin: -4px 0 12px; }
-/* A saved meal's ingredients: one row each, all open until the meal is saved (DR-42). On a phone, the search takes the first line. */
+/* A saved meal's ingredients: one row each, all open until the meal is saved (DR-43). On a phone, the search takes the first line. */
 .ingredient-rows { list-style: none; padding: 0; margin: 0 0 8px; }
 .ingredient-rows > li { display: grid; grid-template-columns: minmax(0, 1fr) 6.5rem minmax(6rem, 10rem) 5.5rem 2.75rem; align-items: center; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .ingredient-rows > li:first-child { border-top: 1px solid var(--border); }

@@ -86,10 +86,11 @@ export type LegacyDictEntry = readonly [word: string, ...ListRef];
 export type PrefixGroup = Readonly<Record<string, readonly [expansions: number, ids?: string]>>;
 
 /**
- * [code, name, brand, packSize, basis, kcalPer100, servingLabel, servingAmount, servingUnit, countries]. Countries are
- * ISO codes separated by spaces ("AU NZ"), left out when none are known, and missing in indexes built before them.
+ * [code, name, brand, packSize, basis, kcalPer100, servingLabel, servingAmount, servingUnit, countries, macroKcalPer100].
+ * Countries are ISO codes separated by spaces ("AU NZ"), null or left out when none are known, and missing in indexes
+ * built before them. macroKcalPer100 is there only when the energy disagrees with the macronutrients (DR-42).
  */
-export type SummaryRow = readonly [...SummaryFields, countries?: string];
+export type SummaryRow = readonly [...SummaryFields, countries?: string | null, macroKcalPer100?: number];
 type SummaryFields = [string, string, string | null, string | null, BaseUnit, number, string | null, number | null, BaseUnit | null];
 
 /** [nutrients in NUTRIENT_KEYS order, portions as [name, amount, unit], density] */
@@ -192,13 +193,15 @@ export function summaryRow(s: FoodSummary): SummaryRow {
     s.serving && s.serving.unit === s.basis ? round(s.serving.amount) : null,
     s.serving && s.serving.unit === s.basis ? s.serving.unit : null,
   ];
-  return s.countries?.length ? [...row, s.countries.join(" ")] : row;
+  const countries = s.countries?.length ? s.countries.join(" ") : null;
+  if (s.macroKcalPer100 !== undefined) return [...row, countries, round(s.macroKcalPer100)];
+  return countries ? [...row, countries] : row;
 }
 
-const countriesOf = (text: string | undefined) => (text ? { countries: text.split(" ") } : {});
+const countriesOf = (text: string | null | undefined) => (text ? { countries: text.split(" ") } : {});
 
 export function fromSummaryRow(r: SummaryRow): FoodSummary {
-  const [code, name, brand, packSize, basis, kcal, servingLabel, servingAmount, servingUnit, countries] = r;
+  const [code, name, brand, packSize, basis, kcal, servingLabel, servingAmount, servingUnit, countries, macroKcal] = r;
   return {
     ref: { source: "off", id: code },
     name,
@@ -211,6 +214,7 @@ export function fromSummaryRow(r: SummaryRow): FoodSummary {
       ? { serving: { label: servingLabel, amount: servingAmount, unit: servingUnit, kcal: (kcal * servingAmount) / 100 } }
       : {}),
     ...countriesOf(countries),
+    ...(typeof macroKcal === "number" ? { macroKcalPer100: macroKcal } : {}),
   };
 }
 

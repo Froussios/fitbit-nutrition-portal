@@ -89,7 +89,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
   let saving = false;
   let offline = false;
 
-  /** A saved meal's ingredients are rows that all stay open until the meal is saved (DR-42). */
+  /** A saved meal's ingredients are rows that all stay open until the meal is saved (DR-43). */
   const mealRows = (): IngredientInput =>
     createIngredientRows({
       catalog: opts.catalog,

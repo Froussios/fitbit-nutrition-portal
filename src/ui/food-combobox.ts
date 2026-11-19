@@ -65,6 +65,21 @@ function runs(parts: readonly TextRun[]): Node[] {
 
 const unitLabel = (s: FoodSummary) => `100 ${s.basis}`;
 
+/** A chip on a product whose stated energy disagrees with its fat, carbs and protein (DR-42), or null. */
+export function energyWarning(s: FoodSummary): HTMLElement | null {
+  if (s.macroKcalPer100 === undefined) return null;
+  const detail =
+    `Its fat, carbs and protein add up to ${fmtEnergy(s.macroKcalPer100)} ${energyLabel()} / ${unitLabel(s)}, not ${fmtEnergy(s.kcalPer100)}. ` +
+    "One of the values is probably wrong: check the pack before logging it.";
+  return el(
+    "span",
+    { class: "opt-warning", title: detail },
+    el("span", { "aria-hidden": "true" }, "⚠ "),
+    "Energy doesn't add up",
+    el("span", { class: "visually-hidden" }, `. ${detail}`),
+  );
+}
+
 /** A small flag for where the food is sold, with every listed country in its tooltip; null when none is known. */
 export function countryFlag(s: FoodSummary, home: string | undefined = userCountry()): HTMLElement | null {
   const countries = foodCountries(s);
@@ -148,6 +163,7 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
         ...(s.packSize ? [document.createTextNode(` · ${formatMeasurementLabel(s.packSize)}`)] : []),
         el("span", { class: "opt-source", title: "Where this food's data comes from" }, SOURCE_TAGS[s.ref.source]),
         countryFlag(s),
+        energyWarning(s),
       ];
       return el(
         "li",

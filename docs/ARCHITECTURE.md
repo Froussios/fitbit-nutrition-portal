@@ -257,7 +257,7 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
 * **Screens.** The **Saved meals** tab (`src/ui/meal-card.ts`) lists the meals by name with their energy. Each one's
   ingredients and amounts open under it ("3 ingredients"). It has Log, Edit, Delete (with an undo until reload, which
   saves the meal again) and New meal, which open the builder of section 4.5. For a saved meal its ingredients are rows
-  (`src/ui/ingredient-rows.ts`, DR-42), each with its own search, amount and unit, all open until the meal is saved;
+  (`src/ui/ingredient-rows.ts`, DR-43), each with its own search, amount and unit, all open until the meal is saved;
   Add ingredient adds an empty row. In **Log food** the search finds saved
   meals, and up to 8 are offered under the empty search. A chosen meal shows its ingredients: an amount can be changed
   in the unit it was added in, an ingredient left out or put back, and another added, for this entry only. "Reset to
