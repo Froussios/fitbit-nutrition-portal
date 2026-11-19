@@ -199,6 +199,8 @@ describe("the + button's step (DR-37)", () => {
     expect(toDiaryEntry(share)!.increment).toBeUndefined();
     const meal = buildPortionPoint({ name: "Lunch bowl", profile: { energyKcal: 500, nutrients: {} }, time }, "e-test-0001-meal-abc");
     expect(toDiaryEntry(meal)!.increment).toBeUndefined();
+    const named = buildPortionPoint({ name: "Oats (40 g)", profile: { energyKcal: 150, nutrients: {} }, time }, "e-test-0001-meal-abc");
+    expect(toDiaryEntry(named)!.increment).toBeUndefined();
   });
 
   it("adds the step to the amount and scales every value with it, keeping the meal, time and unit", () => {

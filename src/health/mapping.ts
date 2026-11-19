@@ -370,7 +370,7 @@ export interface DiaryEntry {
   readonly point: DataPoint;
   /**
    * What the + button adds (DR-37): the step its ID records, else the amount as logged. Only on this app's entries that
-   * have an amount in grams or millilitres, and never on a meal prep share, which is changed from its batch.
+   * have an amount in grams or millilitres, and never on a meal prep share or a saved meal.
    */
   readonly increment?: LoggedAmount;
 }
@@ -443,7 +443,8 @@ export function toDiaryEntry(point: DataPoint, ctx: DiaryContext = {}): DiaryEnt
   const ref = own ? parseEntryId(id)?.ref : undefined;
   const label = own ? undefined : sourceLabel(point);
   const amount = servingText(log, ctx.unitNames);
-  const logged = own && ref?.source !== "prep" ? loggedAmount(log, ctx.unitNames) : undefined;
+  // A meal prep share is changed from its batch, and a saved meal has no amount of its own, even if its name ends in one.
+  const logged = own && ref?.source !== "prep" && ref?.source !== "meal" ? loggedAmount(log, ctx.unitNames) : undefined;
   const increment = logged && { amount: entryStep(id) ?? logged.amount, unit: logged.unit };
   const entry: DiaryEntry = {
     name: point.name,

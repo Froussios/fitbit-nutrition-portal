@@ -451,7 +451,7 @@ first in its row, which says what it adds (`+35 g`, `+250 ml`). Its step is one 
 (tsp, tbsp, cup) the entry was logged in, else the entry's amount as logged (`90 g` steps by 90 g, `2 oz` by 2 oz). A
 tap replaces the entry with a corrected copy at the larger amount, every value scaled with it, as an edit does (DR-22).
 The step is recorded in the entry's ID, after its 4 random characters, in hundredths of a gram or millilitre in base
-36 (ARCHITECTURE.md section 4.3). Copies keep it (undo, edit, Log again). An edit to a portion or measure records one of
+36 (ARCHITECTURE.md section 4.3). Copies keep it (undo, Log again). An edit to a portion or measure records one of
 it; an edit in grams or millilitres keeps the step; an edit that turns grams into millilitres, or back, drops it. The
 first + on an entry with no step records its amount as logged, so later taps add the same again rather than double it.
 Log again (DR-36) stays on today's rows beside it.
