@@ -265,6 +265,8 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
 * **Logging** writes one entry like a meal prep portion: the meal's name, the summed nutrients, no `serving`, and the
   ID `e-<time>-<rand>-meal-<mealId>`. The database is not written. The entry can be edited ("× this entry", DR-22) and
   deleted like any other the app wrote. Ingredients come from `catalog` foods, which never include a meal or a prep.
+  Its diary row, and the chat's description of it, show **saved meal** for the amount rather than the "–" of an
+  entry that recorded none (DR-44).
 * **A meal in a meal.** The builder's searches, and the one under a chosen meal in Log food, also find saved meals. One
   is added as copies of its ingredients (in the builder, when the meal is saved: until then it is one row in servings), scaled to the servings typed (`expandMeal` in `src/core/meal.ts`), so there is
   no nesting to resolve and later edits to it change nothing here. A meal holds at most 60 ingredients, as a prep does.

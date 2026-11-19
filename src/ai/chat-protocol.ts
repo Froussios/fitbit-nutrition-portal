@@ -14,7 +14,7 @@ import { kcalToKj, type NutrientProfile } from "../core/nutrients";
 import { formatAmount, formatNumber } from "../core/units";
 import { SOURCE_TAGS } from "../core/food";
 import type { FoodSummary } from "../core/food-summary";
-import { mealLabel, type DiaryEntry } from "../health/mapping";
+import { isSavedMeal, mealLabel, type DiaryEntry } from "../health/mapping";
 import type { MealType } from "../health/types";
 
 export const CHAT_ACTIONS = ["reply", "read_day", "read_days", "search_food", "log_food", "change_entry", "delete_entry"] as const;
@@ -279,7 +279,9 @@ export function describeEntry(handle: string, e: DiaryEntry, unit: EnergyUnitNam
   const meal = e.mealType === "MEAL_TYPE_UNSPECIFIED" ? "no meal" : mealLabel(e.mealType).toLowerCase();
   const missing = missingOf(e);
   const complete = missing.length ? `incomplete, not recorded: ${missing.join(", ")}` : "complete";
-  return `${handle}: ${e.displayName}, ${e.amount ?? "no amount"}, ${meal}, ${entryProfileText(e, unit)}, ${complete}, at ${clockTime(e.start)}, ${ownerText(e)}`;
+  // A saved meal has no amount of its own, which is not something missing (DR-44).
+  const amount = e.amount ?? (isSavedMeal(e) ? "a saved meal, logged as one entry with no amount of its own" : "no amount");
+  return `${handle}: ${e.displayName}, ${amount}, ${meal}, ${entryProfileText(e, unit)}, ${complete}, at ${clockTime(e.start)}, ${ownerText(e)}`;
 }
 
 /**

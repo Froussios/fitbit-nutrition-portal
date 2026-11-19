@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ChatHandles, chatInstructions, describeDay, describeDays, describeEntry, mealOf, parseStep, resolveDay, stepSchema } from "../src/ai/chat-protocol";
+import type { DiaryEntry } from "../src/health/mapping";
 import { bread, entryOf, oats, TODAY, withoutEnergy } from "./chat-fixtures";
 
 const step = (fields: Record<string, string>) => JSON.stringify({ text: "", day: "", from: "", to: "", query: "", food: "", entry: "", amount: "", meal: "", ...fields });
@@ -117,6 +118,12 @@ describe("describing the diary", () => {
     const toast = withoutEnergy(entryOf(bread, 1, "portion:slice (35 g)", `${TODAY}T08:10:00`, { id: "e-abc-bb22-fnds-555" }));
     const text = describeDays([{ day: TODAY, entries: [breakfast, toast] }], "kcal");
     expect(text).toMatch(/Average over the 1 day with entries: .* \(leaves out what is not recorded: energy of 1 entry across the range\)$/);
+  });
+
+  it("says a saved meal has no amount of its own, rather than none recorded", () => {
+    const meal = { ...breakfast, displayName: "Porridge", amount: undefined, ref: { source: "meal", id: "m1" } } as DiaryEntry;
+    expect(describeEntry("E1", meal, "kcal")).toContain("E1: Porridge, a saved meal, logged as one entry with no amount of its own, breakfast,");
+    expect(describeEntry("E1", { ...meal, ref: undefined } as DiaryEntry, "kcal")).toContain("E1: Porridge, no amount, breakfast,");
   });
 
   it("says when another app logged an entry", () => {
