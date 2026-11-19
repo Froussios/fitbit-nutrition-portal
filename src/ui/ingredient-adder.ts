@@ -22,6 +22,21 @@ const MAX_MEAL_HITS = 2;
  */
 export const SERVINGS: Measurable = { basis: "g", portions: [{ name: "serving", amount: 1, unit: "g" }], portionsOnly: true };
 
+/** The saved meals that match what was typed, as rows above the food search hits. */
+export function savedMealRows(meals: readonly SavedMeal[], query: string, choose: (meal: SavedMeal) => void): ComboExtra[] {
+  const q = query.trim().toLowerCase();
+  return meals
+    .filter((m) => m.name.toLowerCase().includes(q))
+    .slice(0, MAX_MEAL_HITS)
+    .map((m) => ({
+      name: m.name,
+      detail: `${fmtEnergy(batchProfile(m.ingredients).energyKcal)} ${energyLabel()}`,
+      tag: "Saved meal",
+      sub: `${m.ingredients.length} ${m.ingredients.length === 1 ? "ingredient" : "ingredients"}`,
+      choose: () => choose(m),
+    }));
+}
+
 export interface IngredientAdderOptions {
   readonly catalog: FoodCatalog;
   /** Prefix for the fields' IDs. */
@@ -72,28 +87,17 @@ export function createIngredientAdder(opts: IngredientAdderOptions): IngredientA
     loading = undefined;
   };
 
-  const mealRows = (query: string): ComboExtra[] => {
-    const q = query.trim().toLowerCase();
-    return (opts.meals?.() ?? [])
-      .filter((m) => m.name.toLowerCase().includes(q))
-      .slice(0, MAX_MEAL_HITS)
-      .map((m) => ({
-        name: m.name,
-        detail: `${fmtEnergy(batchProfile(m.ingredients).energyKcal)} ${energyLabel()}`,
-        tag: "Saved meal",
-        sub: `${m.ingredients.length} ${m.ingredients.length === 1 ? "ingredient" : "ingredients"}`,
-        choose: () => {
-          forget();
-          meal = m;
-          say("");
-          combobox.showChoice(m.name);
-          amount.clear();
-          amount.show(SERVINGS, defaultAmount);
-          refresh();
-          amount.input.focus();
-        },
-      }));
-  };
+  const mealRows = (query: string): ComboExtra[] =>
+    savedMealRows(opts.meals?.() ?? [], query, (m) => {
+      forget();
+      meal = m;
+      say("");
+      combobox.showChoice(m.name);
+      amount.clear();
+      amount.show(SERVINGS, defaultAmount);
+      refresh();
+      amount.input.focus();
+    });
 
   const combobox = createFoodCombobox(opts.catalog, {
     id: `${opts.id}-food`,

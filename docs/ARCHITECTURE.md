@@ -176,7 +176,7 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
   Eat the rest and Discard batch. The **Meal prep** tab (`src/ui/prep-card.ts`) lists each prep on one line with what
   is left. Its Log a portion opens Log food with the prep chosen. It also has Edit, Discard, New prep, and a list of what
   was eaten, where a portion can be removed. A portion's row in the diary can be deleted and undone, but not edited, because
-  its fraction lives in the prep. The builder (`src/ui/prep-builder.ts`, shared with saved meals) lists the ingredients, whose amounts can be
+  its fraction lives in the prep. The builder (`src/ui/prep-builder.ts`, shared with saved meals, whose ingredients are rows instead: section 4.6) lists the ingredients, whose amounts can be
   changed in place (`src/ui/ingredient-list.ts`), and finds each new one in the food catalogue
   (`src/ui/ingredient-adder.ts`); custom foods can't be ingredients yet. The tab is hidden on a site without the API, and the search then finds
   foods only. The app checks for the API with a request that carries no token: a request with one needs a CORS
@@ -256,15 +256,17 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
 
 * **Screens.** The **Saved meals** tab (`src/ui/meal-card.ts`) lists the meals by name with their energy. Each one's
   ingredients and amounts open under it ("3 ingredients"). It has Log, Edit, Delete (with an undo until reload, which
-  saves the meal again) and New meal, which open the builder of section 4.5. In **Log food** the search finds saved
+  saves the meal again) and New meal, which open the builder of section 4.5. For a saved meal its ingredients are rows
+  (`src/ui/ingredient-rows.ts`, DR-42), each with its own search, amount and unit, all open until the meal is saved;
+  Add ingredient adds an empty row. In **Log food** the search finds saved
   meals, and up to 8 are offered under the empty search. A chosen meal shows its ingredients: an amount can be changed
   in the unit it was added in, an ingredient left out or put back, and another added, for this entry only. "Reset to
   the saved meal" undoes that, and so does logging, so each entry starts from the meal as saved.
 * **Logging** writes one entry like a meal prep portion: the meal's name, the summed nutrients, no `serving`, and the
   ID `e-<time>-<rand>-meal-<mealId>`. The database is not written. The entry can be edited ("× this entry", DR-22) and
   deleted like any other the app wrote. Ingredients come from `catalog` foods, which never include a meal or a prep.
-* **A meal in a meal.** The builder's search, and the one under a chosen meal in Log food, also find saved meals. One
-  is added as copies of its ingredients, scaled to the servings typed (`expandMeal` in `src/core/meal.ts`), so there is
+* **A meal in a meal.** The builder's searches, and the one under a chosen meal in Log food, also find saved meals. One
+  is added as copies of its ingredients (in the builder, when the meal is saved: until then it is one row in servings), scaled to the servings typed (`expandMeal` in `src/core/meal.ts`), so there is
   no nesting to resolve and later edits to it change nothing here. A meal holds at most 60 ingredients, as a prep does.
 * **Ingredients** keep the nutrients worked out when added (section 4.5), and a new amount scales them. Editing a saved
   meal changes later entries only.

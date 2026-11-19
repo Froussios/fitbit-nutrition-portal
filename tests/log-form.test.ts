@@ -5,6 +5,7 @@ import type { SavedMeal } from "../src/core/meal";
 import type { Prep, PrepIngredient } from "../src/core/prep";
 import { LocalFoodCatalog } from "../src/food/catalog";
 import { createLogForm, MAX_MEALS_ON_HAND, type LogFormPrepActions, type LogMeal } from "../src/ui/log-form";
+import { rescaleSaved } from "../src/ui/ingredient-rows";
 import { createPrepBuilder } from "../src/ui/prep-builder";
 
 const food = (name: string): FoodItem => ({ ref: { source: "off", id: name }, name, basis: "g", per100: { energyKcal: 100, nutrients: {} }, portions: [] });
@@ -394,34 +395,161 @@ describe("log form, saved meals", () => {
 });
 
 describe("saved meal builder", () => {
-  it("adds a saved meal as copies of its ingredients, and saves the result", async () => {
-    const onSave = vi.fn(async () => {});
-    const builder = createPrepBuilder({ catalog: catalog(), kind: "meal", draftKey: () => undefined, onSave, onClose: () => {}, meals: () => MEALS });
+  function build(meals: readonly SavedMeal[] = MEALS, draftKey: (id: string | undefined) => string | undefined = () => undefined) {
+    const onSave = vi.fn(async (_draft: unknown) => {});
+    const builder = createPrepBuilder({ catalog: catalog(), kind: "meal", draftKey, onSave, onClose: () => {}, meals: () => meals });
     document.body.append(builder.element);
+    const root = builder.element;
+    const rows = () => [...root.querySelectorAll<HTMLElement>(".ingredient-rows > li")];
+    const inRow = <T extends HTMLElement>(row: number, selector: string) => rows()[row]!.querySelector<T>(selector)!;
+    const button = (text: string) => [...root.querySelectorAll("button")].find((b) => b.textContent === text)!;
+    const setName = (text: string) => {
+      const name = root.querySelector<HTMLInputElement>("#meal-name")!;
+      name.value = text;
+      name.dispatchEvent(new Event("input"));
+    };
+    const search = async (row: number, text: string, option: string) => {
+      const input = inRow<HTMLInputElement>(row, "[role=combobox]");
+      input.focus();
+      input.value = text;
+      input.dispatchEvent(new Event("input"));
+      await vi.advanceTimersByTimeAsync(500);
+      [...rows()[row]!.querySelectorAll<HTMLElement>("[role=option]")].find((o) => o.textContent?.includes(option))!.click();
+      await vi.advanceTimersByTimeAsync(0);
+    };
+    const amount = (row: number, text: string) => {
+      const input = inRow<HTMLInputElement>(row, "input[id$=-qty]");
+      input.value = text;
+      input.dispatchEvent(new Event("input"));
+      input.dispatchEvent(new Event("blur"));
+    };
+    const preview = () => root.querySelector(".preview")!.textContent;
+    const save = async () => {
+      button("Save meal").click();
+      await vi.advanceTimersByTimeAsync(0);
+    };
+    return { builder, root, onSave, rows, inRow, button, setName, search, amount, preview, save };
+  }
+
+  it("adds a row with Add ingredient, and keeps every row open until the meal is saved", async () => {
+    const { builder, rows, inRow, button, setName, search, amount, preview, save, onSave } = build();
     builder.open();
-    expect(builder.element.querySelector("h3")!.textContent).toBe("New saved meal");
-    const name = builder.element.querySelector<HTMLInputElement>("#meal-name")!;
-    name.value = "Big lunch";
-    name.dispatchEvent(new Event("input"));
-    const search = builder.element.querySelector<HTMLInputElement>("#meal-ing-food")!;
-    search.focus();
-    search.value = "bowl";
-    search.dispatchEvent(new Event("input"));
-    await vi.advanceTimersByTimeAsync(500);
-    [...builder.element.querySelectorAll<HTMLElement>("[role=option]")].find((o) => o.textContent?.includes("Chicken burrito bowl"))!.click();
-    const servings = builder.element.querySelector<HTMLInputElement>("#meal-ing-qty")!;
-    servings.value = "0.5";
-    servings.dispatchEvent(new Event("input"));
-    [...builder.element.querySelectorAll("button")].find((b) => b.textContent === "Add")!.click();
-    const amounts = [...builder.element.querySelectorAll<HTMLInputElement>(".ingredients input")];
-    expect(amounts.map((i) => i.value)).toEqual(["75", "50"]);
-    // Amounts can be corrected in place.
-    amounts[1]!.value = "80";
-    amounts[1]!.dispatchEvent(new Event("input"));
-    expect(builder.element.querySelector(".preview")!.textContent).toContain("Whole meal ≈ 235 kcal");
-    [...builder.element.querySelectorAll("button")].find((b) => b.textContent === "Save meal")!.click();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(onSave).toHaveBeenCalledWith({ name: "Big lunch", ingredients: [expect.objectContaining({ label: "Rice", quantity: 75 }), expect.objectContaining({ label: "Chicken", quantity: 80, profile: { energyKcal: 160, nutrients: { protein: 16 } } })] });
+    expect(rows()).toHaveLength(1);
+    setName("Lunch");
+    await search(0, "chickp", "Chickpeas");
+    amount(0, "200");
+    button("Add ingredient").click();
+    expect(rows()).toHaveLength(2);
+    expect(document.activeElement).toBe(inRow(1, "[role=combobox]"));
+    await search(1, "chia", "Chia seeds");
+    amount(1, "20");
+    expect(preview()).toContain("Whole meal ≈ 220 kcal");
+    // The first row is still open: its food and its amount can both change.
+    await search(0, "chicken", "Chicken breast");
+    amount(0, "150");
+    expect(inRow<HTMLInputElement>(0, "[role=combobox]").value).toBe("Chicken breast");
+    expect(preview()).toContain("Whole meal ≈ 170 kcal");
+    await save();
+    expect(onSave).toHaveBeenCalledWith({
+      name: "Lunch",
+      ingredients: [expect.objectContaining({ label: "Chicken breast", quantity: 150, unit: "g" }), expect.objectContaining({ label: "Chia seeds", quantity: 20, unit: "g" })],
+    });
+  });
+
+  it("goes from one row's amount to a new row with Enter, and leaves empty rows out", async () => {
+    const { builder, rows, inRow, setName, search, amount, save, onSave } = build();
+    builder.open();
+    setName("Snack");
+    await search(0, "chia", "Chia seeds");
+    amount(0, "30");
+    inRow<HTMLInputElement>(0, "input[id$=-qty]").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect(rows()).toHaveLength(2);
+    expect(document.activeElement).toBe(inRow(1, "[role=combobox]"));
+    await save();
+    expect(onSave).toHaveBeenCalledWith({ name: "Snack", ingredients: [expect.objectContaining({ label: "Chia seeds", quantity: 30 })] });
+  });
+
+  it("won't save while a row has text but no food chosen, and removes a row with ✕", async () => {
+    const { builder, rows, inRow, button, setName, search, amount, preview } = build();
+    builder.open();
+    setName("Snack");
+    await search(0, "chia", "Chia seeds");
+    amount(0, "30");
+    button("Add ingredient").click();
+    const typed = inRow<HTMLInputElement>(1, "[role=combobox]");
+    typed.value = "banana";
+    typed.dispatchEvent(new Event("input"));
+    expect(preview()).toContain('Choose a food from the list for "banana"');
+    expect(button("Save meal").disabled).toBe(true);
+    inRow<HTMLButtonElement>(1, "button.icon").click();
+    expect(rows()).toHaveLength(1);
+    expect(button("Save meal").disabled).toBe(false);
+  });
+
+  it("keeps a saved meal as one row in servings, and saves copies of its ingredients", async () => {
+    const { builder, rows, setName, search, amount, preview, save, onSave } = build();
+    builder.open();
+    setName("Big lunch");
+    await search(0, "bowl", "Chicken burrito bowl");
+    amount(0, "0.5");
+    expect(rows()).toHaveLength(1);
+    expect(preview()).toContain("Whole meal ≈ 175 kcal");
+    await save();
+    expect(onSave).toHaveBeenCalledWith({ name: "Big lunch", ingredients: [expect.objectContaining({ label: "Rice", quantity: 75 }), expect.objectContaining({ label: "Chicken", quantity: 50, profile: { energyKcal: 100, nutrients: { protein: 10 } } })] });
     expect(MEALS[0]!.ingredients.map((i) => i.quantity)).toEqual([150, 100]);
+  });
+
+  it("opens a saved meal with a row per ingredient, which scales its saved nutrients to another amount or unit", async () => {
+    const { builder, rows, inRow, amount, save, onSave } = build();
+    builder.open({ ...MEALS[0]!, updatedAt: 1 });
+    expect(rows()).toHaveLength(2);
+    expect(rows().map((r) => r.querySelector<HTMLInputElement>("[role=combobox]")!.value)).toEqual(["Rice", "Chicken"]);
+    expect(rows().map((r) => r.querySelector<HTMLInputElement>("input[id$=-qty]")!.value)).toEqual(["150", "100"]);
+    amount(0, "75");
+    const unit = inRow<HTMLSelectElement>(1, "select");
+    unit.value = "kg";
+    unit.dispatchEvent(new Event("input"));
+    amount(1, "0.2");
+    await save();
+    expect(onSave).toHaveBeenCalledWith({
+      id: "bowl0001",
+      name: "Chicken burrito bowl",
+      ingredients: [
+        expect.objectContaining({ label: "Rice", quantity: 75, unit: "g", profile: { energyKcal: 75, nutrients: { protein: 7.5 } } }),
+        expect.objectContaining({ label: "Chicken", quantity: 0.2, unit: "kg", profile: { energyKcal: 400, nutrients: { protein: 40 } } }),
+      ],
+    });
+  });
+
+  it("keeps every row's ingredient in the draft, and brings them back as rows", async () => {
+    const key = () => "draft";
+    const first = build(MEALS, key);
+    first.builder.open();
+    first.setName("Lunch");
+    await first.search(0, "chickp", "Chickpeas");
+    first.amount(0, "200");
+    first.button("Add ingredient").click();
+    await first.search(1, "chia", "Chia seeds");
+    first.amount(1, "20");
+    first.builder.close();
+    document.body.replaceChildren();
+    const second = build(MEALS, key);
+    second.builder.open();
+    expect(second.rows().map((r) => r.querySelector<HTMLInputElement>("[role=combobox]")!.value)).toEqual(["Chickpeas", "Chia seeds"]);
+    expect(second.preview()).toContain("Whole meal ≈ 220 kcal");
+  });
+});
+
+describe("an ingredient as saved, at another amount", () => {
+  const rice = ing("Rice", 150, 150);
+  it("scales its own nutrients within the same kind of unit", () => {
+    expect(rescaleSaved(rice, 0.3, "kg")).toEqual({ ...rice, quantity: 0.3, unit: "kg", profile: { energyKcal: 300, nutrients: { protein: 30 } } });
+    const half = { ...rice, quantity: 0.5, unit: "portion:medium" };
+    expect(rescaleSaved(half, 2, "portion:medium")!.profile.energyKcal).toBe(600);
+  });
+  it("needs its food for another kind of unit, and then takes the food's nutrients", () => {
+    expect(rescaleSaved(rice, 100, "ml")).toBeUndefined();
+    const loaded: FoodItem = { ...food("Rice"), portions: [{ name: "cup", amount: 200, unit: "g" }] };
+    expect(rescaleSaved(rice, 1, "portion:cup", loaded)!.profile.energyKcal).toBe(200);
   });
 });

@@ -6,6 +6,7 @@ import { field } from "./form-fields";
 import { summary } from "./format";
 import { createIngredientAdder } from "./ingredient-adder";
 import { createIngredientList } from "./ingredient-list";
+import { createIngredientRows } from "./ingredient-rows";
 
 export interface PrepDraft {
   /** Set when editing a saved prep or meal. */
@@ -65,6 +66,15 @@ const WORDS = {
   },
 } as const;
 
+/** What the builder needs from its ingredients, however they are entered. */
+interface IngredientInput {
+  readonly element: HTMLElement;
+  set(ingredients: readonly PrepIngredient[]): void;
+  read(): { readonly ingredients: PrepIngredient[]; readonly problem?: string };
+  snapshot(): PrepIngredient[];
+  refresh(): void;
+}
+
 /**
  * Records a recipe: a name and its ingredients, each found by searching the catalogue, for a meal prep (#55) or a
  * saved meal. Each ingredient keeps the nutrients worked out when it was added. Custom foods are not offered yet.
@@ -79,22 +89,46 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
   let saving = false;
   let offline = false;
 
+  /** A saved meal's ingredients are rows that all stay open until the meal is saved (DR-42). */
+  const mealRows = (): IngredientInput =>
+    createIngredientRows({
+      catalog: opts.catalog,
+      id: `${id}-ing`,
+      placeholder: opts.meals ? "Search foods and saved meals" : "Search foods, e.g. weet bix",
+      ...(opts.meals ? { meals: opts.meals } : {}),
+      onChange: () => changed(),
+    });
+
+  /** A meal prep's ingredients are added one at a time, as they go in, and then only their amounts change. */
+  const prepList = (): IngredientInput => {
+    const list = createIngredientList({ id: `${id}-amount`, mode: "edit", onChange: () => changed() });
+    const adder = createIngredientAdder({
+      catalog: opts.catalog,
+      id: `${id}-ing`,
+      placeholder: "Search foods, e.g. weet bix",
+      onAdd: (added) => {
+        const problem = tooManyIngredients(list.size, added.length);
+        if (problem) return problem;
+        list.add(added);
+        changed();
+        return undefined;
+      },
+    });
+    return {
+      element: el("div", {}, list.element, adder.element),
+      set(start) {
+        adder.reset();
+        list.set(start);
+      },
+      read: () => list.read(),
+      snapshot: () => list.snapshot(),
+      refresh: () => list.refresh(),
+    };
+  };
+
   const heading = el("h3", {});
   const name = el("input", { id: `${id}-name`, type: "text", maxlength: MAX_NAME, placeholder: words.placeholder, autocomplete: "off" });
-  const list = createIngredientList({ id: `${id}-amount`, mode: "edit", onChange: () => changed() });
-  const adder = createIngredientAdder({
-    catalog: opts.catalog,
-    id: `${id}-ing`,
-    placeholder: opts.meals ? "Search foods and saved meals" : "Search foods, e.g. weet bix",
-    ...(opts.meals ? { meals: opts.meals } : {}),
-    onAdd: (ingredients) => {
-      const problem = tooManyIngredients(list.size, ingredients.length);
-      if (problem) return problem;
-      list.add(ingredients);
-      changed();
-      return undefined;
-    },
-  });
+  const ingredients = opts.kind === "meal" ? mealRows() : prepList();
   const total = el("p", { class: "preview", "aria-live": "polite" });
   const save = el("button", { type: "button", class: "primary" }, words.save);
   const cancel = el("button", { type: "button" }, "Cancel");
@@ -109,9 +143,9 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
     const key = opts.draftKey(editingId);
     if (!key) return;
     try {
-      const ingredients = list.snapshot();
-      if (!name.value.trim() && ingredients.length === 0) localStorage.removeItem(key);
-      else localStorage.setItem(key, JSON.stringify({ ...(editingId ? { id: editingId, baseUpdatedAt } : {}), name: name.value, ingredients } satisfies PrepDraft));
+      const snapshot = ingredients.snapshot();
+      if (!name.value.trim() && snapshot.length === 0) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify({ ...(editingId ? { id: editingId, baseUpdatedAt } : {}), name: name.value, ingredients: snapshot } satisfies PrepDraft));
     } catch {
       // Storage blocked: the draft lives only in the page.
     }
@@ -137,14 +171,14 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
   }
 
   function showTotal() {
-    const read = list.read();
+    const read = ingredients.read();
     total.textContent = read.problem ?? (read.ingredients.length ? `${words.total} ≈ ${summary(batchProfile(read.ingredients))}` : "No ingredients yet.");
     total.classList.toggle("error", Boolean(read.problem));
     syncSave();
   }
 
   function syncSave() {
-    const read = list.read();
+    const read = ingredients.read();
     save.disabled = saving || offline || read.ingredients.length === 0 || Boolean(read.problem) || !name.value.trim();
     save.classList.toggle("saving", saving);
   }
@@ -161,7 +195,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
 
   save.addEventListener("click", async () => {
     const trimmed = name.value.trim();
-    const read = list.read();
+    const read = ingredients.read();
     if (!trimmed || read.ingredients.length === 0 || read.problem) return;
     saving = true;
     syncSave();
@@ -185,8 +219,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
     heading,
     field("Name", name),
     el("p", { class: "ingredients-head" }, "Ingredients"),
-    list.element,
-    adder.element,
+    ingredients.element,
     total,
     el("div", { class: "actions" }, save, cancel),
     status,
@@ -216,10 +249,9 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
       const start: PrepDraft = draft ?? recipe ?? { name: "", ingredients: [] };
       editingId = recipe?.id;
       baseUpdatedAt = recipe?.updatedAt;
-      adder.reset();
       heading.textContent = recipe ? `Edit ${recipe.name}` : words.new;
       name.value = start.name;
-      list.set(start.ingredients);
+      ingredients.set(start.ingredients);
       const restored = draft ? "Restored your unsaved changes. " : "";
       setStatus(`${restored}${recipe ? words.editing : ""}`.trim());
       showTotal();
@@ -231,7 +263,7 @@ export function createPrepBuilder(opts: PrepBuilderOptions): PrepBuilder {
       syncSave();
     },
     refreshPreview() {
-      list.refresh();
+      ingredients.refresh();
       showTotal();
     },
   };

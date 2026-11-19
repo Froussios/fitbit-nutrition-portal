@@ -426,6 +426,19 @@ button.on-hand-item { display: flex; align-items: baseline; gap: 8px; padding: 4
 .ingredient-adder .add-field { flex: 0 0 auto; }
 .ingredient-adder .status:empty { display: none; }
 .ingredient-adder .status { margin: -4px 0 12px; }
+/* A saved meal's ingredients: one row each, all open until the meal is saved (DR-42). On a phone, the search takes the first line. */
+.ingredient-rows { list-style: none; padding: 0; margin: 0 0 8px; }
+.ingredient-rows > li { display: grid; grid-template-columns: minmax(0, 1fr) 6.5rem minmax(6rem, 10rem) 5.5rem 2.75rem; align-items: center; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.ingredient-rows > li:first-child { border-top: 1px solid var(--border); }
+.ingredient-rows .ingredient-notes { grid-column: 1 / -1; }
+.ingredient-rows .ingredient-notes:not(:has(.amount-note:not([hidden]), .status:not(:empty))) { display: none; }
+.ingredient-rows .status, .ingredient-rows .amount-note { margin: 0; min-height: 0; }
+.ingredient-rows .status:empty { display: none; }
+.ingredient-editor .add-row { margin-bottom: 12px; }
+@media (max-width: 600px) {
+  .ingredient-rows > li { grid-template-columns: 5rem minmax(0, 1fr) auto 2.75rem; }
+  .ingredient-rows .ingredient-food { grid-column: 1 / -1; }
+}
 .meal-fields { margin-bottom: 12px; }
 .meal-fields[hidden] { display: none; }
 .meal-fields .hint { margin-top: 0; }
