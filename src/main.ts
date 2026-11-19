@@ -1,6 +1,6 @@
 import "./styles.css";
 import { GoogleAuth, SignInRequiredError, SignInSupersededError } from "./auth/google-auth";
-import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE, SCOPES, setClientId } from "./config";
+import { ACTIVITY_READ_SCOPE, getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE, SCOPES, setClientId } from "./config";
 import { canReload, foodLabel } from "./core/food";
 import { copiedEntryId, entryStep, idFromName, newEntryId } from "./core/ids";
 import { addCivilDays, civilDate, dayLabel, onCivilDate } from "./core/time";
@@ -170,6 +170,12 @@ class App {
   private weekError = "";
   /** Counts sign-outs, so that a week listing started for one account is never kept for the next. */
   private weekSession = 0;
+  /** Calories burnt (kcal by day) over the 7 days ending on `burntDay`, with the activity scope only (DR-46). */
+  private burnt?: Map<string, number>;
+  private burntDay?: string;
+  private burntError = "";
+  /** Counts requests for calories burnt: only the latest one's answer is kept. */
+  private burntRequest = 0;
   private readonly dayHeading = el("h2", { "aria-live": "polite" });
   private readonly previousDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Previous day", title: "Previous day", onclick: () => this.stepDay(-1) }, "←");
   private readonly nextDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Next day", title: "Next day", onclick: () => this.stepDay(1) }, "→");
@@ -594,6 +600,8 @@ class App {
       this.weekReload = true;
       return;
     }
+    // Once per week listing: a coalesced reload asks when it runs.
+    void this.loadBurnt();
     this.weekLoading = true;
     const day = this.day();
     const first = addCivilDays(day, -6);
@@ -626,6 +634,44 @@ class App {
         this.weekReload = false;
         if (this.auth.isSignedIn) void this.loadWeek();
       }
+    }
+  }
+
+  /** Whether the user let the app read activity data, which holds the calories burnt. Optional: unticked, the dashboard leaves them out. */
+  private get canReadActivity(): boolean {
+    return this.auth.grantedScopes.includes(ACTIVITY_READ_SCOPE);
+  }
+
+  /**
+   * Rolls up the calories burnt over the 7 days ending on the viewed day, for the dashboard (DR-46); today's up to now.
+   * Runs with each week listing, so polling keeps today's figure growing. Nothing is asked without the activity scope.
+   */
+  private async loadBurnt() {
+    const request = ++this.burntRequest;
+    if (!this.canReadActivity) {
+      this.burnt = undefined;
+      this.burntDay = undefined;
+      this.burntError = "";
+      return;
+    }
+    const day = this.day();
+    const now = new Date();
+    try {
+      const burnt = await this.api.dailyCaloriesBurnt(addCivilDays(day, -6), day, day === civilDate(now) ? now : undefined);
+      if (request !== this.burntRequest) return;
+      this.burnt = burnt;
+      this.burntDay = day;
+      this.burntError = "";
+    } catch (e) {
+      if (request !== this.burntRequest) return;
+      // The page already asks the user to sign in again; a note here would only repeat it.
+      if (e instanceof SignInRequiredError) return;
+      appLog.error("Loading the calories burnt for the dashboard failed", describeError(e));
+      // A figure from before stays if it is for this day; the note says it may be out of date.
+      if (this.burntDay !== day) this.burnt = undefined;
+      this.burntError = "Calories burnt could not be loaded" + (this.burntDay === day ? "; the figures shown may be out of date." : ".");
+    } finally {
+      if (request === this.burntRequest) this.renderDashboard();
     }
   }
 
@@ -1494,6 +1540,10 @@ class App {
     this.weekDay = undefined;
     this.weekError = "";
     this.weekSession++;
+    this.burnt = undefined;
+    this.burntDay = undefined;
+    this.burntError = "";
+    this.burntRequest++;
     this.notice = "";
     this.connectError = "";
     this.accountCheck = undefined;
@@ -1605,7 +1655,14 @@ class App {
             { class: "hint" },
             "The day shown in the diary, and the 7 days ending on it, from every app's entries. Energy by macronutrient " +
               "counts 4 kcal a gram of protein and of carbs and 9 of fat, so it can differ a little from the energy logged. " +
-              "Snacks include Google Health's snack times (such as afternoon snack); Other is entries with no meal.",
+              "Snacks include Google Health's snack times (such as afternoon snack); Other is entries with no meal. ",
+            this.canReadActivity
+              ? "Calories burnt are Google Health's total for each day, at rest and active, from every source; today's is what was burnt so far, up to the last sync."
+              : [
+                  "To compare with the calories you burn, allow access to your activity data: ",
+                  el("button", { type: "button", class: "link", onclick: () => void this.signIn("consent") }, "Show calories burnt"),
+                  ".",
+                ],
           ),
         ),
       debugPanel,
@@ -1722,6 +1779,8 @@ class App {
         dayEntries,
         weekEntries,
         weekStatus: this.weekError || (this.listError && !dayEntries ? this.listError : ""),
+        burnt: this.burntDay === day ? this.burnt : undefined,
+        burntStatus: this.burntError,
       }),
     );
     this.dashboard.querySelectorAll("details").forEach((d, i) => (d.open = open[i] ?? false));

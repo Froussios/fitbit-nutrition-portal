@@ -38,6 +38,7 @@ revision `20261030`), Google's documentation as indexed by search, and live HTTP
 | V10 | Webhooks: a *subscriber* (one HTTPS URL per Cloud project) is registered with the `cloud-platform` scope. Google checks it by POSTing twice: it must answer `201` with the shared secret and `401`/`403` without. The `AUTOMATIC` policy then notifies for every user who consented, so there is no per-user setup. The `Subscription` docs list only altitude, distance, floors, sleep, steps and weight; nutrition-log support is unconfirmed. | Discovery document |
 | V11 | **One sign-in can return an access token and an ID token together.** `response_type=token id_token` with `openid` and both nutrition scopes returned both, each lasting 60 minutes, with a valid signature, audience and nonce. Google's token client never returns an ID token. `sub` and `healthUserId` are different values, so they cannot be compared. In desktop Chrome the popup kept its `window.opener` link and closed itself. | Real account in desktop Chrome, twice, 7 November 2026 |
 | V12 | A nutrition log refers to its unit as `users/me/dataTypes/food-measurement-unit/dataPoints/<n>`, while the unit list names the same unit under the user's own ID (`users/<user ID>/…/<n>`). The user part must not be compared as written ([#74](https://github.com/Froussios/fitbit-nutrition-portal/pull/74)). | Owner's debug log from real use, 7 November 2026 |
+| V13 | **Calories burnt are a roll-up only.** `total-calories` has no `DataPoint` field, so it cannot be listed; `dailyRollUp` returns `totalCalories.kcalSum` per civil-day window, from all sources, leaving out wearable data from times the device was not worn. Its range is civil (`CivilTimeInterval`, end excluded), at most 14 days and 14 results a page; a range that is not a whole number of windows truncates the last one, which is how the dashboard asks for today so far. Not confirmed yet: that `googlehealth.activity_and_fitness.readonly` is the scope that covers it (the discovery document lists every read scope on every method), that today's figure is only what was burnt so far, and what a day without a device returns (DR-46). | Discovery document, revision `20261118` |
 
 ## 3. Components
 
@@ -153,6 +154,12 @@ app falls back to its own entries and says so.
 A Dashboard card under the diary charts the day shown (energy and macronutrient totals, energy by macronutrient and by
 meal) and the 7 days ending on it (macronutrients and energy by meal per day), from one listing of those 7 days made after
 each diary load; the day shown takes its figures from the diary's own listing (DR-38).
+
+With the optional activity scope, the dashboard also rolls up `total-calories` over the same 7 days
+(`dataPoints:dailyRollUp`, one request per week listing, so polling refreshes it) and sets each day's calories burnt
+against the energy eaten: a note under the day's energy, a marker on its bar by meal and a line on each day's energy
+column. The viewed day is today's up to the current local time. Without the scope no request is made and the dashboard
+draws as before (DR-46).
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
 background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-foods-logged-before)).

@@ -112,6 +112,18 @@ export function averageEnergy(days: readonly DayTotals[]): number | undefined {
 }
 
 /**
+ * The mean of the calories burnt (kcal by YYYY-MM-DD) over the given days that have a figure, leaving out `today`,
+ * whose figure is only what was burnt so far. Undefined when no such day has one.
+ */
+export function averageBurnt(burnt: ReadonlyMap<string, number>, days: readonly string[], today: string): number | undefined {
+  const known = days.flatMap((d) => {
+    const kcal = burnt.get(d);
+    return d !== today && kcal !== undefined ? [kcal] : [];
+  });
+  return known.length ? known.reduce((a, b) => a + b, 0) / known.length : undefined;
+}
+
+/**
  * A round axis maximum at or above `max`, and the step between its gridlines: 1, 2, 2.5 or 5 times a power of 10. It
  * takes the smallest step that needs no more than `maxSteps` of them, so the tallest column fills most of the plot.
  */

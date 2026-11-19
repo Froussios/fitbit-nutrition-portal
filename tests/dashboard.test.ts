@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { averageEnergy, byMealGroup, dailyTotals, macroEnergy, mealGroup, niceScale, totals, type DashboardEntry } from "../src/core/dashboard";
+import { averageBurnt, averageEnergy, byMealGroup, dailyTotals, macroEnergy, mealGroup, niceScale, totals, type DashboardEntry } from "../src/core/dashboard";
 import { nutritionDaysFilter } from "../src/core/time";
+import { markerLeft } from "../src/ui/charts";
 import { renderDashboard } from "../src/ui/dashboard";
 import { setEnergyUnit } from "../src/ui/energy-unit";
 
@@ -56,6 +57,18 @@ describe("dashboard sums", () => {
   it("averages energy over the days with entries only", () => {
     expect(averageEnergy(dailyTotals([entry("2026-11-19", "LUNCH", 2000), entry("2026-11-17", "LUNCH", 1000)], "2026-11-19"))).toBe(1500);
     expect(averageEnergy(dailyTotals([], "2026-11-19"))).toBeUndefined();
+  });
+
+  it("averages calories burnt over the complete days with a figure, leaving out today's", () => {
+    const burnt = new Map([
+      ["2026-11-17", 2000],
+      ["2026-11-18", 2400],
+      ["2026-11-19", 900],
+    ]);
+    expect(averageBurnt(burnt, ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19"], "2026-11-19")).toBe(2200);
+    expect(averageBurnt(burnt, ["2026-11-19"], "2026-11-19")).toBeUndefined();
+    // Viewing a past week, its last day is complete.
+    expect(averageBurnt(burnt, ["2026-11-18", "2026-11-19"], "2026-11-25")).toBe(1650);
   });
 
   it("picks a round axis maximum", () => {
@@ -131,5 +144,88 @@ describe("dashboard view", () => {
     const failed = renderDashboard({ day, today: day, dayEntries: [], weekEntries: undefined, weekStatus: "The week could not be loaded." });
     expect(failed.textContent).toContain("Nothing logged today yet.");
     expect(failed.textContent).toContain("The week could not be loaded.");
+  });
+
+  describe("with calories burnt (DR-46)", () => {
+    const burnt = new Map([
+      ["2026-11-15", 2300],
+      ["2026-11-18", 2500],
+      [day, 1500],
+    ]);
+
+    it("sets today's energy against what was burnt so far, on the tile and the bar by meal", () => {
+      setEnergyUnit("kcal");
+      const view = renderDashboard({ day, today: day, dayEntries, weekEntries: week, weekStatus: "", burnt });
+      expect(view.querySelector(".stat-energy .stat-note")?.textContent).toBe("of 1,500 kcal burnt so far");
+      const meals = view.querySelectorAll(".seg-bar")[1]!;
+      // 1,200 eaten of 1,500 burnt: an outlined gap of 300 up to the marker at the bar's end.
+      expect(meals.querySelector<HTMLElement>(".seg-rest")?.style.flexGrow).toBe("300");
+      expect(meals.querySelector<HTMLElement>(".seg-marker")?.style.left).toBe("100%");
+      expect(meals.getAttribute("aria-label")).toBe("Energy by meal: Breakfast 400 kcal, 33%; Dinner 800 kcal, 67%; Burnt so far 1,500 kcal, 300 kcal more than eaten");
+      // The macronutrient bar is in grams' shares and has no reference.
+      expect(view.querySelectorAll(".seg-bar")[0]!.querySelector(".seg-marker")).toBeNull();
+    });
+
+    it("marks where the calories burnt fall when more was eaten, and says burnt without so far for a past day", () => {
+      const view = renderDashboard({ day, today: "2026-11-20", dayEntries, weekEntries: week, weekStatus: "", burnt: new Map([[day, 1000]]) });
+      expect(view.querySelector(".stat-energy .stat-note")?.textContent).toBe("of 1,000 kcal burnt");
+      const meals = view.querySelectorAll(".seg-bar")[1]!;
+      expect(meals.querySelector(".seg-rest")).toBeNull();
+      // Past breakfast's block and the gap after it: 1000 of 1200, less its share of the one gap, plus that gap.
+      expect(meals.querySelector<HTMLElement>(".seg-marker")?.style.left).toBe(`calc(${(1000 / 1200) * 100}% + ${Number((2 - (1000 / 1200) * 2).toFixed(3))}px)`);
+      expect(meals.getAttribute("aria-label")).toContain("; Burnt 1,000 kcal, 200 kcal less than eaten");
+    });
+
+    it("places the bar's marker allowing for the gaps between blocks", () => {
+      expect(markerLeft(1500, [400, 800, 300])).toBe("100%");
+      expect(markerLeft(100, [400, 800])).toBe("calc(8.333333333333332% - 0.167px)");
+      // On a boundary reached by a sum of floats (0.1 + 0.2 is not 0.3): still the middle of the gap.
+      expect(markerLeft(0.3, [0.1, 0.2, 0.3])).toMatch(/ \+ 1px\)$/);
+      // On the boundary between two blocks: the middle of the gap.
+      expect(markerLeft(400, [400, 800])).toBe(`calc(${(400 / 1200) * 100}% + ${Number((1 - (400 / 1200) * 2).toFixed(3))}px)`);
+    });
+
+    it("draws a line on each day's energy column that has a figure, with the figure in the tooltip and the table", () => {
+      const view = renderDashboard({ day, today: day, dayEntries, weekEntries: week, weekStatus: "", burnt });
+      const [macros, energy] = view.querySelectorAll(".chart.columns");
+      expect(macros!.querySelectorAll(".chart-marker")).toHaveLength(0);
+      expect(energy!.querySelectorAll(".chart-marker")).toHaveLength(3);
+      expect(energy!.querySelector(".chart-legend-marker")?.textContent).toBe("Burnt");
+      const columns = energy!.querySelectorAll(".chart-column");
+      expect(columns[6]!.getAttribute("aria-label")).toBe(
+        "Thursday, 19 Nov 2026: Breakfast 400 kcal, Lunch 0 kcal, Dinner 800 kcal, Snacks 0 kcal, Other 0 kcal; total 1,200 kcal; Burnt so far 1,500 kcal",
+      );
+      // The axis reaches the highest line, 2,500, above every column.
+      expect([...energy!.querySelectorAll(".chart-grid text")].map((t) => t.textContent).at(-1)).toBe("2,500");
+      columns[2]!.dispatchEvent(new Event("focus"));
+      expect(energy!.querySelector(".chart-tooltip")?.textContent).toContain("2,300 kcal Burnt");
+      const rows = [...energy!.querySelectorAll("tbody tr")].map((r) => [...r.children].map((c) => c.textContent).at(-1));
+      expect(rows).toEqual(["–", "–", "2,300 kcal", "–", "–", "2,500 kcal", "1,500 kcal (so far)"]);
+      expect(energy!.querySelectorAll("thead th")[7]?.textContent).toBe("Burnt");
+      expect(view.textContent).toContain("Burnt 2,400 kcal a day, over the 2 complete days recorded.");
+    });
+
+    it("charts calories burnt in kJ when that is the chosen unit", () => {
+      setEnergyUnit("kj");
+      const view = renderDashboard({ day, today: day, dayEntries, weekEntries: week, weekStatus: "", burnt });
+      expect(view.querySelector(".stat-energy .stat-note")?.textContent).toBe("of 6,276 kJ burnt so far");
+      const rows = [...view.querySelectorAll(".chart.columns")[1]!.querySelectorAll("tbody tr")].map((r) => [...r.children].map((c) => c.textContent).at(-1));
+      expect(rows[6]).toBe("6,276 kJ (so far)");
+      setEnergyUnit("kcal");
+    });
+
+    it("says what was burnt on a day with nothing logged", () => {
+      const view = renderDashboard({ day, today: day, dayEntries: [], weekEntries: [], weekStatus: "", burnt });
+      expect(view.querySelector(".dash-day .empty")?.textContent).toBe("Nothing logged today yet. 1,500 kcal burnt so far.");
+    });
+
+    it("leaves calories burnt out entirely without them, and says when they failed", () => {
+      const view = renderDashboard({ day, today: day, dayEntries, weekEntries: week, weekStatus: "" });
+      expect(view.querySelector(".stat-note, .seg-marker, .seg-rest, .chart-marker, .chart-legend-marker")).toBeNull();
+      expect(view.textContent).not.toContain("Burnt");
+      expect([...view.querySelectorAll(".chart.columns")[1]!.querySelectorAll("thead th")].map((th) => th.textContent).at(-1)).toBe("Total");
+      const failed = renderDashboard({ day, today: day, dayEntries, weekEntries: week, weekStatus: "", burntStatus: "Calories burnt could not be loaded." });
+      expect(failed.textContent).toContain("Calories burnt could not be loaded.");
+    });
   });
 });

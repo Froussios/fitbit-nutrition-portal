@@ -1,5 +1,7 @@
 /** Time helpers for the Google Health API's interval and civil-time fields. */
 
+import type { CivilDateTime } from "../health/types";
+
 /** The local UTC offset at `d` as a google-duration string, e.g. "39600s" for AEDT (+11:00). */
 export function utcOffsetDuration(d: Date): string {
   const seconds = -d.getTimezoneOffset() * 60;
@@ -36,6 +38,18 @@ export function nextCivilDate(date: string): string {
 export function onCivilDate(date: string, now: Date): Date {
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];
   return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+}
+
+/** Civil date `date` (YYYY-MM-DD) at midnight, or at the local clock time of `at`, as the API's civil date-time. */
+export function civilDateTime(date: string, at?: Date): CivilDateTime {
+  const [year, month, day] = date.split("-").map(Number) as [number, number, number];
+  const time = at ? { hours: at.getHours(), minutes: at.getMinutes(), seconds: at.getSeconds() } : {};
+  return { date: { year, month, day }, time };
+}
+
+/** The YYYY-MM-DD of an API civil date-time. */
+export function civilDateOf(t: CivilDateTime): string {
+  return `${t.date.year}-${pad(t.date.month)}-${pad(t.date.day)}`;
 }
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

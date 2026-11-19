@@ -24,6 +24,8 @@
   --meal-other: #9a9d96;
   --chart-grid: #e6e8e3;
   --chart-axis: #c3c7bf;
+  /* Calories burnt (DR-46): an ink line, apart from every series' fill. */
+  --burnt: #1d211c;
   /* Section colours: each card's hue, shown as a stripe on top, its heading and a faint wash (see .card below). */
   --tint-log: #2f6b3a;
   --tint-prep: #13777a;
@@ -65,6 +67,7 @@
     --meal-other: #6f756b;
     --chart-grid: #2b3029;
     --chart-axis: #474e44;
+    --burnt: #e6e9e3;
     --tint-log: #7cc48a;
     --tint-prep: #4dbdb8;
     --tint-meals: #a98fe6;
@@ -554,6 +557,9 @@ button.day-pick svg { display: block; width: 1em; height: 1em; }
 .stat-fat { --stat-tint: var(--macro-fat); }
 .stat-label { font-size: 0.8rem; color: var(--muted); }
 .stat-value { font-size: 1.35rem; font-weight: 600; }
+.stat-note { font-size: 0.8rem; color: var(--muted); }
+/* Two tiles a row on a phone, so that the energy tile's calories burnt fit on a line or two. */
+@media (max-width: 600px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .dash-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; }
 .chart { margin: 0 0 16px; min-width: 0; }
 .chart-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; }
@@ -563,7 +569,14 @@ button.day-pick svg { display: block; width: 1em; height: 1em; }
 .chart-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .chart-figure { color: var(--text); font-variant-numeric: tabular-nums; }
 /* The segmented bar: each block as wide as its share, a 2px gap of the surface between them. */
-.seg-bar { display: flex; gap: 2px; height: 28px; }
+.seg-bar { position: relative; display: flex; gap: 2px; height: 28px; }
+/* Calories burnt beyond the energy eaten: an outline up to the marker, with nothing in it. */
+.seg.seg-rest { border: 1px dashed var(--chart-axis); background: transparent; }
+/* Where the calories burnt fall on the bar, with a halo of the surface so it shows over a block. */
+.seg-marker {
+  position: absolute; top: -4px; bottom: -4px; width: 2px; transform: translateX(-1px);
+  border-radius: 1px; box-shadow: 0 0 0 1.5px var(--surface); pointer-events: auto;
+}
 .seg {
   flex: 1 1 0; min-width: 0; border-radius: 4px; overflow: hidden;
   display: flex; align-items: center; padding: 0 8px;
@@ -595,6 +608,13 @@ button.day-pick svg { display: block; width: 1em; height: 1em; }
 .chart-tooltip-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
 .chart-tooltip-note { color: var(--muted); margin-top: 2px; }
 .chart-line-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+.chart-marker-key { width: 14px; height: 2px; border-radius: 1px; flex: none; }
+/* On a narrow card the figure goes under the name as a whole, rather than splitting the name. */
+.chart-legend-marker { flex-wrap: wrap; }
+.chart-marker { stroke-width: 2; stroke-linecap: round; }
+/* Today's calories burnt are still growing. */
+.chart-marker.partial { stroke-dasharray: 4 3; stroke-linecap: butt; }
+.chart-marker-halo { stroke: var(--surface); stroke-width: 5; stroke-linecap: round; }
 .chart-table { margin: 8px 0 0; }
 .chart-table summary { font-size: 0.85rem; margin-bottom: 4px; }
 

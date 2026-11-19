@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { copiedEntryId, entryStep, ID_PATTERN, idFromName, newEntryId, parseEntryId } from "../src/core/ids";
-import { addCivilDays, civilDate, dayLabel, formatCivilDate, nextCivilDate, nutritionDayFilter, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../src/core/time";
+import { addCivilDays, civilDate, civilDateOf, civilDateTime, dayLabel, formatCivilDate, nextCivilDate, nutritionDayFilter, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../src/core/time";
 
 describe("entry ids", () => {
   const now = Date.UTC(2026, 10, 1, 8, 30);
@@ -62,6 +62,12 @@ describe("entry ids", () => {
 });
 
 describe("time helpers", () => {
+  it("writes a civil date as the API's civil date-time, at midnight or at a local clock time, and back", () => {
+    expect(civilDateTime("2026-01-05")).toEqual({ date: { year: 2026, month: 1, day: 5 }, time: {} });
+    expect(civilDateTime("2026-01-05", new Date(2026, 0, 5, 9, 7, 3))).toEqual({ date: { year: 2026, month: 1, day: 5 }, time: { hours: 9, minutes: 7, seconds: 3 } });
+    expect(civilDateOf({ date: { year: 2026, month: 1, day: 5 } })).toBe("2026-01-05");
+  });
+
   it("formats the UTC offset as a duration", () => {
     const d = new Date();
     expect(parseDurationSeconds(utcOffsetDuration(d))).toBe(-d.getTimezoneOffset() * 60 || 0);

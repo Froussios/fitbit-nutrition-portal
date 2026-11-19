@@ -191,3 +191,55 @@ describe("HealthClient.listOwnRecentNutritionLogs", () => {
     expect(requests[0]!.searchParams.has("filter")).toBe(false);
   });
 });
+
+describe("HealthClient.dailyCaloriesBurnt (DR-46)", () => {
+  const civil = (year: number, month: number, day: number) => ({ date: { year, month, day }, time: {} });
+  const capture = (pages: unknown[]) => {
+    const calls: { url: URL; method?: string; body: unknown }[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      calls.push({ url: new URL(String(input)), method: init?.method, body: JSON.parse(String(init?.body)) });
+      return new Response(JSON.stringify(pages[calls.length - 1] ?? {}), { status: 200 });
+    };
+    return { calls, client: new HealthClient(token, fetchImpl) };
+  };
+
+  it("rolls up whole civil days for a past range, keyed by date, leaving out days without data", async () => {
+    const { calls, client } = capture([
+      {
+        rollupDataPoints: [
+          { civilStartTime: civil(2026, 11, 12), totalCalories: { kcalSum: 2410.6 } },
+          { civilStartTime: civil(2026, 11, 13), totalCalories: {} },
+          { civilStartTime: civil(2026, 11, 14), totalCalories: { kcalSum: 0 } },
+          { civilStartTime: civil(2026, 11, 18), totalCalories: { kcalSum: 2205 } },
+        ],
+      },
+    ]);
+    const burnt = await client.dailyCaloriesBurnt("2026-11-12", "2026-11-18");
+    expect([...burnt]).toEqual([
+      ["2026-11-12", 2410.6],
+      ["2026-11-18", 2205],
+    ]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.method).toBe("POST");
+    expect(calls[0]!.url.pathname).toBe("/v4/users/me/dataTypes/total-calories/dataPoints:dailyRollUp");
+    // The end is excluded: midnight after the last day.
+    expect(calls[0]!.body).toEqual({ range: { start: civil(2026, 11, 12), end: civil(2026, 11, 19) }, windowSizeDays: 1 });
+  });
+
+  it("stops today's window at the local time given, for what was burnt so far", async () => {
+    const { calls, client } = capture([{ rollupDataPoints: [] }]);
+    await client.dailyCaloriesBurnt("2026-11-13", "2026-11-19", new Date(2026, 10, 19, 14, 5, 30));
+    expect((calls[0]!.body as { range: unknown }).range).toEqual({ start: civil(2026, 11, 13), end: { date: { year: 2026, month: 11, day: 19 }, time: { hours: 14, minutes: 5, seconds: 30 } } });
+  });
+
+  it("follows page tokens with the same range", async () => {
+    const { calls, client } = capture([
+      { rollupDataPoints: [{ civilStartTime: civil(2026, 11, 1), totalCalories: { kcalSum: 2000 } }], nextPageToken: "p2" },
+      { rollupDataPoints: [{ civilStartTime: civil(2026, 11, 2), totalCalories: { kcalSum: 2100 } }] },
+    ]);
+    const burnt = await client.dailyCaloriesBurnt("2026-11-01", "2026-11-02");
+    expect(burnt.size).toBe(2);
+    expect((calls[1]!.body as { pageToken?: string }).pageToken).toBe("p2");
+    expect((calls[1]!.body as { range: unknown }).range).toEqual((calls[0]!.body as { range: unknown }).range);
+  });
+});
