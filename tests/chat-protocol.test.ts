@@ -106,9 +106,17 @@ describe("describing the diary", () => {
     expect(line).not.toContain("0 kcal");
   });
 
-  it("says which entries a day's energy total leaves out", () => {
-    const text = describeDay(TODAY, TODAY, [breakfast, withoutEnergy(entryOf(bread, 1, "portion:slice (35 g)", `${TODAY}T08:10:00`, { id: "e-abc-bb22-fnds-555" }))], new ChatHandles(), "kcal");
-    expect(text).toContain("Total: 160 kcal (protein 7.2 g, carbs 39.8 g, fat 3.1 g) (1 entry has no energy recorded, so the energy total leaves it out)");
+  it("says which entries a day's total leaves out, for energy and for each nutrient", () => {
+    const noProtein = entryOf({ ...bread, per100: { energyKcal: 250, nutrients: { fat: 3, carbohydrates: 45 } } }, 1, "portion:slice (35 g)", `${TODAY}T08:20:00`, { id: "e-abc-cc33-fnds-555" });
+    const toast = withoutEnergy(entryOf(bread, 1, "portion:slice (35 g)", `${TODAY}T08:10:00`, { id: "e-abc-bb22-fnds-555" }));
+    const text = describeDay(TODAY, TODAY, [breakfast, toast, noProtein], new ChatHandles(), "kcal");
+    expect(text).toMatch(/\nTotal: .* \(leaves out what is not recorded: energy of 1 entry, protein of 1 entry\)$/);
+  });
+
+  it("says what a range's average leaves out", () => {
+    const toast = withoutEnergy(entryOf(bread, 1, "portion:slice (35 g)", `${TODAY}T08:10:00`, { id: "e-abc-bb22-fnds-555" }));
+    const text = describeDays([{ day: TODAY, entries: [breakfast, toast] }], "kcal");
+    expect(text).toMatch(/Average over the 1 day with entries: .* \(leaves out what is not recorded: energy of 1 entry\)$/);
   });
 
   it("says when another app logged an entry", () => {

@@ -282,11 +282,16 @@ export function describeEntry(handle: string, e: DiaryEntry, unit: EnergyUnitNam
   return `${handle}: ${e.displayName}, ${e.amount ?? "no amount"}, ${meal}, ${entryProfileText(e, unit)}, ${complete}, at ${clockTime(e.start)}, ${ownerText(e)}`;
 }
 
-/** Says how many entries the energy total leaves out, if any. */
-function energyGap(entries: readonly DiaryEntry[]): string {
-  const without = entries.filter((e) => !energyRecorded(e)).length;
-  if (without === 0) return "";
-  return without === 1 ? " (1 entry has no energy recorded, so the energy total leaves it out)" : ` (${without} entries have no energy recorded, so the energy total leaves them out)`;
+/**
+ * Says which entries a total leaves out because they record no value for it, if any: energy, protein, carbs or fat.
+ * Without it, a total with a gap reads as complete.
+ */
+function totalGaps(entries: readonly DiaryEntry[]): string {
+  const counts = new Map<string, number>();
+  for (const e of entries) for (const part of missingOf(e)) counts.set(part, (counts.get(part) ?? 0) + 1);
+  if (counts.size === 0) return "";
+  const parts = [...counts].map(([part, n]) => `${part} of ${n} ${n === 1 ? "entry" : "entries"}`);
+  return ` (leaves out what is not recorded: ${parts.join(", ")})`;
 }
 
 function totalOf(entries: readonly DiaryEntry[]): NutrientProfile {
@@ -307,21 +312,22 @@ export function describeDay(day: string, today: string, entries: readonly DiaryE
   const head = `${formatCivilDate(day)}${day === today ? " (today)" : day === addCivilDays(today, -1) ? " (yesterday)" : ""}`;
   if (entries.length === 0) return `${head}: nothing logged.`;
   const lines = entries.map((e) => describeEntry(handles.entryHandle(e), e, unit));
-  return [`${head}: ${entries.length} ${entries.length === 1 ? "entry" : "entries"}`, ...lines, `Total: ${profileText(totalOf(entries), unit)}${energyGap(entries)}`].join("\n");
+  return [`${head}: ${entries.length} ${entries.length === 1 ? "entry" : "entries"}`, ...lines, `Total: ${profileText(totalOf(entries), unit)}${totalGaps(entries)}`].join("\n");
 }
 
 /** Totals for several days, with the average over the days that have entries. */
 export function describeDays(days: readonly { readonly day: string; readonly entries: readonly DiaryEntry[] }[], unit: EnergyUnitName): string {
-  const lines = days.map(({ day, entries }) => (entries.length ? `${formatCivilDate(day)}: ${profileText(totalOf(entries), unit)}, ${entries.length} ${entries.length === 1 ? "entry" : "entries"}${energyGap(entries)}` : `${formatCivilDate(day)}: nothing logged`));
+  const lines = days.map(({ day, entries }) => (entries.length ? `${formatCivilDate(day)}: ${profileText(totalOf(entries), unit)}, ${entries.length} ${entries.length === 1 ? "entry" : "entries"}${totalGaps(entries)}` : `${formatCivilDate(day)}: nothing logged`));
   const logged = days.filter((d) => d.entries.length > 0);
   if (logged.length > 0) {
-    const all = totalOf(logged.flatMap((d) => d.entries));
+    const loggedEntries = logged.flatMap((d) => d.entries);
+    const all = totalOf(loggedEntries);
     const factor = 1 / logged.length;
     const average: NutrientProfile = {
       energyKcal: all.energyKcal * factor,
       nutrients: Object.fromEntries(Object.entries(all.nutrients).map(([k, v]) => [k, v === undefined ? v : v * factor])),
     };
-    lines.push(`Average over the ${logged.length} ${logged.length === 1 ? "day" : "days"} with entries: ${profileText(average, unit)}`);
+    lines.push(`Average over the ${logged.length} ${logged.length === 1 ? "day" : "days"} with entries: ${profileText(average, unit)}${totalGaps(loggedEntries)}`);
   }
   return lines.join("\n");
 }
@@ -382,7 +388,7 @@ export function chatInstructions(ctx: ChatContext): { readonly role: "system" | 
     const h = ctx.focus.handle;
     system.push(
       `The user opened this chat from one entry, ${h}. "This", "it" and "this entry" mean ${h}, not the whole day. ` +
-        `Answer questions about ${h} from its line below, which each message repeats, without read_day:\n${describeEntry(h, ctx.focus.entry, ctx.energyUnit)}`,
+        `Answer questions about ${h} from its line below, which each message repeats while the entry is unchanged, without read_day:\n${describeEntry(h, ctx.focus.entry, ctx.energyUnit)}`,
     );
   }
   return [

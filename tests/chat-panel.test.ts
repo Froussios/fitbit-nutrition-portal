@@ -183,9 +183,22 @@ describe("chat panel", () => {
     t.say("How much energy?");
     await vi.waitFor(() => expect(t.log().querySelector(".msg-assistant")).not.toBeNull());
     const [system] = t.fake.initial[0] as { content: string }[];
-    expect(system!.content).toContain("from its line below, which each message repeats, without read_day:\nE1: Oats, 40 g, breakfast");
+    expect(system!.content).toContain("from its line below, which each message repeats while the entry is unchanged, without read_day:\nE1: Oats, 40 g, breakfast");
     // The entry comes again right before the question, where a small model is likeliest to use it.
     expect(t.fake.prompts[0]).toMatch(/^This chat is about E1: Oats, 40 g, breakfast, .*\nUser: How much energy\?$/);
+  });
+
+  it("stops repeating the entry once the chat has changed it, since the change replaces it", async () => {
+    const t = setup([answer({ action: "change_entry", entry: "E1", meal: "lunch" }), answer({ action: "reply", text: "Moved." }), answer({ action: "reply", text: "Sure." })]);
+    t.apply.mockResolvedValueOnce({ ok: true, message: "Changed Oats." });
+    t.panel.open(breakfast());
+    t.say("Make it lunch");
+    await vi.waitFor(() => expect(t.log().querySelector(".proposal")).not.toBeNull());
+    expect(t.fake.prompts[0]).toMatch(/^This chat is about E1: Oats/);
+    t.log().querySelector<HTMLButtonElement>(".proposal button.primary")!.click();
+    await vi.waitFor(() => expect(t.log().querySelector(".msg-assistant")?.textContent).toBe("Moved."));
+    t.say("Thanks");
+    await vi.waitFor(() => expect(t.fake.prompts.at(-1)).toBe("User: Thanks"));
   });
 
   it("stops repeating the entry once the chat has deleted it", async () => {

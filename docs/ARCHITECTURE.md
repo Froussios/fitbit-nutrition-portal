@@ -301,8 +301,8 @@ is on and the model is ready.
   so the entry a chat was opened on stays known as `E1`. Each message in such a chat also starts with that entry's line,
   since a small model weighs what is next to the question most, until the chat changes or deletes the entry.
 * **Missing values.** The diary reads an entry with no energy as 0 kcal. The chat says "energy not recorded" instead,
-  marks the entry incomplete, and says which entries a day's energy total leaves out, so the model can't take a gap
-  for a zero. The approval card does the same.
+  marks the entry incomplete, and says what a day's total, or a range's average, leaves out (energy, protein, carbs or
+  fat not recorded), so the model can't take a gap for a zero. The approval card does the same.
 * **Writing.** Accept calls `applyFromChat` in `src/main.ts`: it reads the entry's day again, refuses if the entry has
   gone or changed, and then logs, edits or deletes it with the same methods as the diary's buttons, so pending rows,
   undo, meal prep portions and failure alerts behave the same.
