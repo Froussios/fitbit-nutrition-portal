@@ -100,6 +100,9 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
 │ Weet-Bix Blends Multi-Grain                378 kcal / 100 g  │
 │ Sanitarium · 510 g [Open Food Facts] 🇦🇺 +1                  │
 ├──────────────────────────────────────────────────────────────┤
+│ Weet-Bix                                    46 kcal / 100 g  │
+│ Sanitarium [Open Food Facts] 🇦🇺 [⚠ Energy doesn't add up]    │
+├──────────────────────────────────────────────────────────────┤
 │ + Custom food "weetbix"                                      │
 ├──────────────────────────────────────────────────────────────┤
 │ Food data: Open Food Facts (ODbL)                            │
@@ -117,6 +120,9 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
   Facts lists no country, which doesn't mean the product isn't sold here (section 5). Flags are emoji, which Windows
   draws as two letters (`AU`). Right: energy per serving when the product has a serving size, e.g. `107 kcal / 2 biscuits (30 g)`.
   A serving that Open Food Facts writes as only a weight or volume shows as one: `4 kcal / serving (354.9mL)` (DR-31).
+* **Energy check (DR-42):** an Open Food Facts product whose energy disagrees with its own fat, carbohydrate and
+  protein ends line 2 with **⚠ Energy doesn't add up**. The tooltip gives the energy the macros imply ("Its fat, carbs
+  and protein add up to 352 kcal / 100 g, not 46"). Section 5.3 has the rule. Generic foods are not checked.
 * A row is built from a `FoodSummary` view model computed from the `FoodItem` by a pure function in
   `src/core/`. The index builder runs the same function, so search results arrive as summaries and the full
   food is fetched only when chosen. Later visuals (a thumbnail, a macro bar, Nutri-Score) are new fields on that model and new
@@ -182,7 +188,8 @@ shown next (section 13, DR-16). Open Food Facts products follow, ordered by thes
 | 6 | **More query words in the name.** | `Vanilla queen (Other)` before `Vanilla extract (Queen)`, searching `vanilla queen` |
 | 7 | **More query words in the brand as well.** | `Vanilla (Vanilla Queen)` before `Vanilla (Queen)` |
 | 8 | **Sold in the user's country** (DR-35), among the products a search fetched. It comes before popularity. | Searching `oat milk` in the UK: `Oat milk (Bolt)`, sold in the UK, before `Oat milk (Acme)`, sold in the US, however often Acme is scanned |
-| 9 | **More popular** (below). | |
+| 9 | **Energy that adds up** (DR-42): products whose energy agrees with their macronutrients, or that can't be checked, before those flagged. | Searching `vegemite`: `Vegemite (Vegemite)` at 177 kcal before the more scanned one at 6 |
+| 10 | **More popular** (below). | |
 
 **Food or flavour (rule 3).** `headWords` in `src/core/tokens.ts` uses word position. English puts the food last, so
 `Dark chocolate` is a chocolate and `Chocolate milk` is a milk. Sizes (`455g`) and anything after `with`, `in`, a
@@ -207,9 +214,9 @@ popularity = log10(1 + unique_scans_n)       how often Open Food Facts apps have
            + completeness                    0..1, Open Food Facts' own score
 ```
 
-**Pre-sorted index.** Rules 4, 5 and 9 mostly do not depend on the query, so the builder numbers the products in
+**Pre-sorted index.** Rules 4, 5, 9 and 10 mostly do not depend on the query, so the builder numbers the products in
 this fixed order: branded first, then fewer distinct name words, then fewer distinct words in the name and brand
-together, then more entries with the same name, then more popular. A word has three sorted lists of product IDs:
+together, then more entries with the same name, then energy that adds up, then more popular. A word has three sorted lists of product IDs:
 products where it says what the food is, products with it elsewhere in the name, and products with it only in the
 brand. Those facts are enough to rank a product without fetching its text:
 `meta.json` gives the word counts and branded or not for any ID (`bands`, `unbrandedFrom`), and the lists say
@@ -303,7 +310,8 @@ Worker; the index does not change.
    text longer than the API's limits (`ingredientLimitProblem` in `src/core/prep.ts`, #91). Open Food Facts is trusted,
    so the limits are generous and long texts are assumed to be real. The build report lists the first 20, and the run
    shows a warning, so the limits can be raised if real products are lost.
-6. Duplicates are collapsed in the word index to the best-ranked one (DR-39). Branded products with the same words in
+6. Duplicates are collapsed in the word index to the best-ranked one (DR-39), so an entry whose energy adds up stands
+   for the group over a more popular one whose energy doesn't (DR-42). Branded products with the same words in
    name and brand are collapsed when their kcal per 100 are within 10% (5 kcal for low-energy foods) of a kept one:
    `Coca Cola (Coca Cola)` at 39, 42 and 45 is one product entered three times. Products with no brand and the same
    name (every word in order: `Milk chocolate` is neither `Chocolate milk` nor `Milk with chocolate`) are collapsed
@@ -311,8 +319,18 @@ Worker; the index does not change.
    every row. So are products whose name adds no word to their brand, whichever of the two really is the brand
    (`Chobani (Chobani)`, `Cookie (Cookie)`, `Cola (Coca-Cola)`), within the same brand. All of them stay reachable by
    barcode.
-6. Only if the index exceeds the host's limit: a popularity floor (never scanned and incomplete). Never a
+7. Only if the index exceeds the host's limit: a popularity floor (never scanned and incomplete). Never a
    country filter.
+
+**Energy check (DR-42).** Each product's stated energy is compared with what its fat, carbohydrate and protein imply
+(9, 4 and 4 kcal a gram; `src/core/energy-check.ts`). Fibre counts at 2 kcal a gram, either outside carbohydrate
+(Australian and EU labels) or inside it (US labels), and the product passes if either reading agrees. Alcohol and
+sugar alcohols count too when Open Food Facts records them (`alcohol_100g`, `polyols_100g`). They agree within 20%,
+or 10 kcal for low-energy foods. A product missing fat, carbohydrate or protein is not checked. A flagged product
+keeps its place in search, except that it ranks after otherwise equal products (rule 9 in section 4.3). Its summary
+row carries the implied energy, which the dropdown shows (section 3.3). The tolerance was set on the generic foods,
+whose values are measured: about 1% of them disagree, all for real reasons (organic acids in citrus and vinegar,
+alcohol, sweeteners). That is also why generic foods are not checked.
 
 **Fields.** Of the hundreds of fields in an Open Food Facts record, the index keeps what the app shows or
 logs, split in two so search fetches only the small part:
@@ -320,7 +338,8 @@ logs, split in two so search fetches only the small part:
 * **Summary** (what a dropdown row shows, ~60 bytes): barcode, name, brand, pack size, basis, kcal per 100,
   serving label and amount, and the countries it is sold in as ISO codes (`"AU NZ"`, left out when none; Open Food
   Facts tags mapped by `pipeline/off-countries.ts`). Built by the same `FoodSummary` function the UI uses (section 3.3).
-  The countries add about 1% to the gzipped summary files.
+  The countries add about 1% to the gzipped summary files. Last, only for a product the energy check flags, the energy
+  its macronutrients imply (DR-42; countries are `null` then if none are known).
 * **Detail** (what logging needs, ~120 bytes): the 14 other nutrients in `NUTRIENTS`, portions, density.
 
 The builder runs `fromOffProduct()` and stores its result, so the normaliser stays the single place that
@@ -342,11 +361,12 @@ index is 195 MB in 18,009 files):
 | **Total stored** | **~350–600 MB** |
 | Files | ~25 k |
 
-These are stored on the host; a user downloads only what section 5.1 lists. **Measured on the 2 November
-2026 export:** 4,889,627 records read; 900,168 kept
-(3.68 M dropped for no usable energy, 290 k for no name, 16 k for implausible energy, 2 k obsolete);
-808,377 searchable after collapsing duplicates; 197,937 distinct words. The index is 195 MB in 18,009 files,
-none over 0.1 MB, and took 44 minutes to build on a GitHub runner.
+These are stored on the host; a user downloads only what section 5.1 lists. **Measured on the 19 November
+2026 build (DR-39):** 4,923,262 records read; 886,715 kept
+(3.73 M dropped for no usable energy, 292 k for no name, 16 k for implausible energy, 2 k obsolete);
+741,175 searchable after collapsing duplicates; 194,913 distinct words. The index is 201 MB in 17,866 files,
+none over 0.1 MB, and took 41 minutes to build on a GitHub runner. The build report also counts the products the
+energy check flags (`energyMismatch`).
 
 ### 5.5 Free hosts compared (whole dataset)
 

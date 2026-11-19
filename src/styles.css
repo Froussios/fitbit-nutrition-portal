@@ -335,6 +335,7 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .opt-nobrand { font-style: italic; }
 .opt-source { display: inline-block; margin-left: 8px; padding: 0 5px; border: 1px solid currentColor; border-radius: 3px; font-size: 0.7rem; opacity: 0.75; white-space: nowrap; }
 .opt-country { margin-left: 6px; font-size: 0.7rem; opacity: 0.75; white-space: nowrap; }
+.opt-warning { display: inline-block; margin-left: 8px; padding: 0 5px; border: 1px solid var(--notice-border); border-radius: 3px; background: var(--notice-bg); color: var(--text); font-size: 0.7rem; white-space: nowrap; }
 .opt-flag { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-size: 0.95rem; vertical-align: -1px; }
 .opt-serving { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .opt mark { background: none; color: inherit; font-weight: 700; }

@@ -17,6 +17,11 @@ export interface FoodSummary {
   readonly serving?: { readonly label: string; readonly amount: number; readonly unit: BaseUnit; readonly kcal: number };
   /** Where the product is sold, as ISO codes (`FoodItem.countries`). */
   readonly countries?: readonly string[];
+  /**
+   * Set when the stated energy disagrees with the fat, carbohydrate and protein (DR-42): the kcal per 100 they
+   * imply. Only Open Food Facts products are checked, when the index is built.
+   */
+  readonly macroKcalPer100?: number;
 }
 
 /** The serving portion: any named portion other than the whole pack. */
