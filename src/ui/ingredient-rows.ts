@@ -277,7 +277,7 @@ export function createIngredientRows(opts: IngredientRowsOptions): IngredientRow
         },
       },
       // U+FE0E: as text, because some phones would otherwise draw it as an emoji.
-      "✕",
+      "✕︎",
     );
     const element = el(
       "li",
@@ -290,9 +290,10 @@ export function createIngredientRows(opts: IngredientRowsOptions): IngredientRow
       el("div", { class: "ingredient-notes" }, amount.note, status),
     );
     const row: Row = { n, version: 0, asked: false, last: [], combobox, amount, energy, status, element };
-    element.addEventListener("focusin", (ev) => {
-      if (ev.target !== combobox.input) loadSaved(row);
-    });
+    // Only the amount and unit need the food. Hovering the unit loads it before a click opens the list, so the options don't change under it.
+    amount.input.addEventListener("focus", () => loadSaved(row));
+    amount.unitSelect.addEventListener("focus", () => loadSaved(row));
+    amount.unitSelect.addEventListener("pointerenter", () => loadSaved(row));
     if (base) {
       row.choice = { kind: "saved", base };
       combobox.showChoice(base.label);

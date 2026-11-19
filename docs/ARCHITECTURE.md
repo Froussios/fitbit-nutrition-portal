@@ -268,8 +268,9 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
 * **A meal in a meal.** The builder's searches, and the one under a chosen meal in Log food, also find saved meals. One
   is added as copies of its ingredients (in the builder, when the meal is saved: until then it is one row in servings), scaled to the servings typed (`expandMeal` in `src/core/meal.ts`), so there is
   no nesting to resolve and later edits to it change nothing here. A meal holds at most 60 ingredients, as a prep does.
-* **Ingredients** keep the nutrients worked out when added (section 4.5), and a new amount scales them. Editing a saved
-  meal changes later entries only.
+* **Ingredients** keep the nutrients worked out when added (section 4.5), and a new amount, or a unit of the same kind,
+  scales them. In the builder, a unit of another kind or another portion takes the catalogue's nutrients as they are now
+  (DR-43). Editing a saved meal changes later entries only.
 * **Older API.** An API without `/api/meals` answers its own 404, and the app hides saved meals but keeps meal prep.
   The app deploys on merge, but the API only with the Food index workflow, so for a while the app may run against it.
 * **API.**
