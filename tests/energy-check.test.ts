@@ -36,7 +36,7 @@ describe("energy check", () => {
   });
 
   it("counts fibre either inside carbohydrate (US labels) or outside it (Australian and EU labels)", () => {
-    // Bran: 20 g fibre. Outside carbs: 4 × 40 + 2 × 20 + … = 260; inside: 4 × 20 + 40 + … = 180.
+    // Bran, 20 g fibre: 9 × 5 fat + 4 × 15 protein + 2 × 20 fibre = 145, plus 4 × 40 carbs outside (305) or 4 × 20 inside (225).
     expect(energyFromMacros(per100(0, 5, 40, 15, 20))).toEqual([305, 225]);
     expect(energyMismatch(per100(300, 5, 40, 15, 20))).toBeUndefined();
     expect(energyMismatch(per100(230, 5, 40, 15, 20))).toBeUndefined();
