@@ -963,13 +963,13 @@ class App {
         }
         case "edit": {
           const current = await this.currentEntry(proposal.entry);
-          if (typeof current === "string") return { ok: false, message: current };
+          if (typeof current === "string") return { ok: false, message: current, stale: true };
           const failure = await this.saveEdit(current, proposal.edit, true);
           return failure ? { ok: false, message: failure } : { ok: true, message: `Changed ${current.displayName}.` };
         }
         case "delete": {
           const current = await this.currentEntry(proposal.entry);
-          if (typeof current === "string") return { ok: false, message: current };
+          if (typeof current === "string") return { ok: false, message: current, stale: true };
           const failure = await this.remove(current, true);
           return failure ? { ok: false, message: failure } : { ok: true, message: `Deleted ${current.displayName}. Until the page is reloaded, the diary for ${dayInWords(entryDay(current))} shows it crossed out, with an undo.` };
         }

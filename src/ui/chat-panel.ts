@@ -22,6 +22,8 @@ export interface ApplyResult {
   readonly ok: boolean;
   /** What was done, or why it failed, in words for the user and the model. */
   readonly message: string;
+  /** It failed because the entry is no longer as the chat read it: changed or deleted since. */
+  readonly stale?: boolean;
 }
 
 export interface ChatPanelHost extends ChatHost {
@@ -247,7 +249,8 @@ export function createChatPanel(model: ChatModel, ai: AiSwitch, host: ChatPanelH
       card.set({ kind: "applying" });
       const result = await host.apply(proposal);
       card.set(result.ok ? { kind: "done", text: result.message } : { kind: "failed", text: result.message });
-      if (result.ok && proposal.kind !== "log") c.tools.handles.forgetEntry(proposal.entry.id);
+      // The entry is gone, or no longer as the model saw it: its handle must not offer the old values again.
+      if ((result.ok || result.stale) && proposal.kind !== "log") c.tools.handles.forgetEntry(proposal.entry.id);
       outcome = outcomeText(proposal, { accepted: true, ...result }, host.today());
     } else {
       card.set({ kind: "rejected" });

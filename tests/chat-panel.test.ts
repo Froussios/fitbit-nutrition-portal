@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AiState } from "../src/ai/amount-ai";
 import type { ChatModel, ChatSession } from "../src/ai/chat-model";
 import type { Proposal } from "../src/ai/chat-tools";
-import { createChatPanel, type AiSwitch, type ChatPanelHost } from "../src/ui/chat-panel";
+import { createChatPanel, type AiSwitch, type ApplyResult, type ChatPanelHost } from "../src/ui/chat-panel";
 import { createProposalCard } from "../src/ui/chat-proposal";
 import { renderDiaryTable } from "../src/ui/diary-table";
 import { bread, entryOf, hostWith, oats, TODAY } from "./chat-fixtures";
@@ -86,7 +86,7 @@ function fakeModel(...answers: string[]) {
 function setup(answers: string[], kind: AiState["kind"] = "ready") {
   const ai = aiSwitch(kind);
   const fake = fakeModel(...answers);
-  const apply = vi.fn(async (_p: Proposal) => ({ ok: true, message: "Deleted Oats." }));
+  const apply = vi.fn(async (_p: Proposal): Promise<ApplyResult> => ({ ok: true, message: "Deleted Oats." }));
   const host: ChatPanelHost = { ...hostWith({ [TODAY]: [breakfast()] }, [oats, bread]), apply };
   const panel = createChatPanel(fake.model, ai, host);
   document.body.append(panel.toggle, panel.element);
@@ -138,6 +138,23 @@ describe("chat panel", () => {
     expect(t.input.disabled).toBe(false);
     // The deleted entry's handle is taken back, so the model can no longer name it.
     expect(t.fake.constraints.at(-1)?.properties.entry.enum).toEqual([""]);
+  });
+
+  it("takes the handle back when the entry changed since the chat read it, and keeps it after other failures", async () => {
+    for (const [result, enumAfter] of [
+      [{ ok: false, message: "Oats has changed since the chat read it.", stale: true }, [""]],
+      [{ ok: false, message: "The browser is offline." }, ["E1", ""]],
+    ] as const) {
+      const t = setup([answer({ action: "read_day", day: "today" }), answer({ action: "delete_entry", entry: "E1" }), answer({ action: "reply", text: "Sorry." })]);
+      t.apply.mockResolvedValueOnce(result);
+      t.panel.open();
+      t.say("Delete my oats");
+      await vi.waitFor(() => expect(t.log().querySelector(".proposal")).not.toBeNull());
+      t.log().querySelector<HTMLButtonElement>(".proposal button.primary")!.click();
+      await vi.waitFor(() => expect(t.log().querySelector(".msg-assistant")?.textContent).toBe("Sorry."));
+      expect(t.fake.constraints.at(-1)?.properties.entry.enum).toEqual(enumAfter);
+      t.panel.reset();
+    }
   });
 
   it("writes nothing when the user rejects a change", async () => {

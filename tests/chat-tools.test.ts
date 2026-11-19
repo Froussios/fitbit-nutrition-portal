@@ -172,6 +172,9 @@ describe("outcomeText", () => {
     const proposal: Proposal = { kind: "delete", entry: breakfast() };
     expect(outcomeText(proposal, { accepted: false }, TODAY)).toContain("rejected");
     expect(outcomeText(proposal, { accepted: true, ok: false, message: "Offline." }, TODAY)).toBe("The user accepted, but it failed: Offline.");
+    expect(outcomeText(proposal, { accepted: true, ok: false, message: "Oats has changed.", stale: true }, TODAY)).toBe(
+      "The user accepted, but it failed: Oats has changed. That entry's handle no longer works. To change it again, use read_day to see it as it is now.",
+    );
     expect(outcomeText(proposal, { accepted: true, ok: true, message: "" }, TODAY)).toBe(
       `The user accepted, and it was done: ${describeDone(proposal, TODAY)} That entry's handle no longer works. To change it again, use read_day to see it as it is now.`,
     );

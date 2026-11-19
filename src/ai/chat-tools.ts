@@ -266,12 +266,17 @@ export function createChatTools(host: ChatHost, handles: ChatHandles = new ChatH
 }
 
 /** What happened to a proposal, as the model is told it. */
-export function outcomeText(proposal: Proposal, outcome: { readonly accepted: false } | { readonly accepted: true; readonly ok: boolean; readonly message: string }, today: string): string {
+export function outcomeText(
+  proposal: Proposal,
+  outcome: { readonly accepted: false } | { readonly accepted: true; readonly ok: boolean; readonly message: string; readonly stale?: boolean },
+  today: string,
+): string {
   if (!outcome.accepted) return "The user rejected this change, so nothing was done. Do not propose it again unless the user asks.";
-  if (!outcome.ok) return `The user accepted, but it failed: ${outcome.message}`;
-  const done = `The user accepted, and it was done: ${outcome.message || describeDone(proposal, today)}`;
-  // The entry's handle was taken back (ChatHandles.forgetEntry): say so, or the model would try to use it again.
-  return proposal.kind === "log" ? done : `${done} That entry's handle no longer works. To change it again, use read_day to see it as it is now.`;
+  // After a change or delete, and after one refused because the entry had changed, the entry's handle was taken back
+  // (ChatHandles.forgetEntry): say so, or the model would try to use it again.
+  const forgotten = proposal.kind !== "log" && (outcome.ok || outcome.stale) ? " That entry's handle no longer works. To change it again, use read_day to see it as it is now." : "";
+  if (!outcome.ok) return `The user accepted, but it failed: ${outcome.message}${forgotten}`;
+  return `The user accepted, and it was done: ${outcome.message || describeDone(proposal, today)}${forgotten}`;
 }
 
 /** What a done proposal did, in words. */
