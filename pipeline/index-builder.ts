@@ -114,7 +114,7 @@ interface Doc {
   readonly nameKey: string;
   /** Sold in INDEX_COUNTRY. */
   readonly soldHere: boolean;
-  /** The stated energy disagrees with the macronutrients (DR-40): ranked below entries that agree. */
+  /** The stated energy disagrees with the macronutrients (DR-42): ranked below entries that agree. */
   readonly energyMismatch: boolean;
   readonly popularity: number;
   /** Products with the same key are told apart only by their energy, if at all. */

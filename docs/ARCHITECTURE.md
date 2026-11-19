@@ -61,7 +61,7 @@ flowchart LR
 | Google Health client | `src/health/` | Thin `fetch` wrapper typed from the discovery document. Maps a `LogDraft` to a `DataPoint` and a `DataPoint` to a `DiaryEntry`. |
 | Food data | `src/food/` | `FoodCatalog` interface, implemented in M0 by `LocalFoodCatalog` over fake data (section 6). |
 | Auth | `src/auth/`, `public/auth-callback.*` | Popup sign-in returning an access token and an ID token (section 5). |
-| On-device AI | `src/ai/` | Chrome's built-in model, used only if the user ticks the setting. Its answers are checked by rules in `src/core/amount-answer.ts` (DR-26). |
+| On-device AI | `src/ai/` | Chrome's built-in model, used only if the user ticks the setting. Its answers about amounts are checked by rules in `src/core/amount-answer.ts` (DR-26). It also runs the chat (section 4.7, DR-41). |
 | UI | `src/ui/`, `src/main.ts` | Plain TypeScript and DOM. Three screens; no framework yet. |
 
 Hosting is the static build (`vite build`), deployed to GitHub Pages by `.github/workflows/ci.yml`.
@@ -104,7 +104,7 @@ A `FoodItem` stores nutrients **per 100 g or per 100 ml** (its `basis`), plus na
 | meal | `mealType` (`BREAKFAST`, `LUNCH`, `DINNER`, `SNACK`), left out when the user picks no meal, which is the default. The legacy `ANYTIME` is never written. |
 | food name | `foodDisplayName`, e.g. `Rolled oats` or `Cola soft drink (Sample Drinks Co)` |
 | amount | `serving` = the API's *gram* or *millilitre* `food-measurement-unit` plus an amount, keeping the kind of unit the user chose (250 g of milk stays 250 g). If the API's units cannot be resolved, the amount goes into the name instead (`Rolled oats (40 g)`). |
-| energy | `energy.kcal` (`userProvidedUnit: KILOCALORIE`). The UI shows either kcal or kJ, as chosen in the page header (DR-21). |
+| energy | `energy.kcal` (`userProvidedUnit: KILOCALORIE`). The UI shows either kcal or kJ, as chosen in the settings behind the header's gear (DR-21, DR-40). |
 | fat, carbohydrate | `totalFat`, `totalCarbohydrate` (top-level fields) |
 | other nutrients | `nutrients[]`: protein, sugars, fibre, saturated, trans, mono- and poly-unsaturated fat, cholesterol, sodium, potassium, calcium, iron, caffeine, vitamin C |
 
@@ -277,6 +277,30 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
   | `GET /api/meals` | The user's saved meals |
   | `PUT /api/meals/:id` | Creates a meal, or replaces its name and ingredients; 409 with `limit` if out of room, as for preps |
   | `DELETE /api/meals/:id` | Deletes a meal; deleting one that is gone succeeds |
+
+### 4.7 Chat
+
+DR-41. The chat is a panel on the right of the page (`src/ui/chat-panel.ts`), opened from the header, or from a diary
+row's speech-bubble button for a new chat about that entry. It uses Chrome's built-in model only while the AI setting
+is on and the model is ready.
+
+* **Turns** (`src/ai/chat-agent.ts`). Each user message starts a loop: the model answers with one action as JSON,
+  constrained by `stepSchema` (`src/ai/chat-protocol.ts`), the app runs it and sends back the result as text, until the
+  model replies, proposes a change, or has used 8 calls. A proposal pauses the turn; the user's Accept or Reject, and
+  what came of it, is the next prompt.
+* **Actions** (`src/ai/chat-tools.ts`). `read_day` and `read_days` read the diary afresh through `entriesOn` in
+  `src/main.ts` (listed entries, minus this session's deletes, plus writes not listed yet). `search_food` uses the
+  catalogue's search, 5 results. `log_food`, `change_entry` and `delete_entry` build a `Proposal`: a `LogDraft` or an
+  `EntryEdit`, and the entry it would write, made by the same mapping functions as a real write, so the card shows the
+  exact values.
+* **Handles.** Entries and foods reach the model as `E1`, `F1`… (`ChatHandles`), one per entry or food for the whole
+  chat, never as IDs. An entry's handle is taken back once the chat edits or deletes it, since that entry has gone. The instructions are sent once per chat as `initialPrompts`, which the Prompt API never evicts,
+  so the entry a chat was opened on stays known as `E1`.
+* **Writing.** Accept calls `applyFromChat` in `src/main.ts`: it reads the entry's day again, refuses if the entry has
+  gone or changed, and then logs, edits or deletes it with the same methods as the diary's buttons, so pending rows,
+  undo, meal prep portions and failure alerts behave the same.
+* **Not kept.** The chat is in memory only. Signing out, another account signing in, and turning the AI setting off end
+  it and destroy the model session.
 
 ## 5. Authentication
 

@@ -1,7 +1,7 @@
 import type { NutrientProfile } from "./nutrients";
 
 /**
- * Whether a food's stated energy agrees with its fat, carbohydrate and protein (DR-40).
+ * Whether a food's stated energy agrees with its fat, carbohydrate and protein (DR-42).
  * Open Food Facts values are typed in by people, and a wrong one usually disagrees with the
  * rest of the label: `Vegemite (Vegemite)` at 6 kcal per 100 g, with 5 g of carbohydrate and no protein.
  */

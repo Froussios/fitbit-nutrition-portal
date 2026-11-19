@@ -65,7 +65,7 @@ function runs(parts: readonly TextRun[]): Node[] {
 
 const unitLabel = (s: FoodSummary) => `100 ${s.basis}`;
 
-/** A chip on a product whose stated energy disagrees with its fat, carbs and protein (DR-40), or null. */
+/** A chip on a product whose stated energy disagrees with its fat, carbs and protein (DR-42), or null. */
 export function energyWarning(s: FoodSummary): HTMLElement | null {
   if (s.macroKcalPer100 === undefined) return null;
   const detail =

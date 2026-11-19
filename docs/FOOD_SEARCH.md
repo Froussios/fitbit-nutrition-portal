@@ -120,7 +120,7 @@ Mouse hover highlights a row but does not write into the field; a click or tap c
   Facts lists no country, which doesn't mean the product isn't sold here (section 5). Flags are emoji, which Windows
   draws as two letters (`AU`). Right: energy per serving when the product has a serving size, e.g. `107 kcal / 2 biscuits (30 g)`.
   A serving that Open Food Facts writes as only a weight or volume shows as one: `4 kcal / serving (354.9mL)` (DR-31).
-* **Energy check (DR-40):** an Open Food Facts product whose energy disagrees with its own fat, carbohydrate and
+* **Energy check (DR-42):** an Open Food Facts product whose energy disagrees with its own fat, carbohydrate and
   protein ends line 2 with **⚠ Energy doesn't add up**. The tooltip gives the energy the macros imply ("Its fat, carbs
   and protein add up to 352 kcal / 100 g, not 46"). Section 5.3 has the rule. Generic foods are not checked.
 * A row is built from a `FoodSummary` view model computed from the `FoodItem` by a pure function in
@@ -188,7 +188,7 @@ shown next (section 13, DR-16). Open Food Facts products follow, ordered by thes
 | 6 | **More query words in the name.** | `Vanilla queen (Other)` before `Vanilla extract (Queen)`, searching `vanilla queen` |
 | 7 | **More query words in the brand as well.** | `Vanilla (Vanilla Queen)` before `Vanilla (Queen)` |
 | 8 | **Sold in the user's country** (DR-35), among the products a search fetched. It comes before popularity. | Searching `oat milk` in the UK: `Oat milk (Bolt)`, sold in the UK, before `Oat milk (Acme)`, sold in the US, however often Acme is scanned |
-| 9 | **Energy that adds up** (DR-40): products whose energy agrees with their macronutrients, or that can't be checked, before those flagged. | Searching `vegemite`: `Vegemite (Vegemite)` at 177 kcal before the more scanned one at 6 |
+| 9 | **Energy that adds up** (DR-42): products whose energy agrees with their macronutrients, or that can't be checked, before those flagged. | Searching `vegemite`: `Vegemite (Vegemite)` at 177 kcal before the more scanned one at 6 |
 | 10 | **More popular** (below). | |
 
 **Food or flavour (rule 3).** `headWords` in `src/core/tokens.ts` uses word position. English puts the food last, so
@@ -311,7 +311,7 @@ Worker; the index does not change.
    so the limits are generous and long texts are assumed to be real. The build report lists the first 20, and the run
    shows a warning, so the limits can be raised if real products are lost.
 6. Duplicates are collapsed in the word index to the best-ranked one (DR-39), so an entry whose energy adds up stands
-   for the group over a more popular one whose energy doesn't (DR-40). Branded products with the same words in
+   for the group over a more popular one whose energy doesn't (DR-42). Branded products with the same words in
    name and brand are collapsed when their kcal per 100 are within 10% (5 kcal for low-energy foods) of a kept one:
    `Coca Cola (Coca Cola)` at 39, 42 and 45 is one product entered three times. Products with no brand and the same
    name (every word in order: `Milk chocolate` is neither `Chocolate milk` nor `Milk with chocolate`) are collapsed
@@ -322,7 +322,7 @@ Worker; the index does not change.
 7. Only if the index exceeds the host's limit: a popularity floor (never scanned and incomplete). Never a
    country filter.
 
-**Energy check (DR-40).** Each product's stated energy is compared with what its fat, carbohydrate and protein imply
+**Energy check (DR-42).** Each product's stated energy is compared with what its fat, carbohydrate and protein imply
 (9, 4 and 4 kcal a gram; `src/core/energy-check.ts`). Fibre counts at 2 kcal a gram, either outside carbohydrate
 (Australian and EU labels) or inside it (US labels), and the product passes if either reading agrees. Alcohol and
 sugar alcohols count too when Open Food Facts records them (`alcohol_100g`, `polyols_100g`). They agree within 20%,
@@ -339,7 +339,7 @@ logs, split in two so search fetches only the small part:
   serving label and amount, and the countries it is sold in as ISO codes (`"AU NZ"`, left out when none; Open Food
   Facts tags mapped by `pipeline/off-countries.ts`). Built by the same `FoodSummary` function the UI uses (section 3.3).
   The countries add about 1% to the gzipped summary files. Last, only for a product the energy check flags, the energy
-  its macronutrients imply (DR-40; countries are `null` then if none are known).
+  its macronutrients imply (DR-42; countries are `null` then if none are known).
 * **Detail** (what logging needs, ~120 bytes): the 14 other nutrients in `NUTRIENTS`, portions, density.
 
 The builder runs `fromOffProduct()` and stores its result, so the normaliser stays the single place that

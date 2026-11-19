@@ -18,7 +18,7 @@ export interface FoodSummary {
   /** Where the product is sold, as ISO codes (`FoodItem.countries`). */
   readonly countries?: readonly string[];
   /**
-   * Set when the stated energy disagrees with the fat, carbohydrate and protein (DR-40): the kcal per 100 they
+   * Set when the stated energy disagrees with the fat, carbohydrate and protein (DR-42): the kcal per 100 they
    * imply. Only Open Food Facts products are checked, when the index is built.
    */
   readonly macroKcalPer100?: number;

@@ -88,7 +88,7 @@ export type PrefixGroup = Readonly<Record<string, readonly [expansions: number, 
 /**
  * [code, name, brand, packSize, basis, kcalPer100, servingLabel, servingAmount, servingUnit, countries, macroKcalPer100].
  * Countries are ISO codes separated by spaces ("AU NZ"), null or left out when none are known, and missing in indexes
- * built before them. macroKcalPer100 is there only when the energy disagrees with the macronutrients (DR-40).
+ * built before them. macroKcalPer100 is there only when the energy disagrees with the macronutrients (DR-42).
  */
 export type SummaryRow = readonly [...SummaryFields, countries?: string | null, macroKcalPer100?: number];
 type SummaryFields = [string, string, string | null, string | null, BaseUnit, number, string | null, number | null, BaseUnit | null];

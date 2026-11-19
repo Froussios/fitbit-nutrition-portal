@@ -266,7 +266,7 @@ export interface RankedProduct {
   readonly productWordCount: number;
   /** Entries of any brand with this exact name, weighted towards the index's country: an estimate of how popular the food is. */
   readonly sameNameCount: number;
-  /** The stated energy disagrees with the macronutrients (DR-40). */
+  /** The stated energy disagrees with the macronutrients (DR-42). */
   readonly energyMismatch?: boolean;
   readonly popularity: number;
   readonly key: string;

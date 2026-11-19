@@ -35,7 +35,7 @@ function num(v: unknown): number | undefined {
   return typeof n === "number" && Number.isFinite(n) ? n : undefined;
 }
 
-/** Alcohol and sugar alcohols, which the energy check needs and the app doesn't keep (DR-40). */
+/** Alcohol and sugar alcohols, which the energy check needs and the app doesn't keep (DR-42). */
 export function offEnergyExtras(p: Pick<OffProduct, "nutriments">): EnergyExtras {
   const n = p.nutriments ?? {};
   const alcoholPercent = num(n["alcohol_100g"]);

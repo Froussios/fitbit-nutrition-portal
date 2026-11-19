@@ -199,6 +199,7 @@ stays until it is dismissed or the action is tried again, so that a refresh cann
 **Reopen if.** Deleted entries need to survive a reload, or [#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18) shows that the original ID can be reused.
 
 ### DR-21 Energy is shown in one unit, chosen in the page header
+Revised by DR-40: the control is in the settings panel behind the header's gear.
 **Decision.** The diary, the log form's preview and the food search show energy in either kcal or kJ, not both. A control
 in the page header chooses which, kcal by default, and the choice is kept in `localStorage` on each device. Google Health
 still stores kcal. A custom food's energy can still be typed in either unit, whatever the setting.
@@ -272,6 +273,7 @@ showing is what counts.
 **Reopen if.** Refused input turns out to be common in real use.
 
 ### DR-26 An on-device model can read what the rules refuse, behind a setting, and cannot supply a number or a guess
+Revised by DR-40: the tickbox is in the settings panel behind the header's gear.
 **Decision.** A "Use AI processing of input" tickbox in the page header turns on Chrome's built-in model. It is off by default,
 kept in `localStorage` on each device, and ticking it starts the model's download, with progress shown. Unticked, the model is
 never used, even if installed. If the browser or computer cannot run it, the box is disabled with the reason. The model is
@@ -289,7 +291,8 @@ typed word must be accounted for, so `1-2 cups` and `about 2 cups` are refused.
 **Consequence.** Since numbers have to be readable by the rules, phrases such as `two and a half` moved into the rules, which
 leaves the model typos and odd word order. Chrome 148+ on desktop only, with 22 GB free, and more than 4 GB of VRAM or 16 GB of
 RAM with 4+ cores. Unticking does not delete the model, which Chrome manages. The debug log records each question and answer,
-to judge how well the model does. Not yet tried against the real model.
+to judge how well the model does. Not yet tried against the real model. The chat (DR-41) is a separate use of the same
+model and setting, which is told about the diary.
 **Reopen if.** The model turns out too unreliable to be worth keeping, or the header runs out of room for settings (DR-21).
 
 ### DR-27 The diary is ordered by meal and has no time column
@@ -502,7 +505,52 @@ Different products under one name and brand whose energy is within 10% now show 
 **Reopen if.** Collapsed entries hide products people look for by name, or a better tie-break than popularity is
 needed (energy agreeing with the macros, or with the group's median).
 
-### DR-40 Open Food Facts energy is checked against the macronutrients, and a product that fails is flagged
+### DR-40 Settings live in a panel behind a gear in the header
+**Decision.** The header shows only the title, Sign out and a gear button. The gear opens a small panel under it with
+the settings: the energy unit (DR-21), the AI tickbox (DR-26) and, in builds with no client ID built in, the link to
+the OAuth client ID setup screen. The panel closes on the gear, Escape (which gives focus back to the gear), or a click
+or focus outside it, and a redraw of the page leaves it as it was. With nothing to set (signed out, client ID built in),
+there is no gear. Sign out stays in the header, since it is an action, not a setting.
+**Why.** Owner request (19 November 2026): settings should not be always visible; move them to a popup panel or a new
+page and leave a gear behind as the link. A panel was chosen over a page because the settings are few and change what
+the current page shows, so it stays in view while they change.
+**Consequence.** Changing a setting takes one more click. The AI download's progress, and its notes that the model is
+not available here or could not start, show only while the panel is open.
+**Reopen if.** The settings outgrow a small panel, or some need explaining at length: then a settings page.
+
+### DR-41 A chat beside the diary, run by the on-device model, proposes changes for the user to accept
+**Decision.** A Chat button in the page header opens a panel on the right of the page. A speech-bubble button on each
+diary row opens it on that entry: a new chat, with the model told about that entry first. The chat uses Chrome's
+built-in model (DR-26), only while the AI setting is on and the model is ready, and turning the setting off ends the
+chat. The model answers each message with one action as JSON, held to a schema: reply, read a day, read the totals of
+up to 14 days, search foods, or propose a log, a change or a delete. Reading and searching happen straight away. A
+proposal is a card in the chat showing what the diary row shows (food, amount, meal, day and time, nutrients), and for
+a change each value before and after, with Accept and Reject. Nothing is written before Accept, and nothing else can
+be sent until the user decides. Accepted changes go through the diary's own code (DR-20, DR-22, DR-33), once the app
+has read the entry again and found it as the chat saw it. The model is told the outcome and carries on, so one message
+can log several foods, each accepted on its own.
+**Why.** Owner request (19 November 2026): a chat on the right of the page, where a local agent gets the context it
+needs and can change the diary, every change asking for approval in a short structured card, and an entry named so the
+user can tell which it is, since they never see its ID. A plain chat pulls context through its actions, and a chat
+opened on an entry gets that entry up front. The Prompt API's own tool calls are specified, but not in every Chrome that
+runs the model, and a schema is.
+**How it is kept in bounds.** The model never sees an entry's ID or a food's reference: it names them by handles (`E1`,
+`F1`) that the app hands out, and the schema allows only handles already handed out. Amounts are text read by the
+amount rules (DR-25): a log must name a unit, and a bare number in a change is in the unit the entry was logged in, as
+in the row editor. Days after today are refused. Only this app's entries can be changed or deleted (DR-04), and a meal
+prep share only deleted. The app adds up totals and averages; the model only quotes them. Each message gets at most 8
+model calls, each one at most a minute.
+**Consequence.** Unlike the amount reader (DR-26), the chat sends the diary's food names, amounts and nutrients to the
+model, which runs on the device; nothing goes anywhere but Google Health, and the debug log records the model's
+answers. The model's number can reach an entry, but only as amount text the rules read, and only after the user
+accepts a card that shows the result. A chat lives only in the page: reloading, signing out, another account signing
+in, or turning the setting off ends it. Logging covers catalogue foods only, not custom foods, saved meals or meal prep
+portions. Rows have one more button while the chat can be used. Not yet tried against the real model, which is small,
+so the instructions in `src/ai/chat-protocol.ts` may need tuning.
+**Reopen if.** Tool calls reach every Chrome that runs the model, the model proves too unreliable to be worth it, or the owner wants some
+changes made without asking.
+
+### DR-42 Open Food Facts energy is checked against the macronutrients, and a product that fails is flagged
 **Decision.** When the index is built, each Open Food Facts product's energy is compared with what its fat,
 carbohydrate and protein imply, with fibre, alcohol and sugar alcohols accounted for
 ([FOOD_SEARCH.md](FOOD_SEARCH.md#53-slimming-the-dataset)). A product more than 20% off (10 kcal for low-energy foods)
