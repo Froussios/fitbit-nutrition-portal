@@ -586,3 +586,15 @@ was saved with for as long as its unit allows, as ingredients always have (DR-29
 draft as its ingredients. An ingredient whose food has left the catalogue, or no longer has the unit it was saved in,
 can change its amount but only to units of the same kind.
 **Reopen if.** The owner wants meal prep built the same way, or a saved meal in a meal kept as a link to it.
+
+### DR-44 A saved meal's entry shows "saved meal" for its amount
+**Decision.** In the diary, the Amount of a saved meal's entry (ID source `meal`, DR-29) is a small muted label,
+**saved meal**, with a tooltip saying it was logged from a saved meal as one entry with no amount of its own. The
+chat's description of an entry says the same. Every other entry without an amount, a meal prep share or another app's
+entry, still shows "–".
+**Why.** Owner request (19 November 2026): a saved meal's "–" looked the same as an amount that had wrongly not been
+recorded. A label says where the entry came from without inventing a number: "1 serving" would be wrong after
+"× this entry" (DR-22) scales it, since the entry keeps no `serving`.
+**Consequence.** The label is read from the entry's ID, so it shows only on this app's entries. It does not say how
+many servings an entry holds after it was scaled.
+**Reopen if.** The owner wants meal prep shares marked too, or a scaled meal to show its multiple.

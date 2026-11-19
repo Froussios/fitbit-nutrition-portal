@@ -9,7 +9,7 @@ import type { Proposal } from "../ai/chat-tools";
 import { dayLabel } from "../core/time";
 import { entryDay, mealLabel, type DiaryEntry } from "../health/mapping";
 import { el } from "./dom";
-import { summary } from "./format";
+import { amountText, summary } from "./format";
 
 export type ProposalState =
   | { readonly kind: "waiting" }
@@ -30,7 +30,7 @@ const whenText = (e: DiaryEntry, today: string) => `${dayLabel(entryDay(e), toda
 function facts(e: DiaryEntry, today: string): [string, string][] {
   return [
     ["Food", e.displayName],
-    ["Amount", e.amount ?? "–"],
+    ["Amount", amountText(e)],
     ["Meal", mealText(e)],
     ["When", whenText(e, today)],
     ["Nutrients", summary(e.profile)],
