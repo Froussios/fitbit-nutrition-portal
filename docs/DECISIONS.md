@@ -289,7 +289,8 @@ typed word must be accounted for, so `1-2 cups` and `about 2 cups` are refused.
 **Consequence.** Since numbers have to be readable by the rules, phrases such as `two and a half` moved into the rules, which
 leaves the model typos and odd word order. Chrome 148+ on desktop only, with 22 GB free, and more than 4 GB of VRAM or 16 GB of
 RAM with 4+ cores. Unticking does not delete the model, which Chrome manages. The debug log records each question and answer,
-to judge how well the model does. Not yet tried against the real model.
+to judge how well the model does. Not yet tried against the real model. The chat (DR-38) is a separate use of the same
+model and setting, which is told about the diary.
 **Reopen if.** The model turns out too unreliable to be worth keeping, or the header runs out of room for settings (DR-21).
 
 ### DR-27 The diary is ordered by meal and has no time column
@@ -463,3 +464,35 @@ old size, which the button shows. Entries logged before this change, and those l
 their whole amount until the first tap fixes it. Saved meals, meal prep shares and other apps' entries have no +.
 Each tap is a write and a delete, so the entry's ID changes on every tap.
 **Reopen if.** The step should be chosen (half a portion), the + is wanted on other days, or a minus is wanted too.
+
+### DR-38 A chat beside the diary, run by the on-device model, proposes changes for the user to accept
+**Decision.** A Chat button in the page header opens a panel on the right of the page. A speech-bubble button on each
+diary row opens it on that entry: a new chat, with the model told about that entry first. The chat uses Chrome's
+built-in model (DR-26), only while the AI setting is on and the model is ready, and turning the setting off ends the
+chat. The model answers each message with one action as JSON, held to a schema: reply, read a day, read the totals of
+up to 14 days, search foods, or propose a log, a change or a delete. Reading and searching happen straight away. A
+proposal is a card in the chat showing what the diary row shows (food, amount, meal, day and time, nutrients), and for
+a change each value before and after, with Accept and Reject. Nothing is written before Accept, and nothing else can
+be sent until the user decides. Accepted changes go through the diary's own code (DR-20, DR-22, DR-33), once the app
+has read the entry again and found it as the chat saw it. The model is told the outcome and carries on, so one message
+can log several foods, each accepted on its own.
+**Why.** Owner request (19 November 2026): a chat on the right of the page, where a local agent gets the context it
+needs and can change the diary, every change asking for approval in a short structured card, and an entry named so the
+user can tell which it is, since they never see its ID. A plain chat pulls context through its actions, and a chat
+opened on an entry gets that entry up front. The Prompt API's own tool calls are specified, but not in every Chrome that
+runs the model, and a schema is.
+**How it is kept in bounds.** The model never sees an entry's ID or a food's reference: it names them by handles (`E1`,
+`F1`) that the app hands out, and the schema allows only handles already handed out. Amounts are text read by the
+amount rules (DR-25): a log must name a unit, and a bare number in a change is in the unit the entry was logged in, as
+in the row editor. Days after today are refused. Only this app's entries can be changed or deleted (DR-04), and a meal
+prep share only deleted. The app adds up totals and averages; the model only quotes them. Each message gets at most 8
+model calls, each one at most a minute.
+**Consequence.** Unlike the amount reader (DR-26), the chat sends the diary's food names, amounts and nutrients to the
+model, which runs on the device; nothing goes anywhere but Google Health, and the debug log records the model's
+answers. The model's number can reach an entry, but only as amount text the rules read, and only after the user
+accepts a card that shows the result. A chat lives only in the page: reloading, signing out, another account signing
+in, or turning the setting off ends it. Logging covers catalogue foods only, not custom foods, saved meals or meal prep
+portions. Rows have one more button while the chat can be used. Not yet tried against the real model, which is small,
+so the instructions in `src/ai/chat-protocol.ts` may need tuning.
+**Reopen if.** Tool calls reach every Chrome that runs the model, the model proves too unreliable to be worth it, or the owner wants some
+changes made without asking.

@@ -28,6 +28,8 @@ export interface DiaryTableOptions {
   readonly onIncrement?: (entry: DiaryEntry) => void;
   /** What an empty day says. */
   readonly emptyText?: string;
+  /** Opens the chat about this entry (DR-38). Left out while the chat can't be used, and the rows then have no chat button. */
+  readonly onAsk?: (entry: DiaryEntry) => void;
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -71,6 +73,18 @@ function repeatIcon(): SVGElement {
   return svg;
 }
 
+/** A speech bubble: ask the chat about this entry. */
+function askIcon(): SVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("fill", "currentColor");
+  path.setAttribute("d", "M2.5 2A1.5 1.5 0 0 0 1 3.5v7A1.5 1.5 0 0 0 2.5 12H4v3l3.6-3h5.9a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 13.5 2Z");
+  svg.append(path);
+  return svg;
+}
+
 /**
  * Stands in for the delete button on an entry from another app, which the write scope does not cover.
  * A tap or a key opens the explanation, since a title alone never shows on a touch screen.
@@ -92,7 +106,7 @@ function rowTag(id: string, deleted: ReadonlySet<string>, busy: ReadonlyMap<stri
   return text ? el("span", { class: "tag" }, text) : undefined;
 }
 
-export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo, onRepeat, today = false, onIncrement, emptyText = "Nothing logged today yet." }: DiaryTableOptions): HTMLElement {
+export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo, onRepeat, today = false, onIncrement, emptyText = "Nothing logged today yet.", onAsk }: DiaryTableOptions): HTMLElement {
   if (entries.length === 0 && deleted.length === 0) {
     return el("p", { class: "empty" }, emptyText);
   }
@@ -138,6 +152,15 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
               { type: "button", class: "icon repeat", "data-entry-repeat": e.id, title: offline ? "Logging needs a connection" : "Log again today", "aria-label": `Log ${e.displayName} again today`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onRepeat(e) },
               repeatIcon(),
             );
+          // Any entry can be asked about, whichever app logged it: the chat says what it can't change.
+          const askButton =
+            onAsk &&
+            !deletedIds.has(e.id) &&
+            el(
+              "button",
+              { type: "button", class: "icon ask", "data-entry-ask": e.id, title: "Ask the chat about this entry", "aria-label": `Ask the chat about ${e.displayName}`, onclick: () => onAsk(e) },
+              askIcon(),
+            );
           return el(
             "tr",
             {
@@ -169,7 +192,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
                   ? editor.actions
                   : // The write scope only covers entries this app created.
                     !e.own
-                  ? [repeatButton, notOwnedMark(e)]
+                  ? [askButton, repeatButton, notOwnedMark(e)]
                   : deletedIds.has(e.id)
                     ? el(
                         "button",
@@ -179,6 +202,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
                       )
                     : [
                         incrementButton,
+                        askButton,
                         repeatButton,
                         hasEdit &&
                         el(

@@ -35,6 +35,10 @@ import { createPrepCard, type PrepCard } from "./ui/prep-card";
 import { createMealCard, type MealCard } from "./ui/meal-card";
 import type { SavedMeal } from "./core/meal";
 import { describeError, installGlobalErrorHandlers, logger } from "./debug/log";
+import { DiaryReadError } from "./ai/chat-agent";
+import { chatModel } from "./ai/chat-model";
+import type { Proposal } from "./ai/chat-tools";
+import { createChatPanel, type ApplyResult, type ChatPanel } from "./ui/chat-panel";
 
 /** Refetch interval while the tab is visible: the client-only stand-in for webhook pushes. */
 const POLL_MS = 5 * 60_000;
@@ -145,6 +149,8 @@ class App {
   /** The diary row being edited. Its controls outlive redraws of the table, so a refresh keeps what the user typed. */
   private editor?: RowEditor;
   private readonly aiSetting = createAiSetting(amountAi);
+  /** The chat on the right of the page (DR-38). Kept for the life of the page, outside the redrawn root. */
+  private readonly chat: ChatPanel;
   private readonly diary = el("div", { class: "diary" });
   private readonly dayHeading = el("h2", { "aria-live": "polite" });
   private readonly previousDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Previous day", title: "Previous day", onclick: () => this.stepDay(-1) }, "←");
@@ -238,6 +244,25 @@ class App {
       this.mealBuilder.element,
     );
     this.entryCard = createEntryCard(this.form.element, this.prepCard.element, this.mealCard.element);
+    this.chat = createChatPanel(chatModel, amountAi, {
+      today: () => civilDate(new Date()),
+      viewedDay: () => this.day(),
+      entriesOn: (day, signal) => this.entriesOn(day, signal),
+      catalog,
+      energyUnit: () => getEnergyUnit(),
+      servingUnits: () => this.servingUnits,
+      diaryContext: () => this.diaryContext(),
+      logTime: (day) => (day === civilDate(new Date()) ? new Date() : onCivilDate(day, new Date())),
+      apply: (proposal) => this.applyFromChat(proposal),
+    });
+    document.body.append(this.chat.element);
+    // The rows' chat buttons come and go with the model.
+    let chatAvailable = this.chat.available;
+    amountAi.onChange(() => {
+      if (chatAvailable === this.chat.available) return;
+      chatAvailable = this.chat.available;
+      this.renderDiary();
+    });
     // The ID token, never the access token: it proves who the user is and can't use the diary (DR-24).
     this.prepApi = new PrepApi(new URL("api/", FOOD_INDEX_URL).href, () => this.auth.getIdToken());
     // Logging needs the write scope; the read scope (whole diary) is asked for but optional.
@@ -343,6 +368,7 @@ class App {
     if (this.prepUser !== this.auth.subject) {
       this.resetPreps();
       this.resetMeals();
+      this.chat.reset();
     }
     this.prepUser = this.auth.subject;
     void this.loadPreps();
@@ -581,12 +607,14 @@ class App {
     return { key, created };
   }
 
-  private async remove(entry: DiaryEntry) {
-    if (this.busy.has(entry.id)) return;
+  /** Deletes an entry. Resolves to why it failed, or undefined when it was deleted. */
+  private async remove(entry: DiaryEntry): Promise<string | undefined> {
+    if (this.busy.has(entry.id)) return `${entry.displayName} is busy. Try again in a moment.`;
     // Disabling the button takes keyboard focus from it, so it is given back at the end.
     const hadFocus = focusedEntryId() === entry.id;
     this.startRowAction(entry, "deleting…");
     appLog.info(`Deleting ${entry.name}`);
+    let failure: string | undefined;
     try {
       const op = await this.api.deleteNutritionLogs([entry.name]);
       if (op.error) {
@@ -602,11 +630,13 @@ class App {
     } catch (e) {
       appLog.error("Deleting the entry failed", describeError(e));
       this.handleError(e, false);
-      this.showRowFailure(entry, isConnectionFailure(e) ? deleteFailed(entry.displayName) : actionRefused("delete", entry.displayName, refusalReason(e)));
+      failure = isConnectionFailure(e) ? deleteFailed(entry.displayName) : actionRefused("delete", entry.displayName, refusalReason(e));
+      this.showRowFailure(entry, failure);
     }
     this.busy.delete(entry.id);
     this.renderDiary(hadFocus ? entry.id : undefined);
     await this.loadDay();
+    return failure;
   }
 
   /** Undoes a delete by logging an equivalent entry. The original is gone, so the copy has its own ID. */
@@ -754,21 +784,24 @@ class App {
    * Applies an edit: writes the corrected entry, then deletes the original, so that a failure can
    * never lose the entry (DR-22). If nothing was saved, the row stays open with what the user typed.
    */
-  private async saveEdit(entry: DiaryEntry, edit: EntryEdit): Promise<void> {
+  private async saveEdit(entry: DiaryEntry, edit: EntryEdit): Promise<string | undefined> {
     const log = entry.point.nutritionLog;
-    if (this.busy.has(entry.id) || !log) return;
+    if (this.busy.has(entry.id)) return `${entry.displayName} is busy. Try again in a moment.`;
+    if (!log) return `${entry.displayName} has nothing to edit.`;
     let point: DataPoint;
     try {
       const step = stepAfterEdit(log, edit.amount, entryStep(entry.id), this.unitNames);
       point = editedNutritionLogPoint(log, edit, { id: copiedEntryId(entry.id, undefined, undefined, step), servingUnits: this.servingUnits, unitNames: this.unitNames });
     } catch (e) {
       appLog.error("Could not build the edited entry", describeError(e));
-      this.showRowFailure(entry, actionRefused("edit", entry.displayName, errorMessage(e)));
-      return;
+      const failure = actionRefused("edit", entry.displayName, errorMessage(e));
+      this.showRowFailure(entry, failure);
+      return failure;
     }
     this.startRowAction(entry, "saving…");
     // The row can leave the diary during the write, and another row can be opened: the answer is only for this one's editor.
-    const editor = this.editor;
+    // An edit from the chat has none, and must leave alone the editor of any other row.
+    const editor = this.editor?.id === entry.id ? this.editor : undefined;
     editor?.setSaving(true);
     const stillEditing = () => editor !== undefined && this.editor === editor;
     appLog.info(`Editing ${entry.name}`, { replacement: point.name, mealType: edit.mealType, quantity: edit.amount?.quantity, unit: edit.amount?.unit, fromFoodRecord: Boolean(edit.amount?.food), day: edit.day });
@@ -781,11 +814,12 @@ class App {
       appLog.error("Saving the edit failed", describeError(e));
       this.handleError(e, false);
       this.busy.delete(entry.id);
-      this.showRowFailure(entry, isConnectionFailure(e) ? editNotConfirmed(entry.displayName) : actionRefused("edit", entry.displayName, refusalReason(e)));
+      const failure = isConnectionFailure(e) ? editNotConfirmed(entry.displayName) : actionRefused("edit", entry.displayName, refusalReason(e));
+      this.showRowFailure(entry, failure);
       if (stillEditing()) editor?.setSaving(false);
       this.renderDiary();
       if (stillEditing()) editor?.focusSave();
-      return;
+      return failure;
     }
     const { key, created } = written;
     // No wait since the write: a listing that still has the original must not match the replacement to it (a meal-only edit looks the same).
@@ -795,7 +829,8 @@ class App {
     // Moved to another day, it leaves this one: the listing for that day shows it, pending until the API does.
     const here = replacement && entryDay(replacement) === this.day() ? replacement : undefined;
     this.entries = [...this.entries.filter((e) => e.id !== entry.id), ...(here ? [here] : [])].sort(byTime);
-    if (replacement && !here) this.showMoved(entry.displayName, entryDay(replacement));
+    // Only an entry that was on the day shown has moved away from it: the chat can edit entries on other days.
+    if (replacement && !here && entryDay(entry) === this.day()) this.showMoved(entry.displayName, entryDay(replacement));
     if (stillEditing()) {
       this.stopEditing();
       this.renderDiary(undefined, key);
@@ -805,6 +840,75 @@ class App {
       this.renderDiary();
     }
     void this.removeReplaced(entry);
+    return undefined;
+  }
+
+  // Chat (DR-38) ----------------------------------------------------------------------------------
+
+  /**
+   * A day's entries as the diary would show them, read afresh for the chat: listed ones, with this session's deletes
+   * left out and its writes the API has not listed yet put in.
+   */
+  private async entriesOn(day: string, signal: AbortSignal): Promise<DiaryEntry[]> {
+    let points: DataPoint[];
+    try {
+      points = withoutEntries(await this.api.listNutritionLogs(day), this.deletedIds);
+    } catch (e) {
+      appLog.warn("The chat could not read the diary", { day, error: describeError(e) });
+      this.handleError(e, false);
+      if (e instanceof SignInRequiredError) throw new DiaryReadError("Your session has expired. Sign in again, then ask again.", { cause: e });
+      if (isConnectionFailure(e)) throw new DiaryReadError("Google Health did not answer, so the diary could not be read. Check your connection, then ask again.", { cause: e });
+      throw new DiaryReadError(`The diary could not be read: ${errorMessage(e)}`, { cause: e });
+    }
+    signal.throwIfAborted();
+    const { stillPending } = reconcilePending(this.pending, points, this.clientId);
+    const pending = withoutEntries(
+      stillPending.flatMap((key) => this.pending.get(key) ?? []),
+      this.deletedIds,
+    ).filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === day);
+    return toDiaryEntries([...points, ...pending], this.diaryContext());
+  }
+
+  /**
+   * The entry as it is in the diary now, or why the proposal no longer fits it. The chat read it a while ago, and it
+   * may since have been changed or deleted, here or in another app.
+   */
+  private async currentEntry(entry: DiaryEntry): Promise<DiaryEntry | string> {
+    const now = (await this.entriesOn(entryDay(entry), new AbortController().signal)).find((e) => e.id === entry.id);
+    if (!now) return `${entry.displayName} is no longer in the diary, so nothing was changed. It may have been changed or deleted since.`;
+    const same = now.displayName === entry.displayName && now.amount === entry.amount && now.mealType === entry.mealType && now.start.getTime() === entry.start.getTime() && now.profile.energyKcal === entry.profile.energyKcal;
+    return same ? now : `${entry.displayName} has changed since the chat read it, so nothing was changed. Ask again.`;
+  }
+
+  /** Writes a change the user accepted in the chat, the same way as the diary's own buttons. Never rejects. */
+  private async applyFromChat(proposal: Proposal): Promise<ApplyResult> {
+    // No queue (DR-18): offline, nothing is sent.
+    if (this.connection.state === "offline") return { ok: false, message: "The browser is offline, so nothing was changed." };
+    try {
+      switch (proposal.kind) {
+        case "log": {
+          await this.log(proposal.draft);
+          const day = entryDay(proposal.preview);
+          if (day !== this.day()) this.showOnOtherDay(`Logged ${proposal.preview.displayName} on ${dayInWords(day)}.`, day);
+          return { ok: true, message: `Logged ${proposal.preview.displayName} for ${dayInWords(day)}.` };
+        }
+        case "edit": {
+          const current = await this.currentEntry(proposal.entry);
+          if (typeof current === "string") return { ok: false, message: current };
+          const failure = await this.saveEdit(current, proposal.edit);
+          return failure ? { ok: false, message: failure } : { ok: true, message: `Changed ${current.displayName}.` };
+        }
+        case "delete": {
+          const current = await this.currentEntry(proposal.entry);
+          if (typeof current === "string") return { ok: false, message: current };
+          const failure = await this.remove(current);
+          return failure ? { ok: false, message: failure } : { ok: true, message: `Deleted ${current.displayName}. The diary can undo it until the page is reloaded.` };
+        }
+      }
+    } catch (e) {
+      appLog.error("A change accepted in the chat failed", describeError(e));
+      return { ok: false, message: e instanceof SignInRequiredError ? refusalReason(e) : errorMessage(e) };
+    }
   }
 
   /** Says that `name` is now on `day`, with a button that shows that day. */
@@ -1300,6 +1404,8 @@ class App {
   /** Signs out and forgets this user's diary state (the per-user unit cache stays). */
   private signOut() {
     this.stopEditing();
+    // The chat holds this user's diary.
+    this.chat.reset();
     this.pending.clear();
     this.pendingSince.clear();
     this.deleted.clear();
@@ -1345,6 +1451,7 @@ class App {
         { class: "account" },
         signedIn && this.energySetting(),
         signedIn && this.aiSetting,
+        signedIn && this.ready && this.chat.toggle,
         signedIn && el("button", { type: "button", onclick: () => this.signOut() }, "Sign out"),
         !isClientIdBuiltIn() && el("button", { type: "button", class: "link", onclick: () => renderSetup(true) }, "Settings"),
       ),
@@ -1352,6 +1459,8 @@ class App {
 
     if (!signedIn) {
       this.stopEditing();
+      // Kept for when the same user signs in again, but out of sight: it can't read the diary meanwhile.
+      if (this.chat.isOpen) this.chat.close();
       const expired = this.auth.hasExpiredSession;
       replaceChildren(
         root,
@@ -1485,6 +1594,7 @@ class App {
           onRepeat: (e) => void this.repeatToday(e),
           today: day === today,
           onIncrement: (e) => void this.increment(e),
+          ...(this.chat.available ? { onAsk: (e: DiaryEntry) => this.chat.open(e) } : {}),
         }),
     );
     this.diary.querySelector(".table-wrap")?.scrollTo({ left: scrollLeft });
