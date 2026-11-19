@@ -11,7 +11,7 @@ This is the MVP, a proof of concept (milestone M0):
    custom food, in g, ml, household measures or portions. Amounts can be typed with their unit, such as `90 g` or `1 cup`. A setting in the header lets Chrome's on-device model
    read what the app's rules refuse, such as a mistyped unit, and you check the result before it is logged. With it on, a
    **Chat** beside the diary answers questions about your diary and proposes logs, changes and deletes, each one shown in
-   full for you to accept or reject (DR-38). A button on each row opens the chat about that entry.
+   full for you to accept or reject (DR-40). A button on each row opens the chat about that entry.
 3. See a day's whole Google Health nutrition diary, whichever app logged each entry, with amounts and
    totals. Arrows beside the day step back to earlier days, a calendar button jumps to any day, a Today button jumps back, and new entries go on the day shown: the log button turns amber and names the day when it isn't today.
    The page URL names the day (`?day=2026-11-09`), so a day can be linked to; without it the diary shows today. Entries made by this app can be edited (amount, meal, and day, which moves the entry to another day), with the pencil button or a double-click on the row (Escape or a click outside the row cancels), and deleted. Deleting asks for no confirmation: a
@@ -19,7 +19,10 @@ This is the MVP, a proof of concept (milestone M0):
    app, can be logged again for today with the button beside it (same food, amount and meal, at the current time),
    except a deleted entry or a meal prep share. On today, a + button beside this app's entries adds one more of what was
    logged: a portion or household measure (`+35 g` for a slice), or the amount as logged (`+90 g`).
-4. Where the site serves its API, cook a batch and eat it in shares (**Meal prep**), or keep meals you eat often
+4. A **Dashboard** under the diary charts the day shown: its energy and macronutrients, and its energy split by
+   macronutrient and by meal. For the 7 days ending on that day it charts each day's protein, carbs and fat, and each
+   day's energy by meal, with a table of the figures under each chart.
+5. Where the site serves its API, cook a batch and eat it in shares (**Meal prep**), or keep meals you eat often
    (**Saved meals**). A saved meal is logged as one entry under its name. Its ingredients can be changed for that
    one entry, and a saved meal can be added to another as its ingredients.
 
@@ -137,12 +140,12 @@ One-time setup:
 
 ```
 src/
-  core/      domain logic, no I/O: units, nutrients, food model, Open Food Facts normaliser, ids, time
+  core/      domain logic, no I/O: units, nutrients, food model, Open Food Facts normaliser, ids, time, dashboard sums
   health/    Google Health API types (from the discovery document), client and mapping
   auth/      Google sign-in: popup, checks on Google's answer
   food/      FoodCatalog interface, the static index engine and catalogue, sample foods
   ai/        the optional on-device model that reads amounts the rules refuse
-  ui/        DOM helpers, log form, food search combobox, diary table, meal prep and saved meal tabs and builder
+  ui/        DOM helpers, log form, food search combobox, diary table, dashboard charts, meal prep and saved meal tabs and builder
   prep/      the browser's client for the meal prep and saved meal API
   main.ts    app shell
 pipeline/    food index builder (Open Food Facts export → public/food-index/), generic foods builder

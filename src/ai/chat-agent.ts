@@ -1,5 +1,5 @@
 /**
- * The chat's turn loop (DR-38): ask the model for one action, run it, tell the model what came of it, and again,
+ * The chat's turn loop (DR-40): ask the model for one action, run it, tell the model what came of it, and again,
  * until it replies or proposes a change. A proposal pauses the turn until the user accepts or rejects it.
  */
 

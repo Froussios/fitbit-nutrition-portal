@@ -289,7 +289,7 @@ typed word must be accounted for, so `1-2 cups` and `about 2 cups` are refused.
 **Consequence.** Since numbers have to be readable by the rules, phrases such as `two and a half` moved into the rules, which
 leaves the model typos and odd word order. Chrome 148+ on desktop only, with 22 GB free, and more than 4 GB of VRAM or 16 GB of
 RAM with 4+ cores. Unticking does not delete the model, which Chrome manages. The debug log records each question and answer,
-to judge how well the model does. Not yet tried against the real model. The chat (DR-38) is a separate use of the same
+to judge how well the model does. Not yet tried against the real model. The chat (DR-40) is a separate use of the same
 model and setting, which is told about the diary.
 **Reopen if.** The model turns out too unreliable to be worth keeping, or the header runs out of room for settings (DR-21).
 
@@ -465,7 +465,45 @@ their whole amount until the first tap fixes it. Saved meals, meal prep shares a
 Each tap is a write and a delete, so the entry's ID changes on every tap.
 **Reopen if.** The step should be chosen (half a portion), the + is wanted on other days, or a minus is wanted too.
 
-### DR-38 A chat beside the diary, run by the on-device model, proposes changes for the user to accept
+### DR-38 A dashboard charts the viewed day and the 7 days ending on it
+**Decision.** Under the diary, a Dashboard card shows the day the diary shows: its energy, protein, carbs and fat, a bar
+splitting its energy by macronutrient (by the Atwater factors, 4 kcal a gram of protein and carbohydrate and 9 of fat,
+each part labelled with its share and its grams in the legend) and a bar splitting its energy by meal. Below, the 7 days
+ending on that day: a stacked column per day of protein, carbs and fat in grams, and one of energy by meal, with the
+average energy over the days that have entries. Meals are grouped as Breakfast, Lunch, Dinner, Snacks (Google Health's
+snack times, such as `BEFORE_DINNER`, included) and Other (`ANYTIME` and no meal). The week is one listing of the 7 days
+(`listNutritionLogsBetween`), made after each diary load; the viewed day's own figures come from the diary's listing,
+so this session's writes, edits and deletes show at once. Charts are SVG and HTML drawn by the app, with no chart
+library; each has a legend, a tooltip on hover and keyboard focus, and a table of its figures; colours are checked for
+colour-blind separation in both themes.
+**Why.** Owner request (19 November 2026): graphs for the basic metrics, presented as a dashboard; for the day, a
+breakdown by macro and by meal; for the week, daily totals by macro and by meal.
+**Consequence.** One more request to Google Health per diary load (polling included). Energy by macronutrient can differ
+a little from the energy logged: labels round, fibre gives less energy than other carbohydrate, and alcohol has none of
+the three. A day with nothing logged is an empty column, and does not lower the week's average.
+**Reopen if.** Targets (an energy or protein goal) are wanted, the week should be a calendar week or a longer range, or
+the extra listing costs too much quota.
+
+### DR-39 Search collapses products that only repeat their brand, and branded energy within 10%
+**Decision.** In the word index, a branded product is a duplicate of a better-ranked one with the same words in name
+and brand when their kcal per 100 are within 10%, or 5 kcal for low-energy foods (before, they had to round to the same
+whole kcal). A product whose name adds no word to its brand (`Chobani (Chobani)`, `Cola (Coca-Cola)`, `Milk (Milk)`)
+is collapsed with others of the same brand whatever its energy, as products with no brand already are (DR-15).
+Which of the two really is the brand isn't judged: the rule only asks whether the row carries one piece of
+information. A brand that adds to the name is the usual case (`Greek Yogurt (Chobani)`) and is not collapsed. The rest
+stay reachable by barcode ([FOOD_SEARCH.md](FOOD_SEARCH.md#53-slimming-the-dataset)).
+**Why.** Owner report (19 November 2026): searching `chobani` showed six `Chobani (Chobani)` rows from 38 to 167 kcal,
+with nothing on screen, or in Open Food Facts, to tell them apart; `Coca Cola (Coca Cola)` filled five rows between 39
+and 45 kcal. Removing products that only repeat their brand was ruled out: `Vegemite (Vegemite)` and `Nutella (Nutella)`
+are real products found this way. #48 found 84% of branded same-name groups agree within 10% or 10 kcal.
+**Consequence.** A name that only repeats its brand shows its best-ranked entry in the DR-15 order; among identical
+names that is the most scanned, sold in the user's country and most complete, which is right for `Nutella` and still a
+guess for `Chobani`. A diet version stored under the same bare name (`Cola (Coca-Cola)` at 0 kcal) is hidden too.
+Different products under one name and brand whose energy is within 10% now show as one.
+**Reopen if.** Collapsed entries hide products people look for by name, or a better tie-break than popularity is
+needed (energy agreeing with the macros, or with the group's median).
+
+### DR-40 A chat beside the diary, run by the on-device model, proposes changes for the user to accept
 **Decision.** A Chat button in the page header opens a panel on the right of the page. A speech-bubble button on each
 diary row opens it on that entry: a new chat, with the model told about that entry first. The chat uses Chrome's
 built-in model (DR-26), only while the AI setting is on and the model is ready, and turning the setting off ends the

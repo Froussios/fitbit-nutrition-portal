@@ -2,7 +2,7 @@ import { summarise } from "../src/core/food-summary";
 import { fromOffProduct, type OffProduct } from "../src/core/off";
 import { usefulPortions } from "../src/core/portions";
 import { ingredientLimitProblem } from "../src/core/prep";
-import { compareRank, headWords, indexWords, nameWordCount, popularity, productWordCount, sameNameKey } from "../src/core/tokens";
+import { compareRank, headWords, indexWords, nameWordCount, nameWords, popularity, productWordCount, sameNameKey } from "../src/core/tokens";
 import {
   CHUNK_SIZE,
   chunkPath,
@@ -78,6 +78,27 @@ export const INDEX_COUNTRY = "AU";
  */
 const INDEX_COUNTRY_WEIGHT = 10;
 const MAX_KCAL = 900;
+/** Two products with the same words are the same product if their energy is this close: 10%, or 5 kcal for low-energy foods. */
+const SAME_ENERGY_SHARE = 0.1;
+const SAME_ENERGY_KCAL = 5;
+
+function sameEnergy(a: number, b: number): boolean {
+  return Math.abs(a - b) <= Math.max(SAME_ENERGY_KCAL, SAME_ENERGY_SHARE * Math.max(a, b));
+}
+
+/**
+ * Whether a name adds no word to its brand, whichever of the two really is the brand: "Chobani (Chobani)",
+ * "Cola (Coca-Cola)", "Milk (Milk)", "Weet-Bix (Weetbix)". A brand that adds to the name is the usual case
+ * ("Greek Yogurt (Chobani)" is not one).
+ */
+function nameRepeatsBrand(name: string, brand: string): boolean {
+  const inName = nameWords(name);
+  if (inName.length === 0) return false;
+  const inBrand = nameWords(brand);
+  if (inName.join("") === inBrand.join("")) return true;
+  const brandWords = new Set(indexWords(brand));
+  return inName.every((w) => brandWords.has(w));
+}
 
 interface Doc {
   readonly code: string;
@@ -93,7 +114,11 @@ interface Doc {
   /** Sold in INDEX_COUNTRY. */
   readonly soldHere: boolean;
   readonly popularity: number;
+  /** Products with the same key are told apart only by their energy, if at all. */
   readonly dedupeKey: string;
+  readonly kcal: number;
+  /** Collapsed with any product of the same key, whatever the energy: nothing on its row tells them apart. */
+  readonly anyEnergy: boolean;
   /** Sort key tie-break, for a deterministic order. */
   readonly key: string;
 }
@@ -160,6 +185,8 @@ export class IndexBuilder {
 
     const sum = summaryRow(summarise(food));
     const sortedWords = [...words].sort().join(" ");
+    // Without a brand, or with a name that only repeats it, nothing on the row tells these products apart.
+    const repeatsBrand = food.brand !== undefined && nameRepeatsBrand(food.name, food.brand);
     this.docs.push({
       code,
       sum,
@@ -171,8 +198,13 @@ export class IndexBuilder {
       nameKey: sameNameKey(food.name),
       soldHere: countries.includes(INDEX_COUNTRY),
       popularity: popularity(raw.unique_scans_n, countries.includes(INDEX_COUNTRY), raw.completeness),
-      // Unbranded products with the same name can't be told apart in the dropdown, whatever their energy.
-      dedupeKey: food.brand ? `${sortedWords}|${Math.round(kcal)}` : sameNameKey(food.name),
+      dedupeKey: !food.brand
+        ? `unbranded|${sameNameKey(food.name)}`
+        : repeatsBrand
+          ? `brand only|${nameWords(food.brand).join("")}` // "Coca-Cola", "Coca Cola" and "CocaCola" are one brand
+          : `branded|${sortedWords}`,
+      kcal,
+      anyEnergy: !food.brand || repeatsBrand,
       key: code,
     });
     this.bump("kept");
@@ -197,17 +229,20 @@ export class IndexBuilder {
     // Rank, then collapse duplicates: the best of each group is searchable, the rest only by barcode.
     const ranked = [...this.docs].sort(compareRank);
     this.docs.length = 0;
-    const seen = new Set<string>();
+    // The energy of each searchable product, by key.
+    const kept = new Map<string, number[]>();
     const searchable: Doc[] = [];
     const duplicates: Doc[] = [];
     for (const d of ranked) {
-      if (seen.has(d.dedupeKey)) duplicates.push(d);
+      const group = kept.get(d.dedupeKey);
+      if (group && (d.anyEnergy || group.some((k) => sameEnergy(k, d.kcal)))) duplicates.push(d);
       else {
-        seen.add(d.dedupeKey);
+        if (group) group.push(d.kcal);
+        else kept.set(d.dedupeKey, [d.kcal]);
         searchable.push(d);
       }
     }
-    seen.clear();
+    kept.clear();
     const docs = [...searchable, ...duplicates];
     this.counts.searchable = searchable.length;
     this.counts.duplicates = duplicates.length;

@@ -1,6 +1,6 @@
 /**
  * A change the chat proposes, shown in full so the user can tell exactly which entry it touches, with Accept and
- * Reject (DR-38). Entries are named by what the user sees in the diary (food, amount, meal, day and time, nutrients),
+ * Reject (DR-40). Entries are named by what the user sees in the diary (food, amount, meal, day and time, nutrients),
  * never by ID.
  */
 

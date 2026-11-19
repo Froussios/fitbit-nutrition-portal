@@ -61,7 +61,7 @@ flowchart LR
 | Google Health client | `src/health/` | Thin `fetch` wrapper typed from the discovery document. Maps a `LogDraft` to a `DataPoint` and a `DataPoint` to a `DiaryEntry`. |
 | Food data | `src/food/` | `FoodCatalog` interface, implemented in M0 by `LocalFoodCatalog` over fake data (section 6). |
 | Auth | `src/auth/`, `public/auth-callback.*` | Popup sign-in returning an access token and an ID token (section 5). |
-| On-device AI | `src/ai/` | Chrome's built-in model, used only if the user ticks the setting. Its answers about amounts are checked by rules in `src/core/amount-answer.ts` (DR-26). It also runs the chat (section 4.7, DR-38). |
+| On-device AI | `src/ai/` | Chrome's built-in model, used only if the user ticks the setting. Its answers about amounts are checked by rules in `src/core/amount-answer.ts` (DR-26). It also runs the chat (section 4.7, DR-40). |
 | UI | `src/ui/`, `src/main.ts` | Plain TypeScript and DOM. Three screens; no framework yet. |
 
 Hosting is the static build (`vite build`), deployed to GitHub Pages by `.github/workflows/ci.yml`.
@@ -149,6 +149,10 @@ replaced, not pushed, so stepping adds no browser history. Today, a later day or
 taken out. The form logs on the day shown, at the
 current clock time unless a time is picked, and polling refreshes that day. If the user unticks the read permission on Google's consent screen, the
 app falls back to its own entries and says so.
+
+A Dashboard card under the diary charts the day shown (energy and macronutrient totals, energy by macronutrient and by
+meal) and the 7 days ending on it (macronutrients and energy by meal per day), from one listing of those 7 days made after
+each diary load; the day shown takes its figures from the diary's own listing (DR-38).
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
 background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-foods-logged-before)).
@@ -276,7 +280,7 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
 
 ### 4.7 Chat
 
-DR-38. The chat is a panel on the right of the page (`src/ui/chat-panel.ts`), opened from the header, or from a diary
+DR-40. The chat is a panel on the right of the page (`src/ui/chat-panel.ts`), opened from the header, or from a diary
 row's speech-bubble button for a new chat about that entry. It uses Chrome's built-in model only while the AI setting
 is on and the model is ready.
 

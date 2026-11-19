@@ -1,5 +1,5 @@
 /**
- * The chat on the right of the page (DR-38). It talks to Chrome's on-device model, which reads the diary and searches
+ * The chat on the right of the page (DR-40). It talks to Chrome's on-device model, which reads the diary and searches
  * foods through the app, and proposes logs, changes and deletes that wait for the user to accept them.
  *
  * Opened from the header, it is a plain chat. Opened from a diary row, it starts a new chat about that entry.

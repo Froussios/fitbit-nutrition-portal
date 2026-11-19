@@ -1,5 +1,5 @@
 /**
- * Sessions of Chrome's built-in model for the chat (DR-38). The chat uses the model only while the AI setting is on
+ * Sessions of Chrome's built-in model for the chat (DR-40). The chat uses the model only while the AI setting is on
  * and the model is ready (DR-26): the same setting, the same model, its own sessions.
  */
 
