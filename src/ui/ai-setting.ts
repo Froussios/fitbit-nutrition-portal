@@ -19,7 +19,7 @@ function noteFor(state: AiState): string {
   }
 }
 
-/** The tickbox in the page header. Kept for the life of the page, because a download can outlast a redraw of the header. */
+/** The tickbox in the settings panel (DR-40). Kept for the life of the page, because a download can outlast a redraw of the header. */
 export function createAiSetting(ai: AmountAi): HTMLElement {
   const box = el("input", {
     type: "checkbox",
