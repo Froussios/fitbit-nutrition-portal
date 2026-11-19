@@ -100,6 +100,33 @@ export interface BarReference {
   readonly below: string;
 }
 
+/** The gap of the surface between a segmented bar's blocks, in px, as in `.seg-bar`. */
+const SEG_GAP = 2;
+
+/**
+ * Where `value` falls on a segmented bar of `blocks` (their values, in order), as a CSS length: the blocks share the
+ * bar's width less its gaps, so each gap passed is added back. A value on a boundary between blocks sits in the gap.
+ */
+export function markerLeft(value: number, blocks: readonly number[]): string {
+  const whole = blocks.reduce((a, b) => a + b, 0);
+  if (!(whole > 0) || value >= whole) return "100%";
+  let end = 0;
+  let passed = 0;
+  let onBoundary = false;
+  for (const b of blocks.slice(0, -1)) {
+    end += b;
+    if (end < value) passed++;
+    else {
+      onBoundary = end === value;
+      break;
+    }
+  }
+  const share = value / whole;
+  const px = passed * SEG_GAP - share * SEG_GAP * (blocks.length - 1) + (onBoundary ? SEG_GAP / 2 : 0);
+  const offset = Number(px.toFixed(3));
+  return `calc(${share * 100}% ${offset < 0 ? "-" : "+"} ${Math.abs(offset)}px)`;
+}
+
 /** A part narrower than this share of the bar prints no percentage: it would not fit. Its legend entry still has the amount. */
 const MIN_LABELLED_SHARE = 0.09;
 
@@ -134,7 +161,7 @@ export function segmentedBar({ title, series, values, format, emptyText, referen
             ),
           ),
           ref && gap > 0 && el("div", { class: "seg seg-rest", style: `flex-grow: ${gap}`, title: `${ref.name} ${ref.format(gap)} ${ref.above}` }),
-          ref && el("div", { class: "seg-marker", style: `left: ${(ref.value / scale) * 100}%; background: var(${ref.color})`, title: `${ref.name} ${ref.format(ref.value)}` }),
+          ref && el("div", { class: "seg-marker", style: `left: ${markerLeft(ref.value, [...parts.map((i) => values[i]!), ...(gap > 0 ? [gap] : [])])}; background: var(${ref.color})`, title: `${ref.name} ${ref.format(ref.value)}` }),
         )
       : el("p", { class: "chart-empty" }, emptyText),
     // The legend names the parts the bar draws, in its order: a part at 0 has no block to name.

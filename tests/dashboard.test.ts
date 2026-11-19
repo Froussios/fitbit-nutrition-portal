@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { averageBurnt, averageEnergy, byMealGroup, dailyTotals, macroEnergy, mealGroup, niceScale, totals, type DashboardEntry } from "../src/core/dashboard";
 import { nutritionDaysFilter } from "../src/core/time";
+import { markerLeft } from "../src/ui/charts";
 import { renderDashboard } from "../src/ui/dashboard";
 import { setEnergyUnit } from "../src/ui/energy-unit";
 
@@ -170,8 +171,16 @@ describe("dashboard view", () => {
       expect(view.querySelector(".stat-energy .stat-note")?.textContent).toBe("of 1,000 kcal burnt");
       const meals = view.querySelectorAll(".seg-bar")[1]!;
       expect(meals.querySelector(".seg-rest")).toBeNull();
-      expect(meals.querySelector<HTMLElement>(".seg-marker")?.style.left).toBe(`${(1000 / 1200) * 100}%`);
+      // Past breakfast's block and the gap after it: 1000 of 1200, less its share of the one gap, plus that gap.
+      expect(meals.querySelector<HTMLElement>(".seg-marker")?.style.left).toBe(`calc(${(1000 / 1200) * 100}% + ${Number((2 - (1000 / 1200) * 2).toFixed(3))}px)`);
       expect(meals.getAttribute("aria-label")).toContain("; Burnt 1,000 kcal, 200 kcal less than eaten");
+    });
+
+    it("places the bar's marker allowing for the gaps between blocks", () => {
+      expect(markerLeft(1500, [400, 800, 300])).toBe("100%");
+      expect(markerLeft(100, [400, 800])).toBe("calc(8.333333333333332% - 0.167px)");
+      // On the boundary between two blocks: the middle of the gap.
+      expect(markerLeft(400, [400, 800])).toBe(`calc(${(400 / 1200) * 100}% + ${Number((1 - (400 / 1200) * 2).toFixed(3))}px)`);
     });
 
     it("draws a line on each day's energy column that has a figure, with the figure in the tooltip and the table", () => {

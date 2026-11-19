@@ -596,11 +596,12 @@ class App {
    * dashboard's week says so.
    */
   private async loadWeek() {
-    void this.loadBurnt();
     if (this.weekLoading) {
       this.weekReload = true;
       return;
     }
+    // Once per week listing: a coalesced reload asks when it runs.
+    void this.loadBurnt();
     this.weekLoading = true;
     const day = this.day();
     const first = addCivilDays(day, -6);
@@ -663,6 +664,8 @@ class App {
       this.burntError = "";
     } catch (e) {
       if (request !== this.burntRequest) return;
+      // The page already asks the user to sign in again; a note here would only repeat it.
+      if (e instanceof SignInRequiredError) return;
       appLog.error("Loading the calories burnt for the dashboard failed", describeError(e));
       // A figure from before stays if it is for this day; the note says it may be out of date.
       if (this.burntDay !== day) this.burnt = undefined;
