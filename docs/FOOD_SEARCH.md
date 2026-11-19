@@ -308,8 +308,9 @@ Worker; the index does not change.
    `Coca Cola (Coca Cola)` at 39, 42 and 45 is one product entered three times. Products with no brand and the same
    name (every word in order: `Milk chocolate` is neither `Chocolate milk` nor `Milk with chocolate`) are collapsed
    whatever their kcal: without a brand, nothing in the dropdown tells them apart, and `Vanilla` would otherwise fill
-   every row. So are products whose name only repeats their brand, either way round (`Chobani (Chobani)`,
-   `Cookie (Cookie)`), within the same brand. All of them stay reachable by barcode.
+   every row. So are products whose name adds no word to their brand, whichever of the two really is the brand
+   (`Chobani (Chobani)`, `Cookie (Cookie)`, `Cola (Coca-Cola)`), within the same brand. All of them stay reachable by
+   barcode.
 6. Only if the index exceeds the host's limit: a popularity floor (never scanned and incomplete). Never a
    country filter.
 

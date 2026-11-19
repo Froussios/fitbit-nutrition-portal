@@ -86,11 +86,18 @@ function sameEnergy(a: number, b: number): boolean {
   return Math.abs(a - b) <= Math.max(SAME_ENERGY_KCAL, SAME_ENERGY_SHARE * Math.max(a, b));
 }
 
-/** Whether a name says nothing its brand doesn't, read either way round: "Chobani (Chobani)", "Cola (Coca-Cola)", "Milk (Milk)". */
+/**
+ * Whether a name adds no word to its brand, whichever of the two really is the brand: "Chobani (Chobani)",
+ * "Cola (Coca-Cola)", "Milk (Milk)", "Weet-Bix (Weetbix)". A brand that adds to the name is the usual case
+ * ("Greek Yogurt (Chobani)" is not one).
+ */
 function nameRepeatsBrand(name: string, brand: string): boolean {
   const inName = nameWords(name);
-  const inBrand = new Set(nameWords(brand));
-  return inName.length > 0 && inName.every((w) => inBrand.has(w));
+  if (inName.length === 0) return false;
+  const inBrand = nameWords(brand);
+  if (inName.join("") === inBrand.join("")) return true;
+  const brandWords = new Set(indexWords(brand));
+  return inName.every((w) => brandWords.has(w));
 }
 
 interface Doc {
