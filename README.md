@@ -21,7 +21,9 @@ This is the MVP, a proof of concept (milestone M0):
    logged: a portion or household measure (`+35 g` for a slice), or the amount as logged (`+90 g`).
 4. A **Dashboard** under the diary charts the day shown: its energy and macronutrients, and its energy split by
    macronutrient and by meal. For the 7 days ending on that day it charts each day's protein, carbs and fat, and each
-   day's energy by meal, with a table of the figures under each chart.
+   day's energy by meal, with a table of the figures under each chart. If you allow access to your activity data, it
+   sets the energy you ate against the calories you burnt: today's so far, and each day of the week as a line on its
+   column. Without that permission the dashboard leaves calories burnt out.
 5. Where the site serves its API, cook a batch and eat it in shares (**Meal prep**), or keep meals you eat often
    (**Saved meals**). A saved meal is logged as one entry under its name. Its ingredients can be changed for that
    one entry, and a saved meal can be added to another as its ingredients.
@@ -45,8 +47,9 @@ use a separate project for development.
 2. Under **Google Auth Platform**:
    * **Branding / Audience:** user type *External*, publishing status *Testing*. Add your Google account
      (and up to 100 others) as **test users**.
-   * **Data access:** add the scopes `https://www.googleapis.com/auth/googlehealth.nutrition.readonly`
-     and `https://www.googleapis.com/auth/googlehealth.nutrition.writeonly`.
+   * **Data access:** add the scopes `https://www.googleapis.com/auth/googlehealth.nutrition.readonly`,
+     `https://www.googleapis.com/auth/googlehealth.nutrition.writeonly` and, for calories burnt on the dashboard
+     (optional for users), `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly`.
    * **Clients → Create client → Web application.** Under **Authorized JavaScript origins** add every
      origin the app runs on, for example `http://localhost:5173` (dev), `http://localhost:4173` (preview)
      and `https://<github-user>.github.io` (Pages). Under **Authorized redirect URIs** add `auth-callback.html`

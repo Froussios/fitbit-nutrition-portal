@@ -1,7 +1,7 @@
 /**
  * Google Health API v4 types used by the app, transcribed from the discovery
  * document (https://health.googleapis.com/$discovery/rest?version=v4, revision 20261030).
- * Only the nutrition-related subset is modelled.
+ * Only the nutrition-related subset is modelled, and the daily roll-up of calories burnt (revision 20261118).
  */
 
 export type MealType =
@@ -118,4 +118,29 @@ export interface Identity {
   name: string;
   healthUserId?: string;
   legacyUserId?: string;
+}
+
+/** A range of civil (local) times: `start` included, `end` excluded. */
+export interface CivilTimeInterval {
+  start: CivilDateTime;
+  end: CivilDateTime;
+}
+
+export interface DailyRollUpRequest {
+  range: CivilTimeInterval;
+  windowSizeDays?: number;
+  pageSize?: number;
+  pageToken?: string;
+}
+
+/** One window of a daily roll-up. Only the value for the rolled-up data type is set; only `total-calories` is modelled. */
+export interface DailyRollupDataPoint {
+  readonly civilStartTime?: CivilDateTime;
+  readonly civilEndTime?: CivilDateTime;
+  readonly totalCalories?: { readonly kcalSum?: number };
+}
+
+export interface DailyRollUpResponse {
+  rollupDataPoints?: DailyRollupDataPoint[];
+  nextPageToken?: string;
 }

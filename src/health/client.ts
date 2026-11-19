@@ -1,5 +1,5 @@
-import type { DataPoint, Identity, ListDataPointsResponse, Operation } from "./types";
-import { nutritionDayFilter, nutritionDaysFilter } from "../core/time";
+import type { DailyRollUpResponse, DataPoint, Identity, ListDataPointsResponse, Operation } from "./types";
+import { addCivilDays, civilDateOf, civilDateTime, nutritionDayFilter, nutritionDaysFilter } from "../core/time";
 import { describeError, logger, truncate } from "../debug/log";
 
 const log = logger("health-api");
@@ -77,6 +77,30 @@ export class HealthClient {
    */
   listOwnRecentNutritionLogs(count: number): Promise<DataPoint[]> {
     return this.listAll("users/me/dataTypes/nutrition-log/dataPoints", { dataSourceFamily: "users/me/dataSourceFamilies/self-sources" }, { pageSize: count, stopWhen: () => true });
+  }
+
+  /**
+   * Calories burnt (resting and active, from every source) on each civil day from `first` to `last`, both included,
+   * keyed by YYYY-MM-DD. With `until`, the last day stops at that moment's local clock time instead of its end: what
+   * was burnt so far today. A day with nothing recorded is left out. Needs the activity read scope (DR-46).
+   * `total-calories` can only be rolled up, not listed, and over at most 14 days.
+   */
+  async dailyCaloriesBurnt(first: string, last: string, until?: Date): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    const range = { start: civilDateTime(first), end: until ? civilDateTime(last, until) : civilDateTime(addCivilDays(last, 1)) };
+    let pageToken: string | undefined;
+    do {
+      const page: DailyRollUpResponse = await this.request("POST", "users/me/dataTypes/total-calories/dataPoints:dailyRollUp", {
+        body: { range, windowSizeDays: 1, ...(pageToken ? { pageToken } : {}) },
+      });
+      for (const point of page.rollupDataPoints ?? []) {
+        const kcal = point.totalCalories?.kcalSum;
+        // No one burns nothing in a day: 0 is a day without data.
+        if (point.civilStartTime && kcal !== undefined && kcal > 0) out.set(civilDateOf(point.civilStartTime), kcal);
+      }
+      pageToken = page.nextPageToken || undefined;
+    } while (pageToken);
+    return out;
   }
 
   createNutritionLog(point: DataPoint): Promise<Operation> {
@@ -197,7 +221,10 @@ export class HealthClient {
 
 /** Keeps successful responses readable in the log: counts for lists, the full object otherwise. */
 function summarize(json: unknown): unknown {
-  const page = json as { dataPoints?: unknown[]; nextPageToken?: string };
+  const page = json as { dataPoints?: unknown[]; rollupDataPoints?: unknown[]; nextPageToken?: string };
+  if (Array.isArray(page.rollupDataPoints)) {
+    return { rollupDataPoints: page.rollupDataPoints.length, nextPageToken: page.nextPageToken || undefined, first: page.rollupDataPoints[0] };
+  }
   if (Array.isArray(page.dataPoints)) {
     return { dataPoints: page.dataPoints.length, nextPageToken: page.nextPageToken || undefined, first: page.dataPoints[0] };
   }

@@ -613,3 +613,25 @@ rings keep the one accent.
 cards without their background and borders. The wash stays under 10%, so text keeps its contrast in both themes.
 **Reopen if.** A hue is mistaken for a state, such as the amber of logging on another day, or the owner wants the
 colours stronger, weaker or gone.
+
+### DR-46 Calories burnt, with an optional permission, are set against the energy eaten on the dashboard
+**Decision.** Sign-in also asks for `googlehealth.activity_and_fitness.readonly`, which the user may untick on
+Google's consent screen like the nutrition read scope (DR-04). With it, each week listing (DR-38) is joined by one
+`dailyRollUp` of `total-calories` over the same 7 days, today's window ending at the current local time (V13). The
+figures are drawn into the charts there are, not given a row of their own: under the day's energy, "of 2,300 kcal burnt
+so far" (or "burnt" for a past day); on the bar of energy by meal, a marker where the calories burnt fall, with an
+outlined gap up to it while less was eaten, and the difference in the legend; on each day's energy column, a line at
+its calories burnt, dashed for today, with the figure in the tooltip and a Burnt column in the table. The week's summary
+adds the average burnt over the complete days recorded, leaving today out. Without the scope nothing is asked and the
+dashboard is as before, with a "Show calories burnt" link in its note to sign in again and tick it. A failed roll-up
+only adds a note under the week's summary.
+**Why.** Owner request (19 November 2026): pull the total calories burnt to compare calories in with calories out;
+the connection must be optional, and skipped when the user doesn't agree; calories burnt should inform the graphs and
+the dashboard rather than be a row; "burnt so far" for today, because the current day is the only one the user can
+still act on.
+**Consequence.** One more request to Google Health per diary load, polling included, when the scope is granted. The
+OAuth consent screen's data access needs the new scope added (README). Today's figure lags behind the last device
+sync. The roll-up leaves out time a wearable was not worn; whether a day without one has a resting estimate is not
+known yet (V13). Wrist estimates of energy are rough, so a day's difference is a guide, not a measurement.
+**Reopen if.** V13's open points turn out otherwise (another scope, or today's figure projected to the day's end), the
+owner wants the time of the last sync shown, a target derived from the calories burnt, or a longer range than 14 days.

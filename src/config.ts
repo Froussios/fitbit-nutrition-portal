@@ -12,10 +12,16 @@ export const NUTRITION_READ_SCOPE = "https://www.googleapis.com/auth/googlehealt
 /** Create entries, and edit or delete the entries this app created. */
 export const NUTRITION_WRITE_SCOPE = "https://www.googleapis.com/auth/googlehealth.nutrition.writeonly";
 
+/**
+ * Read activity data, for the calories burnt that the dashboard sets against the energy eaten (DR-46). Optional: the
+ * user can untick it, and the dashboard then leaves calories burnt out.
+ */
+export const ACTIVITY_READ_SCOPE = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly";
+
 /** Adds an ID token to the sign-in: proof of who the user is, with no access to their data (DR-24). */
 export const OPENID_SCOPE = "openid";
 
-export const SCOPES = [OPENID_SCOPE, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE] as const;
+export const SCOPES = [OPENID_SCOPE, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE, ACTIVITY_READ_SCOPE] as const;
 
 const CLIENT_ID_KEY = "foodDiary.clientId";
 
