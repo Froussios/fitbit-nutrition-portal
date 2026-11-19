@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { FoodItem } from "../src/core/food";
 import { PORTION_PREFIX, selectableUnits } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, byMeal, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryDay, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
+import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, byMeal, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryDay, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, reconcilePending, repeatedNutritionLogPoint, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
 import type { DataPoint, MealType, NutritionLog } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
@@ -132,6 +132,41 @@ describe("copyNutritionLogPoint", () => {
   it("copies an entry with no serving or meal", () => {
     const bare = buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", time }, { id: "e-test-0003-smp-oats" });
     expect(copyNutritionLogPoint(bare.nutritionLog!, "e-test-0004-smp-oats").nutritionLog).toEqual(bare.nutritionLog);
+  });
+});
+
+describe("repeatedNutritionLogPoint", () => {
+  const original = buildNutritionLogPoint({ food: oats, quantity: 40, unit: "g", mealType: "BREAKFAST", time }, { id: "e-test-0001-smp-oats", servingUnits: { g: "units/gram" } });
+  const later = new Date("2026-11-19T18:05:30+11:00");
+
+  it("logs the same food, amount, meal and nutrients at the new time, for as long, under the new ID", () => {
+    const repeat = repeatedNutritionLogPoint(original.nutritionLog!, "e-test-0002-smp-oats", later);
+    const log = original.nutritionLog!;
+    expect(repeat.name).toBe("users/me/dataTypes/nutrition-log/dataPoints/e-test-0002-smp-oats");
+    expect(repeat.nutritionLog).toEqual({
+      ...log,
+      interval: { startTime: later.toISOString(), endTime: new Date(later.getTime() + 60_000).toISOString(), startUtcOffset: expect.stringMatching(/^-?\d+s$/), endUtcOffset: expect.stringMatching(/^-?\d+s$/) },
+    });
+    expect(toDiaryEntry(repeat)!.start).toEqual(later);
+  });
+
+  it("drops the read-only fields and another app's food reference, so the copy is an anonymous log", () => {
+    const listed: NutritionLog = {
+      ...original.nutritionLog!,
+      food: "users/me/foods/123",
+      interval: { ...original.nutritionLog!.interval, civilStartTime: { date: { year: 2026, month: 11, day: 1 } } },
+      serving: { ...original.nutritionLog!.serving!, foodMeasurementUnitDisplayName: "gram" },
+    };
+    const log = repeatedNutritionLogPoint(listed, "e-test-0003-m", later).nutritionLog!;
+    expect(log).not.toHaveProperty("food");
+    expect(log.interval).not.toHaveProperty("civilStartTime");
+    expect(log.serving).toEqual({ foodMeasurementUnit: "units/gram", amount: 40 });
+  });
+
+  it("gives an entry with no usable length the length of a new one", () => {
+    const log: NutritionLog = { ...original.nutritionLog!, interval: { ...original.nutritionLog!.interval, endTime: original.nutritionLog!.interval.startTime } };
+    const interval = repeatedNutritionLogPoint(log, "e-test-0004-m", later).nutritionLog!.interval;
+    expect(Date.parse(interval.endTime) - Date.parse(interval.startTime)).toBe(60_000);
   });
 });
 

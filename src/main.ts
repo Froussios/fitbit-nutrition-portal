@@ -13,9 +13,9 @@ import { CombinedCatalog } from "./food/combined-catalog";
 import genericsUrl from "./food/data/generics.json?url";
 import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
-import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, actionRefused, connectionBanner, deleteFailed, editNotConfirmed, oldEntryNotRemoved, undoNotConfirmed, type ConnectionState } from "./health/connection";
+import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, actionRefused, connectionBanner, deleteFailed, editNotConfirmed, oldEntryNotRemoved, repeatNotConfirmed, undoNotConfirmed, type ConnectionState } from "./health/connection";
 import { LoggedFoodsCatalog } from "./food/logged-catalog";
-import { buildNutritionLogPoint, buildPortionPoint, byTime, copyNutritionLogPoint, NUTRITION_LOG_PARENT, editedNutritionLogPoint, entryDay, findServingUnits, reconcilePending, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
+import { buildNutritionLogPoint, buildPortionPoint, byTime, copyNutritionLogPoint, NUTRITION_LOG_PARENT, editedNutritionLogPoint, entryDay, findServingUnits, reconcilePending, repeatedNutritionLogPoint, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
@@ -155,7 +155,10 @@ class App {
     (day) => this.showDay(day),
   );
   private readonly diaryStatus = el("p", { class: "status", role: "status" });
-  /** Says where an entry went after an edit moved it to another day, with a button to that day. Cleared when the day changes. */
+  /**
+   * Says where an entry went after an edit moved it to another day, or that one was logged again for today while another
+   * day is shown, with a button to that day. Cleared when the day changes.
+   */
   private readonly movedNotice = el("p", { class: "status moved-notice", role: "status", hidden: true });
   private readonly rowFailureList = el("div");
   /** Kept across renders, and messages come and go one at a time, so that screen readers announce only what is new. */
@@ -648,6 +651,35 @@ class App {
     await this.loadDay();
   }
 
+  /**
+   * Logs the same food, amount, meal and nutrients as `entry` again, today at the current time (DR-36), whichever day
+   * and app `entry` is from. The entry itself is left as it is.
+   */
+  private async repeatToday(entry: DiaryEntry) {
+    const log = entry.point.nutritionLog;
+    if (this.busy.has(entry.id) || !log) return;
+    const hadFocus = focusedRepeatId() === entry.id;
+    this.startRowAction(entry, "logging again…");
+    const point = repeatedNutritionLogPoint(log, copiedEntryId(entry.id), new Date());
+    appLog.info(`Logging ${entry.name} again for today`, { copy: point.name, mealType: log.mealType });
+    // The copy has no name for its unit until the API lists it, but the original did.
+    if (log.serving?.foodMeasurementUnitDisplayName) this.unitNames.set(log.serving.foodMeasurementUnit, log.serving.foodMeasurementUnitDisplayName);
+    try {
+      const { created } = await this.write(point);
+      this.catalog.merge(toLoggedFoods([created], this.clientId));
+      const copy = toDiaryEntry(created, this.diaryContext());
+      if (copy && entryDay(copy) === this.day()) this.entries = [...this.entries, copy].sort(byTime);
+      else if (copy) this.showOnOtherDay(`Logged ${entry.displayName} again for today.`, entryDay(copy));
+    } catch (e) {
+      appLog.error("Logging the entry again failed", describeError(e));
+      this.handleError(e, false);
+      this.showRowFailure(entry, isConnectionFailure(e) ? repeatNotConfirmed(entry.displayName) : actionRefused("log again", entry.displayName, refusalReason(e)));
+    }
+    this.busy.delete(entry.id);
+    this.renderDiary(undefined, undefined, hadFocus ? entry.id : undefined);
+    await this.loadDay();
+  }
+
   /** Turns a row into its editor. */
   private startEditing(entry: DiaryEntry) {
     if (this.editor) return;
@@ -732,9 +764,13 @@ class App {
 
   /** Says that `name` is now on `day`, with a button that shows that day. */
   private showMoved(name: string, day: string) {
-    const label = dayLabel(day, civilDate(new Date()));
-    const on = label === "Today" || label === "Yesterday" ? label.toLowerCase() : label;
-    replaceChildren(this.movedNotice, `Moved ${name} to ${on}. `, el("button", { type: "button", class: "link", onclick: () => this.showDay(day) }, `Show ${on}`));
+    const on = dayInWords(day);
+    this.showOnOtherDay(`Moved ${name} to ${on}.`, day);
+  }
+
+  /** Says `text` about an entry on `day`, which is not the day shown, with a button that shows that day. */
+  private showOnOtherDay(text: string, day: string) {
+    replaceChildren(this.movedNotice, `${text} `, el("button", { type: "button", class: "link", onclick: () => this.showDay(day) }, `Show ${dayInWords(day)}`));
     this.movedNotice.hidden = false;
   }
 
@@ -1319,7 +1355,7 @@ class App {
             "p",
             { class: "hint" },
             "Everything in your Google Health nutrition diary for the day, whichever app logged it. New entries go on the day shown. " +
-              "Only entries made by this app can be edited or deleted here. A deleted entry stays crossed out, with an undo button, until you reload the page.",
+              "Any entry can be logged again for today with the button beside it. Only entries made by this app can be edited or deleted here. A deleted entry stays crossed out, with an undo button, until you reload the page.",
           ),
         ),
       debugPanel,
@@ -1373,7 +1409,7 @@ class App {
    * Edit buttons are found separately, because a row's Delete has the first claim on `focusId`.
    * The controls of a row being edited are the same elements after the redraw, and get focus back too.
    */
-  private renderDiary(focusId = focusedEntryId(), editFocus = focusedEditId()) {
+  private renderDiary(focusId = focusedEntryId(), editFocus = focusedEditId(), repeatFocus = focusedRepeatId()) {
     const focused = document.activeElement;
     const inEditor = focused instanceof HTMLElement && this.diary.contains(focused) && focused.closest("tr.editing") ? focused : undefined;
     const scrollLeft = this.diary.querySelector(".table-wrap")?.scrollLeft ?? 0;
@@ -1401,11 +1437,13 @@ class App {
           onEdit: (e) => this.startEditing(e),
           onDelete: (e) => void this.remove(e),
           onUndo: (e) => void this.undoDelete(e),
+          onRepeat: (e) => void this.repeatToday(e),
         }),
     );
     this.diary.querySelector(".table-wrap")?.scrollTo({ left: scrollLeft });
     if (focusId) this.diary.querySelector<HTMLElement>(`[data-entry="${CSS.escape(focusId)}"]`)?.focus();
     else if (editFocus) this.diary.querySelector<HTMLElement>(`[data-entry-edit="${CSS.escape(editFocus)}"]`)?.focus();
+    else if (repeatFocus) this.diary.querySelector<HTMLElement>(`[data-entry-repeat="${CSS.escape(repeatFocus)}"]`)?.focus();
     else if (inEditor?.isConnected) inEditor.focus();
   }
 }
@@ -1418,6 +1456,17 @@ function focusedEntryId(): string | undefined {
 /** The entry whose Edit button has keyboard focus. */
 function focusedEditId(): string | undefined {
   return document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entryEdit"] : undefined;
+}
+
+/** The entry whose Log again button has keyboard focus. */
+function focusedRepeatId(): string | undefined {
+  return document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entryRepeat"] : undefined;
+}
+
+/** `day` as the end of a sentence: "today", "yesterday", or the date written out. */
+function dayInWords(day: string): string {
+  const label = dayLabel(day, civilDate(new Date()));
+  return label === "Today" || label === "Yesterday" ? label.toLowerCase() : label;
 }
 
 /** Why a delete, undo or edit failed. It may be read after signing in again, so an expired session says so in the past tense. */

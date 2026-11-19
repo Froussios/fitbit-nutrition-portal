@@ -428,3 +428,19 @@ country (`UTC`) fall back to the language. A user outside Australia gets product
 the candidates the Australian-ordered index offers; a fuller fix needs an index per country or a Worker (#42). Household
 measures (DR-06) and number formats are still Australian.
 **Reopen if.** The index is built per country, or a user's detected country is wrong often enough to want a setting.
+
+### DR-36 Any diary entry can be logged again for today
+**Decision.** Every row of the diary, on any day, has a Log again button beside Edit and Delete (or beside the lock, on
+another app's entry). It logs a new entry with the same name, amount, meal and nutrients, today at the current time and
+for as long as the original, under a new ID that keeps the original's source and food (`copiedEntryId`). The original is
+left as it is. When another day is shown, the note under the heading says the entry was logged again for today, with a
+button that shows today. A deleted row (which has Undo) and a meal prep share (which would need a portion of its batch)
+have no Log again button.
+**Why.** Owner request (19 November 2026): from the diary, pick a past entry and repeat it for today, rather than
+searching for the food and typing the amount again.
+**Consequence.** Another app's entry is copied as an anonymous log of this app's, so its reference to a Google `food`
+is left out, and the copy can be edited and deleted here. The current time can disagree with the meal (yesterday's
+breakfast, repeated in the evening, is still breakfast); the diary groups by meal and shows no time, and the copy can be
+edited like any other entry. Repeating an entry already on today logs a second one.
+**Reopen if.** Copies need another time (the original's clock time, or one picked), or several entries, such as a whole
+meal, should be repeated at once.

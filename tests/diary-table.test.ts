@@ -20,10 +20,11 @@ function entry(id = "e-abc-ab12-off-123"): DiaryEntry {
 
 function render(e: DiaryEntry, options: Partial<DiaryTableOptions> = {}) {
   const onEdit = vi.fn();
-  const table = renderDiaryTable({ entries: [e], pendingIds: new Set(), deleted: [], busy: new Map(), offline: false, onEdit, onDelete: vi.fn(), onUndo: vi.fn(), ...options });
+  const onRepeat = vi.fn();
+  const table = renderDiaryTable({ entries: [e], pendingIds: new Set(), deleted: [], busy: new Map(), offline: false, onEdit, onDelete: vi.fn(), onUndo: vi.fn(), onRepeat, ...options });
   document.body.replaceChildren(table);
   const row = table.querySelector("tbody tr")!;
-  return { onEdit, row };
+  return { onEdit, onRepeat, row };
 }
 
 const dblclick = (target: Element) => target.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
@@ -70,5 +71,39 @@ describe("diary table double-click", () => {
     const { onEdit, row } = render(e);
     dblclick(row.querySelectorAll("td")[1]!);
     expect(onEdit).not.toHaveBeenCalled();
+  });
+});
+
+describe("diary table Log again button", () => {
+  const repeatButton = (row: Element) => row.querySelector<HTMLButtonElement>("[data-entry-repeat]");
+
+  it("logs an entry this app logged again, from beside its Edit and Delete", () => {
+    const e = entry();
+    const { onRepeat, row } = render(e);
+    const buttons = [...row.querySelectorAll(".row-actions button")];
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual(["Log Oats again today", "Edit Oats", "Delete Oats"]);
+    repeatButton(row)!.click();
+    expect(onRepeat).toHaveBeenCalledWith(e);
+  });
+
+  it("is offered on an entry from another app, beside its lock", () => {
+    const e = { ...entry(), own: false };
+    const { onRepeat, row } = render(e);
+    expect(row.querySelector(".not-owned")).not.toBeNull();
+    repeatButton(row)!.click();
+    expect(onRepeat).toHaveBeenCalledWith(e);
+  });
+
+  it("is not offered on a deleted entry or a meal prep share", () => {
+    const e = entry();
+    expect(repeatButton(render(e, { entries: [], deleted: [e] }).row)).toBeNull();
+    expect(repeatButton(render({ ...e, ref: { source: "prep", id: "p1" } }).row)).toBeNull();
+  });
+
+  it("is disabled offline and while the row is busy", () => {
+    const e = entry();
+    expect(repeatButton(render(e, { offline: true }).row)!.disabled).toBe(true);
+    expect(repeatButton(render(e, { busy: new Map([[e.id, "logging again…"]]) }).row)!.disabled).toBe(true);
+    expect(repeatButton(render(e).row)!.disabled).toBe(false);
   });
 });

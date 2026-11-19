@@ -116,6 +116,21 @@ export function copyNutritionLogPoint(log: NutritionLog, id: string): DataPoint 
   return { name: `${NUTRITION_LOG_PARENT}/dataPoints/${id}`, nutritionLog: copy };
 }
 
+/**
+ * A new entry with the same food, amount, meal and nutrients as `log`, eaten at `time`: what repeating an entry from the
+ * diary logs (DR-36). It lasts as long as the original, with the local UTC offsets at `time`, as a new entry has. It is
+ * always anonymous, like every entry this app writes, so another app's reference to a Google `food` is left out.
+ */
+export function repeatedNutritionLogPoint(log: NutritionLog, id: string, time: Date): DataPoint {
+  const point = copyNutritionLogPoint(log, id);
+  const copy = point.nutritionLog!;
+  delete copy.food;
+  const length = Date.parse(log.interval.endTime) - Date.parse(log.interval.startTime);
+  const end = new Date(time.getTime() + (Number.isFinite(length) && length > 0 ? length : ENTRY_DURATION_MS));
+  copy.interval = { startTime: time.toISOString(), endTime: end.toISOString(), startUtcOffset: utcOffsetDuration(time), endUtcOffset: utcOffsetDuration(end) };
+  return point;
+}
+
 /** How much of a food an entry says was eaten. */
 export interface LoggedAmount {
   readonly amount: number;

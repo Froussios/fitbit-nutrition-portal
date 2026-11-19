@@ -19,6 +19,8 @@ export interface DiaryTableOptions {
   readonly onEdit: (entry: DiaryEntry) => void;
   readonly onDelete: (entry: DiaryEntry) => void;
   readonly onUndo: (entry: DiaryEntry) => void;
+  /** Logs the same food, amount and meal again, today at the current time (DR-36). */
+  readonly onRepeat: (entry: DiaryEntry) => void;
   /** What an empty day says. */
   readonly emptyText?: string;
 }
@@ -48,6 +50,22 @@ function pencilIcon(): SVGElement {
   return svg;
 }
 
+/** Two sheets, the front one with a plus: another of this entry. */
+function repeatIcon(): SVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("fill", "currentColor");
+  path.setAttribute("fill-rule", "evenodd");
+  path.setAttribute(
+    "d",
+    "M2.5 1A1.5 1.5 0 0 0 1 2.5v7A1.5 1.5 0 0 0 2.5 11H4V9.5H2.5v-7h7V4H11V2.5A1.5 1.5 0 0 0 9.5 1ZM6.5 5A1.5 1.5 0 0 0 5 6.5v7A1.5 1.5 0 0 0 6.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 13.5 5Zm2.75 2h1.5v2.25H13v1.5h-2.25V13h-1.5v-2.25H7v-1.5h2.25Z",
+  );
+  svg.append(path);
+  return svg;
+}
+
 /**
  * Stands in for the delete button on an entry from another app, which the write scope does not cover.
  * A tap or a key opens the explanation, since a title alone never shows on a touch screen.
@@ -69,7 +87,7 @@ function rowTag(id: string, deleted: ReadonlySet<string>, busy: ReadonlyMap<stri
   return text ? el("span", { class: "tag" }, text) : undefined;
 }
 
-export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo, emptyText = "Nothing logged today yet." }: DiaryTableOptions): HTMLElement {
+export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo, onRepeat, emptyText = "Nothing logged today yet." }: DiaryTableOptions): HTMLElement {
   if (entries.length === 0 && deleted.length === 0) {
     return el("p", { class: "empty" }, emptyText);
   }
@@ -96,6 +114,15 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
           const hasEdit = e.own && !deletedIds.has(e.id) && e.ref?.source !== "prep";
           const canEdit = !offline && !busy.has(e.id) && !editing;
           const editable = hasEdit && canEdit;
+          // Any entry can be logged again, whichever app logged it, but a meal prep share would need a portion of its batch.
+          const repeatButton =
+            !deletedIds.has(e.id) &&
+            e.ref?.source !== "prep" &&
+            el(
+              "button",
+              { type: "button", class: "icon repeat", "data-entry-repeat": e.id, title: offline ? "Logging needs a connection" : "Log again today", "aria-label": `Log ${e.displayName} again today`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onRepeat(e) },
+              repeatIcon(),
+            );
           return el(
             "tr",
             {
@@ -127,7 +154,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
                   ? editor.actions
                   : // The write scope only covers entries this app created.
                     !e.own
-                  ? notOwnedMark(e)
+                  ? [repeatButton, notOwnedMark(e)]
                   : deletedIds.has(e.id)
                     ? el(
                         "button",
@@ -136,6 +163,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
                         "↩\uFE0E",
                       )
                     : [
+                        repeatButton,
                         hasEdit &&
                         el(
                           "button",
