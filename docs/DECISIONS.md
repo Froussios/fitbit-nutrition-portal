@@ -569,3 +569,20 @@ is flagged only because 6 is 14 kcal short of 20). Per-serving values typed as p
 and the same goes for products like them.
 **Reopen if.** Flags turn up often on products that are right, the tolerance needs to differ by food type, or a
 flagged product should be hidden from search rather than ranked lower.
+
+### DR-43 A saved meal's ingredients are rows that stay open until the meal is saved
+**Decision.** In the saved meal builder, new or edited, each ingredient is a row with its own food search, amount and
+unit, and a ✕. Add ingredient adds an empty row; Enter in a row's amount goes on to the next row, and from the last
+one adds a row. Any row can change its food, amount or unit until the meal is saved. An empty row is left out; a row
+with text but no food chosen keeps the meal from being saved. A saved meal chosen in a row stays one row, in servings,
+and becomes copies of its ingredients when the meal is saved (DR-29). A row from the meal as saved, or from a draft,
+scales its own nutrients to another amount, or to a unit of the same kind (g to kg, or the same portion). Its food is
+loaded when the amount or unit is first focused, to offer the food's other portions and units, which take the
+catalogue's nutrients as they are now. Meal prep keeps its builder: one search that adds an ingredient to the list.
+**Why.** Owner request (19 November 2026): Add should not conclude an ingredient, but add a row to configure another,
+and every ingredient should stay open to editing until the meal is saved. The rows keep the nutrients an ingredient
+was saved with for as long as its unit allows, as ingredients always have (DR-29).
+**Consequence.** A draft holds each row's last good ingredients, so a saved meal chosen in a row comes back from a
+draft as its ingredients. An ingredient whose food has left the catalogue, or no longer has the unit it was saved in,
+can change its amount but only to units of the same kind.
+**Reopen if.** The owner wants meal prep built the same way, or a saved meal in a meal kept as a link to it.
