@@ -468,7 +468,9 @@ button.day-pick svg { display: block; width: 1em; height: 1em; }
   display: flex; align-items: center; padding: 0 8px;
   color: #ffffff; font-size: 0.8rem; font-weight: 600; white-space: nowrap;
 }
+/* Near-black where white would fall under 4.5:1: breakfast's yellow in both themes, dinner's light violet in the dark one. */
 .seg-breakfast { color: #0b0b0b; }
+@media (prefers-color-scheme: dark) { .seg-dinner { color: #0b0b0b; } }
 /* The column chart: an SVG scaled to its box, with a tooltip laid over it. */
 .chart-plot { position: relative; }
 .chart-plot svg { display: block; width: 100%; height: auto; overflow: visible; }

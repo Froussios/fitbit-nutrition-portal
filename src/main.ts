@@ -156,6 +156,8 @@ class App {
   /** A week listing was asked for while one was under way: it runs again when that one ends. */
   private weekReload = false;
   private weekError = "";
+  /** Counts sign-outs, so that a week listing started for one account is never kept for the next. */
+  private weekSession = 0;
   private readonly dayHeading = el("h2", { "aria-live": "polite" });
   private readonly previousDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Previous day", title: "Previous day", onclick: () => this.stepDay(-1) }, "←");
   private readonly nextDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Next day", title: "Next day", onclick: () => this.stepDay(1) }, "→");
@@ -563,12 +565,17 @@ class App {
     this.weekLoading = true;
     const day = this.day();
     const first = addCivilDays(day, -6);
+    const session = this.weekSession;
     try {
       const points = withoutEntries(await this.api.listNutritionLogsBetween(first, day), this.deletedIds);
-      if (day !== this.day()) return;
+      // Signed out meanwhile, or moved to another day: this listing is for neither.
+      if (session !== this.weekSession || day !== this.day()) return;
       const { stillPending } = reconcilePending(this.pending, points, this.clientId);
       const pending = withoutEntries(
-        stillPending.flatMap((key) => this.pending.get(key) ?? []),
+        stillPending.flatMap((key) => {
+          const point = this.pending.get(key);
+          return point ? [point] : [];
+        }),
         this.deletedIds,
       ).filter((p) => {
         const start = civilDate(new Date(p.nutritionLog!.interval.startTime));
@@ -579,11 +586,11 @@ class App {
       this.weekError = "";
     } catch (e) {
       appLog.error("Loading the week for the dashboard failed", describeError(e));
-      if (day === this.day()) this.weekError = isConnectionFailure(e) ? "The week could not be loaded. Check your connection and refresh." : errorMessage(e);
+      if (session === this.weekSession && day === this.day()) this.weekError = isConnectionFailure(e) ? "The week could not be loaded. Check your connection and refresh." : errorMessage(e);
     } finally {
       this.weekLoading = false;
       this.renderDashboard();
-      if (this.weekReload || day !== this.day()) {
+      if (this.weekReload || (session === this.weekSession && day !== this.day())) {
         this.weekReload = false;
         if (this.auth.isSignedIn) void this.loadWeek();
       }
@@ -1368,6 +1375,7 @@ class App {
     this.weekEntries = [];
     this.weekDay = undefined;
     this.weekError = "";
+    this.weekSession++;
     this.notice = "";
     this.connectError = "";
     this.accountCheck = undefined;
