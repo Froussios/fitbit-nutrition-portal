@@ -84,6 +84,29 @@ h2 { font-size: 1.15rem; margin-bottom: 12px; }
   margin-bottom: 16px;
 }
 .account { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; white-space: nowrap; }
+/* The gear, and the panel of settings it opens (DR-40). */
+.settings { position: relative; }
+.settings[hidden], .settings-panel[hidden] { display: none; }
+button.icon.settings-toggle { font-size: 1.25rem; }
+button.icon.settings-toggle:not(:disabled):hover, button.icon.settings-toggle[aria-expanded="true"] { color: var(--accent); }
+.settings-toggle svg { display: block; width: 1em; height: 1em; }
+.settings-panel {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  top: calc(100% + 4px);
+  width: max-content;
+  max-width: min(22rem, calc(100vw - 32px));
+  padding: 12px 16px;
+  white-space: normal;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.15);
+}
+.settings-panel h2 { font-size: 1rem; margin: 0 0 8px; }
+.settings-body { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.settings-body button.link { padding-inline: 0; }
 .energy-setting { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
 .energy-setting select { width: auto; }
 .ai-control { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }

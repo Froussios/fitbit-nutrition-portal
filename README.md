@@ -8,7 +8,7 @@ This is the MVP, a proof of concept (milestone M0):
 
 1. Sign in with Google and grant Google Health nutrition access (read and write).
 2. Log an entry from a small catalogue of local fake foods (written as Open Food Facts records) or from a
-   custom food, in g, ml, household measures or portions. Amounts can be typed with their unit, such as `90 g` or `1 cup`. A setting in the header lets Chrome's on-device model
+   custom food, in g, ml, household measures or portions. Amounts can be typed with their unit, such as `90 g` or `1 cup`. A setting (behind the gear in the header) lets Chrome's on-device model
    read what the app's rules refuse, such as a mistyped unit, and you check the result before it is logged.
 3. See a day's whole Google Health nutrition diary, whichever app logged each entry, with amounts and
    totals. Arrows beside the day step back to earlier days, a calendar button jumps to any day, a Today button jumps back, and new entries go on the day shown: the log button turns amber and names the day when it isn't today.

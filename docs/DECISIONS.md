@@ -199,6 +199,7 @@ stays until it is dismissed or the action is tried again, so that a refresh cann
 **Reopen if.** Deleted entries need to survive a reload, or [#18](https://github.com/Froussios/fitbit-nutrition-portal/issues/18) shows that the original ID can be reused.
 
 ### DR-21 Energy is shown in one unit, chosen in the page header
+Revised by DR-40: the control is in the settings panel behind the header's gear.
 **Decision.** The diary, the log form's preview and the food search show energy in either kcal or kJ, not both. A control
 in the page header chooses which, kcal by default, and the choice is kept in `localStorage` on each device. Google Health
 still stores kcal. A custom food's energy can still be typed in either unit, whatever the setting.
@@ -272,6 +273,7 @@ showing is what counts.
 **Reopen if.** Refused input turns out to be common in real use.
 
 ### DR-26 An on-device model can read what the rules refuse, behind a setting, and cannot supply a number or a guess
+Revised by DR-40: the tickbox is in the settings panel behind the header's gear.
 **Decision.** A "Use AI processing of input" tickbox in the page header turns on Chrome's built-in model. It is off by default,
 kept in `localStorage` on each device, and ticking it starts the model's download, with progress shown. Unticked, the model is
 never used, even if installed. If the browser or computer cannot run it, the box is disabled with the reason. The model is
@@ -501,3 +503,15 @@ guess for `Chobani`. A diet version stored under the same bare name (`Cola (Coca
 Different products under one name and brand whose energy is within 10% now show as one.
 **Reopen if.** Collapsed entries hide products people look for by name, or a better tie-break than popularity is
 needed (energy agreeing with the macros, or with the group's median).
+
+### DR-40 Settings live in a panel behind a gear in the header
+**Decision.** The header shows only the title, Sign out and a gear button. The gear opens a small panel under it with
+the settings: the energy unit (DR-21), the AI tickbox (DR-26) and, in builds with no client ID built in, the link to
+the OAuth client ID setup screen. The panel closes on the gear, Escape (which gives focus back to the gear), or a click
+or focus outside it, and a redraw of the page leaves it as it was. With nothing to set (signed out, client ID built in),
+there is no gear. Sign out stays in the header, since it is an action, not a setting.
+**Why.** Owner request (19 November 2026): settings should not be always visible; move them to a popup panel or a new
+page and leave a gear behind as the link. A panel was chosen over a page because the settings are few and change what
+the current page shows, so it stays in view while they change.
+**Consequence.** Changing a setting takes one more click. The AI download's progress shows only while the panel is open.
+**Reopen if.** The settings outgrow a small panel, or some need explaining at length: then a settings page.
