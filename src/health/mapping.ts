@@ -375,6 +375,9 @@ export interface DiaryEntry {
   readonly increment?: LoggedAmount;
 }
 
+/** Whether this app logged the entry from a saved meal (DR-29), which has no amount of its own (DR-44). */
+export const isSavedMeal = (e: Pick<DiaryEntry, "ref">) => e.ref?.source === "meal";
+
 const NUTRIENT_BY_GOOGLE = new Map<string, NutrientKey>(
   NUTRIENT_KEYS.flatMap((k) => {
     const g = NUTRIENTS[k].google;

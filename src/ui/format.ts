@@ -1,7 +1,7 @@
 import { kcalToKj, type NutrientProfile } from "../core/nutrients";
 import { formatNumber } from "../core/units";
 import { getEnergyUnit, type EnergyUnit } from "./energy-unit";
-import type { DiaryEntry } from "../health/mapping";
+import { isSavedMeal, type DiaryEntry } from "../health/mapping";
 
 /** An amount of energy in the chosen unit, without the unit's name. */
 export const fmtEnergy = (kcal: number, unit: EnergyUnit = getEnergyUnit()) => formatNumber(unit === "kj" ? kcalToKj(kcal) : kcal, 0);
@@ -12,7 +12,7 @@ export const fmtGrams = (g: number | undefined) => (g === undefined ? "–" : `$
 export const SAVED_MEAL_AMOUNT = "saved meal";
 
 /** An entry's amount as text: its serving, "saved meal" for a saved meal, else "–" for an amount that wasn't recorded. */
-export const amountText = (e: Pick<DiaryEntry, "amount" | "ref">) => e.amount ?? (e.ref?.source === "meal" ? SAVED_MEAL_AMOUNT : "–");
+export const amountText = (e: Pick<DiaryEntry, "amount" | "ref">) => e.amount ?? (isSavedMeal(e) ? SAVED_MEAL_AMOUNT : "–");
 
 export function summary(p: NutrientProfile, unit: EnergyUnit = getEnergyUnit()): string {
   const n = p.nutrients;

@@ -3,9 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AiState } from "../src/ai/amount-ai";
 import type { ChatModel, ChatSession } from "../src/ai/chat-model";
 import type { Proposal } from "../src/ai/chat-tools";
-import { createChatPanel, type AiSwitch, type ApplyResult, type ChatPanelHost } from "../src/ui/chat-panel";
+import { createChatPanel, entryLine, type AiSwitch, type ApplyResult, type ChatPanelHost } from "../src/ui/chat-panel";
 import { createProposalCard } from "../src/ui/chat-proposal";
 import { renderDiaryTable } from "../src/ui/diary-table";
+import type { DiaryEntry } from "../src/health/mapping";
 import { bread, entryOf, hostWith, oats, TODAY, withoutEnergy } from "./chat-fixtures";
 
 const answer = (fields: Record<string, string>) => JSON.stringify({ text: "", day: "", from: "", to: "", query: "", food: "", entry: "", amount: "", meal: "", ...fields });
@@ -252,5 +253,15 @@ describe("diary row chat button", () => {
   it("is not there while the chat can't be used", () => {
     const table = renderDiaryTable({ ...options, entries: [breakfast()] });
     expect(table.querySelector("button.ask")).toBeNull();
+  });
+});
+
+describe("entryLine", () => {
+  it("says an entry from a saved meal is one, where other entries without an amount say nothing", () => {
+    const e = entryOf(oats, 40, "g", `${TODAY}T08:05:00`, { mealType: "BREAKFAST" });
+    const meal = { ...e, displayName: "Porridge", amount: undefined, ref: { source: "meal", id: "m1" } } as DiaryEntry;
+    expect(entryLine(meal, TODAY)).toBe("Porridge · saved meal · Breakfast · Today, 8:05 am");
+    expect(entryLine({ ...meal, ref: undefined } as DiaryEntry, TODAY)).toBe("Porridge · Breakfast · Today, 8:05 am");
+    expect(entryLine(e, TODAY)).toBe("Oats · 40 g · Breakfast · Today, 8:05 am");
   });
 });
