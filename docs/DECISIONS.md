@@ -482,3 +482,22 @@ a little from the energy logged: labels round, fibre gives less energy than othe
 the three. A day with nothing logged is an empty column, and does not lower the week's average.
 **Reopen if.** Targets (an energy or protein goal) are wanted, the week should be a calendar week or a longer range, or
 the extra listing costs too much quota.
+
+### DR-39 Search collapses products that only repeat their brand, and branded energy within 10%
+**Decision.** In the word index, a branded product is a duplicate of a better-ranked one with the same words in name
+and brand when their kcal per 100 are within 10%, or 5 kcal for low-energy foods (before, they had to round to the same
+whole kcal). A product whose name adds no word to its brand (`Chobani (Chobani)`, `Cola (Coca-Cola)`, `Milk (Milk)`)
+is collapsed with others of the same brand whatever its energy, as products with no brand already are (DR-15).
+Which of the two really is the brand isn't judged: the rule only asks whether the row carries one piece of
+information. A brand that adds to the name is the usual case (`Greek Yogurt (Chobani)`) and is not collapsed. The rest
+stay reachable by barcode ([FOOD_SEARCH.md](FOOD_SEARCH.md#53-slimming-the-dataset)).
+**Why.** Owner report (19 November 2026): searching `chobani` showed six `Chobani (Chobani)` rows from 38 to 167 kcal,
+with nothing on screen, or in Open Food Facts, to tell them apart; `Coca Cola (Coca Cola)` filled five rows between 39
+and 45 kcal. Removing products that only repeat their brand was ruled out: `Vegemite (Vegemite)` and `Nutella (Nutella)`
+are real products found this way. #48 found 84% of branded same-name groups agree within 10% or 10 kcal.
+**Consequence.** A name that only repeats its brand shows its best-ranked entry in the DR-15 order; among identical
+names that is the most scanned, sold in the user's country and most complete, which is right for `Nutella` and still a
+guess for `Chobani`. A diet version stored under the same bare name (`Cola (Coca-Cola)` at 0 kcal) is hidden too.
+Different products under one name and brand whose energy is within 10% now show as one.
+**Reopen if.** Collapsed entries hide products people look for by name, or a better tie-break than popularity is
+needed (energy agreeing with the macros, or with the group's median).
