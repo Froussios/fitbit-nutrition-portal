@@ -1,5 +1,5 @@
 /**
- * What the chat's on-device model may answer, and how the app describes the diary to it (DR-40).
+ * What the chat's on-device model may answer, and how the app describes the diary to it (DR-41).
  *
  * The model answers every prompt with one action as JSON, held to a schema with `responseConstraint`. The Prompt API's
  * own tool calls are not used: they are specified, but not in every Chrome that runs the model, and a schema is. The app runs the action and sends back what it found, until the model replies or proposes a change.

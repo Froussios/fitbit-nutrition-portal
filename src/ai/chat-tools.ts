@@ -1,5 +1,5 @@
 /**
- * Runs the chat model's actions (DR-40). Reading and searching happen straight away. A log, change or delete is only
+ * Runs the chat model's actions (DR-41). Reading and searching happen straight away. A log, change or delete is only
  * a proposal: the user sees it in full and accepts or rejects it, and only the app's own code writes to the diary.
  *
  * Amounts go through the same rules as typed ones (DR-25), so the model cannot decide a unit the rules would not.

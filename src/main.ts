@@ -27,6 +27,7 @@ import { amountAi } from "./ai/amount-ai";
 import { createAiSetting } from "./ui/ai-setting";
 import { createRowEditor, type RowEditor } from "./ui/row-editor";
 import { createDebugPanel } from "./ui/debug-panel";
+import { createSettingsMenu } from "./ui/settings-menu";
 import { createDayPicker } from "./ui/day-picker";
 import { batchProfile, isFinished, PORTION_SUFFIX, portionName, portionOfEntry, portionProfile, randomId, type PortionEntry, type Prep, type PrepIngredient, type PrepPortion } from "./core/prep";
 import type { MealType } from "./health/types";
@@ -150,8 +151,13 @@ class App {
   /** The diary row being edited. Its controls outlive redraws of the table, so a refresh keeps what the user typed. */
   private editor?: RowEditor;
   private readonly aiSetting = createAiSetting(amountAi);
-  /** The chat on the right of the page (DR-40). Kept for the life of the page, outside the redrawn root. */
+  /** The chat on the right of the page (DR-41). Kept for the life of the page, outside the redrawn root. */
   private readonly chat: ChatPanel;
+  /** The gear in the header and its panel of settings (DR-40). */
+  private readonly settings = createSettingsMenu();
+  /** Made on first use, then kept, so that a redraw never replaces the select while it is in use. */
+  private energyControl?: HTMLElement;
+  private clientIdLink?: HTMLElement;
   private readonly diary = el("div", { class: "diary" });
   /** The dashboard's charts (DR-38), redrawn with the diary. */
   private readonly dashboard = el("div");
@@ -902,7 +908,7 @@ class App {
     return undefined;
   }
 
-  // Chat (DR-40) ----------------------------------------------------------------------------------
+  // Chat (DR-41) ----------------------------------------------------------------------------------
 
   /**
    * A day's entries as the diary would show them, read afresh for the chat: listed ones, with this session's deletes
@@ -1505,6 +1511,14 @@ class App {
 
   private render() {
     const signedIn = this.auth.isSignedIn;
+    // Redrawing moves the settings panel, which would drop the focus of a control in it.
+    const active = document.activeElement;
+    const settingsFocus = active instanceof HTMLElement && this.settings.element.contains(active) ? active : undefined;
+    this.settings.setItems([
+      signedIn && (this.energyControl ??= this.energySetting()),
+      signedIn && this.aiSetting,
+      !isClientIdBuiltIn() && (this.clientIdLink ??= el("button", { type: "button", class: "link", onclick: () => (this.settings.close(), renderSetup(true)) }, "OAuth client ID")),
+    ]);
     const header = el(
       "header",
       { class: "top" },
@@ -1512,13 +1526,12 @@ class App {
       el(
         "div",
         { class: "account" },
-        signedIn && this.energySetting(),
-        signedIn && this.aiSetting,
         signedIn && this.ready && this.chat.toggle,
         signedIn && el("button", { type: "button", onclick: () => this.signOut() }, "Sign out"),
-        !isClientIdBuiltIn() && el("button", { type: "button", class: "link", onclick: () => renderSetup(true) }, "Settings"),
+        this.settings.element,
       ),
     );
+    queueMicrotask(() => settingsFocus?.isConnected && settingsFocus.focus());
 
     if (!signedIn) {
       this.stopEditing();

@@ -28,7 +28,7 @@ export interface DiaryTableOptions {
   readonly onIncrement?: (entry: DiaryEntry) => void;
   /** What an empty day says. */
   readonly emptyText?: string;
-  /** Opens the chat about this entry (DR-40). Left out while the chat can't be used, and the rows then have no chat button. */
+  /** Opens the chat about this entry (DR-41). Left out while the chat can't be used, and the rows then have no chat button. */
   readonly onAsk?: (entry: DiaryEntry) => void;
 }
 

@@ -61,7 +61,7 @@ flowchart LR
 | Google Health client | `src/health/` | Thin `fetch` wrapper typed from the discovery document. Maps a `LogDraft` to a `DataPoint` and a `DataPoint` to a `DiaryEntry`. |
 | Food data | `src/food/` | `FoodCatalog` interface, implemented in M0 by `LocalFoodCatalog` over fake data (section 6). |
 | Auth | `src/auth/`, `public/auth-callback.*` | Popup sign-in returning an access token and an ID token (section 5). |
-| On-device AI | `src/ai/` | Chrome's built-in model, used only if the user ticks the setting. Its answers about amounts are checked by rules in `src/core/amount-answer.ts` (DR-26). It also runs the chat (section 4.7, DR-40). |
+| On-device AI | `src/ai/` | Chrome's built-in model, used only if the user ticks the setting. Its answers about amounts are checked by rules in `src/core/amount-answer.ts` (DR-26). It also runs the chat (section 4.7, DR-41). |
 | UI | `src/ui/`, `src/main.ts` | Plain TypeScript and DOM. Three screens; no framework yet. |
 
 Hosting is the static build (`vite build`), deployed to GitHub Pages by `.github/workflows/ci.yml`.
@@ -104,7 +104,7 @@ A `FoodItem` stores nutrients **per 100 g or per 100 ml** (its `basis`), plus na
 | meal | `mealType` (`BREAKFAST`, `LUNCH`, `DINNER`, `SNACK`), left out when the user picks no meal, which is the default. The legacy `ANYTIME` is never written. |
 | food name | `foodDisplayName`, e.g. `Rolled oats` or `Cola soft drink (Sample Drinks Co)` |
 | amount | `serving` = the API's *gram* or *millilitre* `food-measurement-unit` plus an amount, keeping the kind of unit the user chose (250 g of milk stays 250 g). If the API's units cannot be resolved, the amount goes into the name instead (`Rolled oats (40 g)`). |
-| energy | `energy.kcal` (`userProvidedUnit: KILOCALORIE`). The UI shows either kcal or kJ, as chosen in the page header (DR-21). |
+| energy | `energy.kcal` (`userProvidedUnit: KILOCALORIE`). The UI shows either kcal or kJ, as chosen in the settings behind the header's gear (DR-21, DR-40). |
 | fat, carbohydrate | `totalFat`, `totalCarbohydrate` (top-level fields) |
 | other nutrients | `nutrients[]`: protein, sugars, fibre, saturated, trans, mono- and poly-unsaturated fat, cholesterol, sodium, potassium, calcium, iron, caffeine, vitamin C |
 
@@ -280,7 +280,7 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
 
 ### 4.7 Chat
 
-DR-40. The chat is a panel on the right of the page (`src/ui/chat-panel.ts`), opened from the header, or from a diary
+DR-41. The chat is a panel on the right of the page (`src/ui/chat-panel.ts`), opened from the header, or from a diary
 row's speech-bubble button for a new chat about that entry. It uses Chrome's built-in model only while the AI setting
 is on and the model is ready.
 

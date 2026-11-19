@@ -112,7 +112,7 @@ describe("chat panel", () => {
     const t = setup([], "off");
     t.panel.open();
     expect(t.input.disabled).toBe(true);
-    expect(t.panel.element.textContent).toContain("Tick “Use AI processing of input”");
+    expect(t.panel.element.textContent).toContain("Tick “Use AI processing of input” in the settings");
     t.ai.set("unsupported");
     expect(t.panel.toggle.hidden).toBe(true);
   });

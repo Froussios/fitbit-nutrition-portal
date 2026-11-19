@@ -1,5 +1,5 @@
 /**
- * The chat on the right of the page (DR-40). It talks to Chrome's on-device model, which reads the diary and searches
+ * The chat on the right of the page (DR-41). It talks to Chrome's on-device model, which reads the diary and searches
  * foods through the app, and proposes logs, changes and deletes that wait for the user to accept them.
  *
  * Opened from the header, it is a plain chat. Opened from a diary row, it starts a new chat about that entry.
@@ -69,9 +69,9 @@ function unavailableText(state: AiState): string {
     case "downloading":
       return `The model is downloading (${Math.round(state.progress * 100)}%). The chat starts when it is ready.`;
     case "failed":
-      return "The model could not start. Tick “Use AI processing of input” at the top of the page to try again.";
+      return "The model could not start. Tick “Use AI processing of input” in the settings, behind the gear at the top of the page, to try again.";
     default:
-      return "Tick “Use AI processing of input” at the top of the page to use the chat.";
+      return "Tick “Use AI processing of input” in the settings, behind the gear at the top of the page, to use the chat.";
   }
 }
 
