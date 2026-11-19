@@ -31,6 +31,8 @@ export function createEntryCard(logPanel: HTMLElement, prepPanel: HTMLElement, m
 
   function show(tab: EntryTab, focus = false) {
     current = shown().includes(tab) ? tab : "log";
+    // The card takes the colour of the tab shown.
+    element.dataset.tab = current;
     for (const key of ORDER) {
       const selected = key === current;
       tabs[key].setAttribute("aria-selected", String(selected));

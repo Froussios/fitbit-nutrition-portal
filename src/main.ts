@@ -1576,7 +1576,7 @@ class App {
       this.ready &&
         el(
           "section",
-          { class: "card" },
+          { class: "card diary-card" },
           el(
             "div",
             { class: "card-head" },
@@ -1597,7 +1597,7 @@ class App {
       this.ready &&
         el(
           "section",
-          { class: "card" },
+          { class: "card dashboard-card" },
           el("h2", {}, "Dashboard"),
           this.dashboard,
           el(
@@ -1640,7 +1640,7 @@ class App {
   private renderConnectError(): HTMLElement {
     return el(
       "section",
-      { class: "card" },
+      { class: "card error-card" },
       el("h2", {}, "Could not connect to Google Health"),
       el("p", { class: "status error" }, this.connectError),
       el(

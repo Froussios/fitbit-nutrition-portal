@@ -598,3 +598,18 @@ recorded. A label says where the entry came from without inventing a number: "1 
 **Consequence.** The label is read from the entry's ID, so it shows only on this app's entries. It does not say how
 many servings an entry holds after it was scaled.
 **Reopen if.** The owner wants meal prep shares marked too, or a scaled meal to show its multiple.
+
+### DR-45 Each part of the page has a colour of its own
+**Decision.** Each card has a hue (`--tint` in `src/styles.css`). It shows as a stripe along the card's top, in its
+heading, as a faint wash behind it, and in its alternate rows, chips and hovers. Log food is green, Meal prep teal and
+Saved meals violet: the card above the diary takes the hue of the tab shown, and each tab has a dot in its own. The
+diary is blue, the dashboard rose and the chat slate. Sign-in and the developer setup take the log's green, the debug log
+stays gray and a connection error is red. The
+dashboard's tiles take the colours of their series in the charts (energy in the dashboard's own), and a chat proposal
+takes the colour of what it does: green to log, the diary's blue to change, red to delete. Buttons, links and focus
+rings keep the one accent.
+**Why.** Owner request (19 November 2026): subtle colour coding for the page's sections and cards.
+**Consequence.** Colours are mixed with `color-mix()` (every major browser since 2023); an older browser would draw
+cards without their background and borders. The wash stays under 10%, so text keeps its contrast in both themes.
+**Reopen if.** A hue is mistaken for a state, such as the amber of logging on another day, or the owner wants the
+colours stronger, weaker or gone.
