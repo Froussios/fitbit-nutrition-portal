@@ -149,7 +149,7 @@ class App {
   private readonly dayHeading = el("h2", { "aria-live": "polite" });
   private readonly previousDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Previous day", title: "Previous day", onclick: () => this.stepDay(-1) }, "←");
   private readonly nextDayButton = el("button", { type: "button", class: "day-step", "aria-label": "Next day", title: "Next day", onclick: () => this.stepDay(1) }, "→");
-  private readonly todayButton = el("button", { type: "button", class: "day-today", onclick: () => this.showDay(undefined) }, "Today");
+  private readonly todayButton = el("button", { type: "button", onclick: () => this.showDay(undefined) }, "Today");
   private readonly dayPicker = createDayPicker(
     () => ({ day: this.day(), today: civilDate(new Date()) }),
     (day) => this.showDay(day),
