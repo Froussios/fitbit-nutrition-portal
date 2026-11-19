@@ -513,5 +513,6 @@ there is no gear. Sign out stays in the header, since it is an action, not a set
 **Why.** Owner request (19 November 2026): settings should not be always visible; move them to a popup panel or a new
 page and leave a gear behind as the link. A panel was chosen over a page because the settings are few and change what
 the current page shows, so it stays in view while they change.
-**Consequence.** Changing a setting takes one more click. The AI download's progress shows only while the panel is open.
+**Consequence.** Changing a setting takes one more click. The AI download's progress, and its notes that the model is
+not available here or could not start, show only while the panel is open.
 **Reopen if.** The settings outgrow a small panel, or some need explaining at length: then a settings page.
