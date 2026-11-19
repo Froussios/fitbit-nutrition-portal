@@ -1355,7 +1355,7 @@ class App {
             "p",
             { class: "hint" },
             "Everything in your Google Health nutrition diary for the day, whichever app logged it. New entries go on the day shown. " +
-              "Any entry can be logged again for today with the button beside it. Only entries made by this app can be edited or deleted here. A deleted entry stays crossed out, with an undo button, until you reload the page.",
+              "Any entry but a meal prep share can be logged again for today with the button beside it. Only entries made by this app can be edited or deleted here. A deleted entry stays crossed out, with an undo button, until you reload the page.",
           ),
         ),
       debugPanel,
