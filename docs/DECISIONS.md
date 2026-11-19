@@ -591,7 +591,8 @@ can change its amount but only to units of the same kind.
 **Decision.** Each card has a hue (`--tint` in `src/styles.css`). It shows as a stripe along the card's top, in its
 heading, as a faint wash behind it, and in its alternate rows, chips and hovers. Log food is green, Meal prep teal and
 Saved meals violet: the card above the diary takes the hue of the tab shown, and each tab has a dot in its own. The
-diary is blue, the dashboard rose and the chat slate; the debug log stays gray and a connection error is red. The
+diary is blue, the dashboard rose and the chat slate. Sign-in and the developer setup take the log's green, the debug log
+stays gray and a connection error is red. The
 dashboard's tiles take the colours of their series in the charts (energy in the dashboard's own), and a chat proposal
 takes the colour of what it does: green to log, the diary's blue to change, red to delete. Buttons, links and focus
 rings keep the one accent.
