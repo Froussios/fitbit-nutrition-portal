@@ -79,13 +79,6 @@ tr.editing .amount-note { margin: 4px 0 0; min-width: 11em; white-space: normal;
   padding: 16px;
   margin-bottom: 16px;
 }
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 12px;
-}
 
 .field {
   display: flex;
@@ -407,6 +400,8 @@ button.on-hand-item { display: flex; align-items: baseline; gap: 8px; padding: 4
 .meal-amount { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
 .meal-card > .status:empty { display: none; }
 
+/* The diary's header: the day bar, and Refresh on the right. */
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; --bar-button: 2.5rem; }
 /* The diary's day, between the arrows that step to the day before and after (#19). */
 .day-nav { display: flex; align-items: center; gap: 8px; }
 .day-nav h2 { margin: 0; min-width: 7em; text-align: center; }
@@ -414,7 +409,6 @@ button.on-hand-item { display: flex; align-items: baseline; gap: 8px; padding: 4
  * Every button in the diary's header, Refresh included, is one height. The arrows and the calendar are squares
  * of that height, and the buttons in words share one padding, so no button in the row stands out by its size.
  */
-.card-head { --bar-button: 2.5rem; }
 .card-head button { display: inline-flex; align-items: center; justify-content: center; height: var(--bar-button); padding: 0 14px; line-height: 1; }
 .card-head button.day-step, .card-head button.day-pick { width: var(--bar-button); padding: 0; }
 /* The calendar opens the browser's date picker from a field kept out of sight under it. */
