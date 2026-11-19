@@ -265,6 +265,8 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
 * **Logging** writes one entry like a meal prep portion: the meal's name, the summed nutrients, no `serving`, and the
   ID `e-<time>-<rand>-meal-<mealId>`. The database is not written. The entry can be edited ("× this entry", DR-22) and
   deleted like any other the app wrote. Ingredients come from `catalog` foods, which never include a meal or a prep.
+  Its diary row, and the chat's description of it, show **saved meal** for the amount rather than the "–" of an
+  entry that recorded none (DR-44).
 * **A meal in a meal.** The builder's searches, and the one under a chosen meal in Log food, also find saved meals. One
   is added as copies of its ingredients (in the builder, when the meal is saved: until then it is one row in servings), scaled to the servings typed (`expandMeal` in `src/core/meal.ts`), so there is
   no nesting to resolve and later edits to it change nothing here. A meal holds at most 60 ingredients, as a prep does.
@@ -298,7 +300,11 @@ is on and the model is ready.
   exact values.
 * **Handles.** Entries and foods reach the model as `E1`, `F1`… (`ChatHandles`), one per entry or food for the whole
   chat, never as IDs. An entry's handle is taken back once the chat edits or deletes it, since that entry has gone. The instructions are sent once per chat as `initialPrompts`, which the Prompt API never evicts,
-  so the entry a chat was opened on stays known as `E1`.
+  so the entry a chat was opened on stays known as `E1`. Each message in such a chat also starts with that entry's line,
+  since a small model weighs what is next to the question most, until the chat changes or deletes the entry.
+* **Missing values.** The diary reads an entry with no energy as 0 kcal. The chat says "energy not recorded" instead,
+  marks the entry incomplete, and says what a day's total, or a range's average, leaves out (energy, protein, carbs or
+  fat not recorded), so the model can't take a gap for a zero. The approval card does the same.
 * **Writing.** Accept calls `applyFromChat` in `src/main.ts`: it reads the entry's day again, refuses if the entry has
   gone or changed, and then logs, edits or deletes it with the same methods as the diary's buttons, so pending rows,
   undo, meal prep portions and failure alerts behave the same.

@@ -1,8 +1,8 @@
 import { sumProfiles } from "../core/nutrients";
-import { byMeal, mealLabel, type DiaryEntry } from "../health/mapping";
+import { byMeal, isSavedMeal, mealLabel, type DiaryEntry } from "../health/mapping";
 import { el } from "./dom";
 import { formatAmount } from "../core/units";
-import { energyLabel, fmtEnergy, fmtGrams } from "./format";
+import { amountText, energyLabel, fmtEnergy, fmtGrams } from "./format";
 import type { RowEditor } from "./row-editor";
 
 export interface DiaryTableOptions {
@@ -106,6 +106,15 @@ function rowTag(id: string, deleted: ReadonlySet<string>, busy: ReadonlyMap<stri
   return text ? el("span", { class: "tag" }, text) : undefined;
 }
 
+/**
+ * The Amount cell outside the editor: the serving, a mark for a saved meal, which has no amount of its own (DR-44), or
+ * "–" when the entry recorded none.
+ */
+function amountCell(e: DiaryEntry): HTMLElement | string {
+  const text = amountText(e);
+  return e.amount === undefined && isSavedMeal(e) ? el("span", { class: "from-meal", title: "Logged from a saved meal, as one entry with no amount of its own" }, text) : text;
+}
+
 export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo, onRepeat, today = false, onIncrement, emptyText = "Nothing logged today yet.", onAsk }: DiaryTableOptions): HTMLElement {
   if (entries.length === 0 && deleted.length === 0) {
     return el("p", { class: "empty" }, emptyText);
@@ -177,7 +186,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
             },
             el("td", {}, editor ? el("div", { class: "when-edit" }, editor.meal, editor.day) : mealLabel(e.mealType)),
             el("td", {}, e.displayName, rowTag(e.id, deletedIds, busy, pendingIds)),
-            el("td", { class: "num" }, editor ? editor.amount : (e.amount ?? "–")),
+            el("td", { class: "num" }, editor ? editor.amount : amountCell(e)),
             el("td", { class: "num" }, editor ? editor.energy : fmtEnergy(e.profile.energyKcal)),
             el("td", { class: "num" }, editor ? editor.protein : fmtGrams(e.profile.nutrients.protein)),
             el("td", { class: "num" }, editor ? editor.carbs : fmtGrams(e.profile.nutrients.carbohydrates)),

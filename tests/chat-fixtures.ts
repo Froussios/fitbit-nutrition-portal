@@ -36,6 +36,12 @@ export function entryOf(food: FoodItem, quantity: number, unit: string, time: st
   return toDiaryEntry(withWriter as typeof point, { ownClientId: OWN_CLIENT, unitNames })!;
 }
 
+/** The same entry with no energy stated, as another app may log one. The diary reads it as 0 kcal. */
+export function withoutEnergy(e: DiaryEntry): DiaryEntry {
+  const { energy: _energy, ...log } = e.point.nutritionLog!;
+  return toDiaryEntry({ ...e.point, nutritionLog: log }, { ownClientId: OWN_CLIENT, unitNames })!;
+}
+
 /** A host with a fixed diary, by day. */
 export function hostWith(days: Record<string, DiaryEntry[]>, foods: FoodItem[] = [oats, bread]): ChatHost & { reads: string[] } {
   const reads: string[] = [];

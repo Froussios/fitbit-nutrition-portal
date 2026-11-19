@@ -8,13 +8,14 @@
 import type { AiState } from "../ai/amount-ai";
 import { ChatAgent, type ChatEvent, type TurnEnd } from "../ai/chat-agent";
 import type { ChatModel, ChatSession } from "../ai/chat-model";
-import { chatInstructions, clockTime } from "../ai/chat-protocol";
+import { chatInstructions, clockTime, focusPrompt } from "../ai/chat-protocol";
 import { createChatTools, outcomeText, type ChatHost, type ChatTools, type Proposal } from "../ai/chat-tools";
 import { dayLabel } from "../core/time";
 import { describeError, logger } from "../debug/log";
-import { entryDay, mealLabel, type DiaryEntry } from "../health/mapping";
+import { entryDay, isSavedMeal, mealLabel, type DiaryEntry } from "../health/mapping";
 import { createProposalCard, type ProposalCard } from "./chat-proposal";
 import { el } from "./dom";
+import { SAVED_MEAL_AMOUNT } from "./format";
 
 const log = logger("chat");
 
@@ -80,7 +81,8 @@ function unavailableText(state: AiState): string {
 /** One line naming an entry the way the diary shows it. */
 export function entryLine(e: DiaryEntry, today: string): string {
   const meal = e.mealType === "MEAL_TYPE_UNSPECIFIED" ? "no meal" : mealLabel(e.mealType);
-  return [e.displayName, e.amount, meal, `${dayLabel(entryDay(e), today)}, ${clockTime(e.start)}`].filter(Boolean).join(" · ");
+  const amount = e.amount ?? (isSavedMeal(e) ? SAVED_MEAL_AMOUNT : undefined);
+  return [e.displayName, amount, meal, `${dayLabel(entryDay(e), today)}, ${clockTime(e.start)}`].filter(Boolean).join(" · ");
 }
 
 export function createChatPanel(model: ChatModel, ai: AiSwitch, host: ChatPanelHost): ChatPanel {
@@ -233,13 +235,24 @@ export function createChatPanel(model: ChatModel, ai: AiSwitch, host: ChatPanelH
     if (!c.agent?.pending) input.focus();
   };
 
+  /**
+   * The entry the chat is about, as the model was last told it, repeated with each message: a small model weighs what is
+   * next to the question more than the system prompt. None once the entry has been changed or deleted.
+   */
+  const focusLine = (c: Conversation): string | undefined => {
+    if (!c.focus) return undefined;
+    const handle = c.tools.handles.handleOf(c.focus.id);
+    const entry = handle && c.tools.handles.entry(handle);
+    return handle && entry ? focusPrompt(handle, entry, host.energyUnit()) : undefined;
+  };
+
   const submit = (text: string) => {
     if (!available() || running) return;
     const c = conversation ?? begin();
     if (c.agent?.pending) return;
     add(el("div", { class: "msg msg-user" }, text));
     input.value = "";
-    void turn(c, (agent, signal) => agent.send(text, signal, onEvent(c)));
+    void turn(c, (agent, signal) => agent.send(text, signal, onEvent(c), focusLine(c)));
   };
 
   const decide = async (c: Conversation, card: ProposalCard, proposal: Proposal, accept: boolean) => {

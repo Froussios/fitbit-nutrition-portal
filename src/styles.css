@@ -306,6 +306,17 @@ tr.deleted td:not(:last-child) { color: var(--muted); text-decoration: line-thro
   border: 1px solid var(--notice-border);
 }
 
+/* A saved meal's amount (DR-44): a label, not a number, so it doesn't read as a missing one. */
+.from-meal {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
 code { font-size: 0.9em; overflow-wrap: anywhere; }
 details { margin-bottom: 12px; }
 summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }

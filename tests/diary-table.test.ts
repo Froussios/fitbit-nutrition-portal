@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import type { FoodItem } from "../src/core/food";
-import { buildNutritionLogPoint, toDiaryEntry, type DiaryEntry } from "../src/health/mapping";
+import { newEntryId } from "../src/core/ids";
+import { buildNutritionLogPoint, buildPortionPoint, toDiaryEntry, type DiaryEntry } from "../src/health/mapping";
+import { amountText } from "../src/ui/format";
 import { renderDiaryTable, type DiaryTableOptions } from "../src/ui/diary-table";
 
 const UNIT_G = "users/me/dataTypes/food-measurement-unit/dataPoints/g";
@@ -135,5 +137,38 @@ describe("diary table + button", () => {
     const e = entry();
     expect(plus(render(e, { today: true, onIncrement: vi.fn(), offline: true }).row)!.disabled).toBe(true);
     expect(plus(render(e, { today: true, onIncrement: vi.fn(), busy: new Map([[e.id, "adding…"]]) }).row)!.disabled).toBe(true);
+  });
+});
+
+describe("diary table Amount", () => {
+  const amountCell = (row: Element) => row.querySelectorAll("td")[2]!;
+  const savedMeal = () => {
+    const id = newEntryId({ source: "meal", id: "m1" });
+    const point = buildPortionPoint({ name: "Porridge", profile: { energyKcal: 300, nutrients: { protein: 10 } }, time: new Date("2026-11-07T01:00:00Z") }, id);
+    return toDiaryEntry(point)!;
+  };
+
+  it("shows the serving an entry was logged with", () => {
+    expect(amountCell(render(entry()).row).textContent).toBe("40 g");
+  });
+
+  it("marks a saved meal, which has no amount of its own, instead of showing it as missing", () => {
+    const e = savedMeal();
+    expect(e.amount).toBeUndefined();
+    const mark = amountCell(render(e).row).querySelector(".from-meal")!;
+    expect(mark.textContent).toBe("saved meal");
+    expect(mark.getAttribute("title")).toContain("saved meal");
+    expect(amountText(e)).toBe("saved meal");
+  });
+
+  it("still shows a dash for an entry that recorded no amount", () => {
+    const e: DiaryEntry = { ...entry(), amount: undefined } as DiaryEntry;
+    const prep: DiaryEntry = { ...e, ref: { source: "prep", id: "p1" } };
+    for (const x of [e, prep, { ...e, own: false, ref: undefined } as DiaryEntry]) {
+      const cell = amountCell(render(x).row);
+      expect(cell.textContent).toBe("–");
+      expect(cell.querySelector(".from-meal")).toBeNull();
+      expect(amountText(x)).toBe("–");
+    }
   });
 });
