@@ -36,8 +36,9 @@ const energyValue = (kcal: number) => (getEnergyUnit() === "kj" ? kcalToKj(kcal)
 const energy = (kcal: number) => `${fmtEnergy(kcal)} ${energyLabel()}`;
 const energyShown = (value: number) => `${formatNumber(value, 0)} ${energyLabel()}`;
 
-function stat(label: string, value: string): HTMLElement {
-  return el("div", { class: "stat" }, el("div", { class: "stat-label" }, label), el("div", { class: "stat-value" }, value));
+/** `tint`: the tile's colour, the same as its series in the charts. */
+function stat(label: string, value: string, tint: string): HTMLElement {
+  return el("div", { class: `stat stat-${tint}` }, el("div", { class: "stat-label" }, label), el("div", { class: "stat-value" }, value));
 }
 
 /** "Thu 19": a column's label. */
@@ -57,7 +58,7 @@ function daySection(day: string, today: string, entries: readonly DashboardEntry
     "section",
     { class: "dash-day" },
     heading,
-    el("div", { class: "stats" }, stat("Energy", energy(t.energyKcal)), ...MACROS.map((m) => stat(MACRO_NAMES[m], grams(t.grams[m])))),
+    el("div", { class: "stats" }, stat("Energy", energy(t.energyKcal), "energy"), ...MACROS.map((m) => stat(MACRO_NAMES[m], grams(t.grams[m]), m))),
     segmentedBar({
       title: "Energy by macronutrient",
       series: MACRO_SERIES,
