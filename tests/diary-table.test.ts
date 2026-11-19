@@ -107,3 +107,33 @@ describe("diary table Log again button", () => {
     expect(repeatButton(render(e).row)!.disabled).toBe(false);
   });
 });
+
+describe("diary table + button", () => {
+  const plus = (row: Element) => row.querySelector<HTMLButtonElement>("[data-entry-increment]");
+
+  it("shows on today's entries what it adds, first in the row, and adds it", () => {
+    const e = entry();
+    const onIncrement = vi.fn();
+    const { row } = render(e, { today: true, onIncrement });
+    const button = plus(row)!;
+    expect(button.textContent).toBe("+40 g");
+    expect(button.getAttribute("aria-label")).toBe(`Add 40 g to ${e.displayName}`);
+    expect(row.querySelector(".row-actions button")).toBe(button);
+    button.click();
+    expect(onIncrement).toHaveBeenCalledWith(e);
+  });
+
+  it("is not on another day, another app's entry, or a deleted one", () => {
+    const e = entry();
+    const onIncrement = vi.fn();
+    expect(plus(render(e, { onIncrement }).row)).toBeNull();
+    expect(plus(render({ ...e, own: false, increment: undefined } as DiaryEntry, { today: true, onIncrement }).row)).toBeNull();
+    expect(plus(render(e, { today: true, onIncrement, entries: [], deleted: [e] }).row)).toBeNull();
+  });
+
+  it("is disabled offline and while the row is busy", () => {
+    const e = entry();
+    expect(plus(render(e, { today: true, onIncrement: vi.fn(), offline: true }).row)!.disabled).toBe(true);
+    expect(plus(render(e, { today: true, onIncrement: vi.fn(), busy: new Map([[e.id, "adding…"]]) }).row)!.disabled).toBe(true);
+  });
+});

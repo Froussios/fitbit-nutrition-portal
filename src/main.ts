@@ -2,7 +2,7 @@ import "./styles.css";
 import { GoogleAuth, SignInRequiredError, SignInSupersededError } from "./auth/google-auth";
 import { getClientId, isClientIdBuiltIn, NUTRITION_READ_SCOPE, NUTRITION_WRITE_SCOPE, SCOPES, setClientId } from "./config";
 import { canReload, foodLabel } from "./core/food";
-import { copiedEntryId, idFromName, newEntryId } from "./core/ids";
+import { copiedEntryId, entryStep, idFromName, newEntryId } from "./core/ids";
 import { addCivilDays, civilDate, dayLabel, onCivilDate } from "./core/time";
 import { userCountry } from "./core/countries";
 import { dayFromUrl, urlWithDay } from "./core/day-url";
@@ -13,9 +13,9 @@ import { CombinedCatalog } from "./food/combined-catalog";
 import genericsUrl from "./food/data/generics.json?url";
 import { StaticFoodCatalog } from "./food/static-catalog";
 import { HealthApiError, HealthClient } from "./health/client";
-import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, actionRefused, connectionBanner, deleteFailed, editNotConfirmed, oldEntryNotRemoved, repeatNotConfirmed, undoNotConfirmed, type ConnectionState } from "./health/connection";
+import { CONNECT_FAILED, ConnectionMonitor, DIARY_NOT_LOADED, LOG_NOT_CONFIRMED, actionRefused, connectionBanner, deleteFailed, editNotConfirmed, incrementNotConfirmed, oldEntryNotRemoved, repeatNotConfirmed, undoNotConfirmed, type ConnectionState } from "./health/connection";
 import { LoggedFoodsCatalog } from "./food/logged-catalog";
-import { buildNutritionLogPoint, buildPortionPoint, byTime, copyNutritionLogPoint, NUTRITION_LOG_PARENT, editedNutritionLogPoint, entryDay, findServingUnits, reconcilePending, repeatedNutritionLogPoint, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
+import { buildNutritionLogPoint, buildPortionPoint, byTime, copyNutritionLogPoint, countedStep, incrementedNutritionLogPoint, stepAfterEdit, NUTRITION_LOG_PARENT, editedNutritionLogPoint, entryDay, findServingUnits, reconcilePending, repeatedNutritionLogPoint, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
@@ -539,7 +539,8 @@ class App {
   }
 
   private async log(draft: LogDraft) {
-    const id = newEntryId(draft.food.ref);
+    // A portion or household measure is recorded in the ID, so that + adds one more of it (DR-37).
+    const id = newEntryId(draft.food.ref, undefined, undefined, countedStep(draft.food, draft.unit));
     let point: DataPoint;
     try {
       point = buildNutritionLogPoint(draft, { id, servingUnits: this.servingUnits });
@@ -680,6 +681,49 @@ class App {
     await this.loadDay();
   }
 
+  /**
+   * Adds the entry's step to its amount (DR-37): a corrected copy, then a delete of the original, as an edit does (DR-22).
+   * The copy records the step, so that an entry that steps by its amount as logged keeps adding that much.
+   */
+  private async increment(entry: DiaryEntry) {
+    const log = entry.point.nutritionLog;
+    const step = entry.increment;
+    if (this.busy.has(entry.id) || !log || !step) return;
+    const hadFocus = focusedIncrementId() === entry.id;
+    let point: DataPoint;
+    try {
+      point = incrementedNutritionLogPoint(log, step.amount, { id: copiedEntryId(entry.id, undefined, undefined, step.amount), servingUnits: this.servingUnits, unitNames: this.unitNames });
+    } catch (e) {
+      appLog.error("Could not build the larger entry", describeError(e));
+      this.showRowFailure(entry, actionRefused("add to", entry.displayName, errorMessage(e)));
+      return;
+    }
+    this.startRowAction(entry, "adding…");
+    appLog.info(`Adding ${step.amount} ${step.unit} to ${entry.name}`, { replacement: point.name });
+    // The replacement has no name for its unit until the API lists it, but the original did.
+    if (log.serving?.foodMeasurementUnitDisplayName) this.unitNames.set(log.serving.foodMeasurementUnit, log.serving.foodMeasurementUnitDisplayName);
+    let written: { key: string; created: DataPoint };
+    try {
+      written = await this.write(point);
+    } catch (e) {
+      appLog.error("Adding to the entry failed", describeError(e));
+      this.handleError(e, false);
+      this.busy.delete(entry.id);
+      this.showRowFailure(entry, isConnectionFailure(e) ? incrementNotConfirmed(entry.displayName) : actionRefused("add to", entry.displayName, refusalReason(e)));
+      this.renderDiary(undefined, undefined, undefined, hadFocus ? entry.id : undefined);
+      return;
+    }
+    const { key, created } = written;
+    // No wait since the write: a listing that still has the original must not match the replacement to it.
+    this.deletedIds.add(entry.id);
+    this.catalog.merge(toLoggedFoods([created], this.clientId));
+    const replacement = toDiaryEntry(created, this.diaryContext());
+    const here = replacement && entryDay(replacement) === this.day() ? replacement : undefined;
+    this.entries = [...this.entries.filter((e) => e.id !== entry.id), ...(here ? [here] : [])].sort(byTime);
+    this.renderDiary(undefined, undefined, undefined, hadFocus ? key : undefined);
+    void this.removeReplaced(entry);
+  }
+
   /** Turns a row into its editor. */
   private startEditing(entry: DiaryEntry) {
     if (this.editor) return;
@@ -715,7 +759,8 @@ class App {
     if (this.busy.has(entry.id) || !log) return;
     let point: DataPoint;
     try {
-      point = editedNutritionLogPoint(log, edit, { id: copiedEntryId(entry.id), servingUnits: this.servingUnits, unitNames: this.unitNames });
+      const step = stepAfterEdit(log, edit.amount, entryStep(entry.id), this.unitNames);
+      point = editedNutritionLogPoint(log, edit, { id: copiedEntryId(entry.id, undefined, undefined, step), servingUnits: this.servingUnits, unitNames: this.unitNames });
     } catch (e) {
       appLog.error("Could not build the edited entry", describeError(e));
       this.showRowFailure(entry, actionRefused("edit", entry.displayName, errorMessage(e)));
@@ -1355,7 +1400,7 @@ class App {
             "p",
             { class: "hint" },
             "Everything in your Google Health nutrition diary for the day, whichever app logged it. New entries go on the day shown. " +
-              "Any entry but a meal prep share can be logged again for today with the button beside it. Only entries made by this app can be edited or deleted here. A deleted entry stays crossed out, with an undo button, until you reload the page.",
+              "Any entry but a meal prep share can be logged again for today with the button beside it, and on today, + adds one more of what was logged to this app's entries. Only entries made by this app can be edited or deleted here. A deleted entry stays crossed out, with an undo button, until you reload the page.",
           ),
         ),
       debugPanel,
@@ -1409,7 +1454,7 @@ class App {
    * Edit buttons are found separately, because a row's Delete has the first claim on `focusId`.
    * The controls of a row being edited are the same elements after the redraw, and get focus back too.
    */
-  private renderDiary(focusId = focusedEntryId(), editFocus = focusedEditId(), repeatFocus = focusedRepeatId()) {
+  private renderDiary(focusId = focusedEntryId(), editFocus = focusedEditId(), repeatFocus = focusedRepeatId(), incrementFocus = focusedIncrementId()) {
     const focused = document.activeElement;
     const inEditor = focused instanceof HTMLElement && this.diary.contains(focused) && focused.closest("tr.editing") ? focused : undefined;
     const scrollLeft = this.diary.querySelector(".table-wrap")?.scrollLeft ?? 0;
@@ -1438,12 +1483,15 @@ class App {
           onDelete: (e) => void this.remove(e),
           onUndo: (e) => void this.undoDelete(e),
           onRepeat: (e) => void this.repeatToday(e),
+          today: day === today,
+          onIncrement: (e) => void this.increment(e),
         }),
     );
     this.diary.querySelector(".table-wrap")?.scrollTo({ left: scrollLeft });
     if (focusId) this.diary.querySelector<HTMLElement>(`[data-entry="${CSS.escape(focusId)}"]`)?.focus();
     else if (editFocus) this.diary.querySelector<HTMLElement>(`[data-entry-edit="${CSS.escape(editFocus)}"]`)?.focus();
     else if (repeatFocus) this.diary.querySelector<HTMLElement>(`[data-entry-repeat="${CSS.escape(repeatFocus)}"]`)?.focus();
+    else if (incrementFocus) this.diary.querySelector<HTMLElement>(`[data-entry-increment="${CSS.escape(incrementFocus)}"]`)?.focus();
     else if (inEditor?.isConnected) inEditor.focus();
   }
 }
@@ -1461,6 +1509,11 @@ function focusedEditId(): string | undefined {
 /** The entry whose Log again button has keyboard focus. */
 function focusedRepeatId(): string | undefined {
   return document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entryRepeat"] : undefined;
+}
+
+/** The entry whose + button has keyboard focus. */
+function focusedIncrementId(): string | undefined {
+  return document.activeElement instanceof HTMLElement ? document.activeElement.dataset["entryIncrement"] : undefined;
 }
 
 /** `day` as the end of a sentence: "today", "yesterday", or the date written out. */

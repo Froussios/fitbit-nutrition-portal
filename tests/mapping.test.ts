@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { FoodItem } from "../src/core/food";
 import { PORTION_PREFIX, selectableUnits } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, byMeal, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryDay, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, reconcilePending, repeatedNutritionLogPoint, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
+import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, buildPortionPoint, byMeal, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryDay, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, countedStep, incrementedNutritionLogPoint, stepAfterEdit, reconcilePending, repeatedNutritionLogPoint, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
 import type { DataPoint, MealType, NutritionLog } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
@@ -167,6 +167,65 @@ describe("repeatedNutritionLogPoint", () => {
     const log: NutritionLog = { ...original.nutritionLog!, interval: { ...original.nutritionLog!.interval, endTime: original.nutritionLog!.interval.startTime } };
     const interval = repeatedNutritionLogPoint(log, "e-test-0004-m", later).nutritionLog!.interval;
     expect(Date.parse(interval.endTime) - Date.parse(interval.startTime)).toBe(60_000);
+  });
+});
+
+describe("the + button's step (DR-37)", () => {
+  const bread: FoodItem = { ref: { source: "manual", id: "bread" }, name: "Bread", basis: "g", per100: { energyKcal: 250, nutrients: { protein: 9 } }, portions: [{ name: "slice", amount: 35, unit: "g" }] };
+  const UNIT_G = "units/gram";
+  const unitNames = new Map([[UNIT_G, "gram"]]);
+  const logBread = (quantity: number, unit: string, id = "e-test-0001-man-bread") => buildNutritionLogPoint({ food: bread, quantity, unit, mealType: "LUNCH", time }, { id, servingUnits: { g: UNIT_G } });
+
+  it("is one portion or household measure, and nothing for other units", () => {
+    expect(countedStep(bread, `${PORTION_PREFIX}slice`)).toBe(35);
+    expect(countedStep(bread, "cup")).toBe(250);
+    expect(countedStep(bread, "tsp")).toBe(5);
+    expect(countedStep(bread, "g")).toBeUndefined();
+    expect(countedStep(bread, "oz")).toBeUndefined();
+    expect(countedStep(bread, `${PORTION_PREFIX}loaf`)).toBeUndefined();
+  });
+
+  it("shows on this app's entries: the recorded step, else the amount as logged", () => {
+    expect(toDiaryEntry(logBread(2, `${PORTION_PREFIX}slice`, `e-test-0001${(3500).toString(36)}-man-bread`), { unitNames })!.increment).toEqual({ amount: 35, unit: "g" });
+    expect(toDiaryEntry(logBread(90, "g"), { unitNames })!.increment).toEqual({ amount: 90, unit: "g" });
+    // Without the API's units the amount is in the name, which is read the same way.
+    expect(toDiaryEntry(buildNutritionLogPoint({ food: bread, quantity: 90, unit: "g", time }, { id: "e-test-0001-man" }))!.increment).toEqual({ amount: 90, unit: "g" });
+  });
+
+  it("is not on another app's entry, a meal prep share, or an entry with no amount", () => {
+    const other: DataPoint = { ...logBread(90, "g", "1234567890"), dataSource: { application: { packageName: "com.google.fitbit" } } };
+    expect(toDiaryEntry(other, { unitNames })!.increment).toBeUndefined();
+    const share = buildPortionPoint({ name: "Chili (1/6)", profile: { energyKcal: 500, nutrients: {} }, time }, "e-test-0001-prep-abc");
+    expect(toDiaryEntry(share)!.increment).toBeUndefined();
+    const meal = buildPortionPoint({ name: "Lunch bowl", profile: { energyKcal: 500, nutrients: {} }, time }, "e-test-0001-meal-abc");
+    expect(toDiaryEntry(meal)!.increment).toBeUndefined();
+  });
+
+  it("adds the step to the amount and scales every value with it, keeping the meal, time and unit", () => {
+    const original = logBread(70, "g");
+    const larger = incrementedNutritionLogPoint(original.nutritionLog!, 35, { id: "e-test-0002-man-bread", unitNames });
+    const log = larger.nutritionLog!;
+    expect(log.serving).toEqual({ foodMeasurementUnit: UNIT_G, amount: 105 });
+    expect(log.energy?.kcal).toBeCloseTo(262.5, 1);
+    expect(log.mealType).toBe("LUNCH");
+    expect(log.interval.startTime).toBe(original.nutritionLog!.interval.startTime);
+    expect(larger.name).toMatch(/e-test-0002-man-bread$/);
+  });
+
+  it("refuses an entry with no amount", () => {
+    const meal = buildPortionPoint({ name: "Lunch bowl", profile: { energyKcal: 500, nutrients: {} }, time }, "e-test-0001-meal-abc");
+    expect(() => incrementedNutritionLogPoint(meal.nutritionLog!, 10, { id: "e-test-0002-meal-abc" })).toThrow();
+  });
+
+  it("after an edit: one of a counted unit, else the old step while the unit stays, else none", () => {
+    const log = logBread(70, "g").nutritionLog!;
+    expect(stepAfterEdit(log, undefined, 35, unitNames)).toBe(35);
+    expect(stepAfterEdit(log, undefined, undefined, unitNames)).toBeNull();
+    expect(stepAfterEdit(log, { quantity: 3, unit: `${PORTION_PREFIX}slice`, food: bread }, undefined, unitNames)).toBe(35);
+    expect(stepAfterEdit(log, { quantity: 120, unit: "g" }, 35, unitNames)).toBe(35);
+    expect(stepAfterEdit(log, { quantity: 120, unit: "g" }, undefined, unitNames)).toBeNull();
+    // A cup of bread is measured in millilitres, so a step in grams no longer applies.
+    expect(stepAfterEdit(log, { quantity: 300, unit: "ml", food: { ...bread, densityGPerMl: 0.5 } }, 35, unitNames)).toBeNull();
   });
 });
 

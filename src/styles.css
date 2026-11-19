@@ -142,6 +142,9 @@ button.not-owned:not(:disabled):hover { color: var(--text); }
  * place, and nothing moves.
  */
 .row-actions { display: flex; justify-content: flex-end; min-width: 8.25rem; }
+/* The + button says what it adds ("+250 ml"), so it is as wide as its text, on today's rows only. */
+button.icon.increment { width: auto; min-width: 2.75rem; padding: 0 6px; font-size: 0.85rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+button.icon.increment:not(:disabled):hover { color: var(--accent); }
 .not-owned-note {
   max-width: min(22em, calc(100vw - 32px));
   padding: 10px 14px;

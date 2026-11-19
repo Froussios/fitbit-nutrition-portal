@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 /**
- * Logging a diary entry again for today (DR-36), driven through the whole app with a fake Google Health API that lists
+ * Logging a diary entry again for today (DR-36), and adding to one with + (DR-37), driven through the whole app with a fake Google Health API that lists
  * each day's entries by their local civil start, as the real day filter does.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FoodItem } from "../src/core/food";
+import { entryStep } from "../src/core/ids";
 import { addCivilDays, civilDate } from "../src/core/time";
 import { buildNutritionLogPoint } from "../src/health/mapping";
 
@@ -29,6 +30,10 @@ function fakeGoogleHealth() {
   diary.set("1234567890", { ...other, nutritionLog: { ...other.nutritionLog!, food: "users/me/foods/42" }, dataSource: { application: { packageName: "com.google.fitbit" } } } as Stored);
   const early = buildNutritionLogPoint({ food: custom, quantity: 30, unit: "g", time: todayMorning, mealType: "BREAKFAST" }, { id: "e-early-cd34-m" });
   diary.set("e-early-cd34-m", { ...early, dataSource: { application: { googleWebClientId: CLIENT } } } as Stored);
+  // Logged as 2 cups: its ID records a cup, 250 ml.
+  const milkId = `e-milk-ab12${(25000).toString(36)}-man`;
+  const milk = buildNutritionLogPoint({ food: { ...custom, name: "Milk", basis: "ml" }, quantity: 500, unit: "ml", time: todayMorning, mealType: "BREAKFAST" }, { id: milkId });
+  diary.set(milkId, { ...milk, dataSource: { application: { googleWebClientId: CLIENT } } } as Stored);
   const reply = (status: number, body?: unknown) => new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
   async function fetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
@@ -38,7 +43,11 @@ function fakeGoogleHealth() {
     if (url.host !== "health.googleapis.com") return reply(404, "");
     if (url.pathname.endsWith("/identity")) return reply(200, { healthUserId: "1" });
     if (url.pathname.includes("food-measurement-unit")) return reply(200, { dataPoints: [] });
-    if (method === "POST" && !url.pathname.endsWith(":batchDelete")) {
+    if (url.pathname.endsWith(":batchDelete")) {
+      for (const name of body.names as string[]) diary.delete(name.split("/").pop()!);
+      return reply(200, { done: true });
+    }
+    if (method === "POST") {
       if (failCreate) return reply(400, { error: { code: 400, message: "Invalid nutrition log", status: "INVALID_ARGUMENT" } });
       const id = String(body.name).split("/").pop()!;
       const stored = { ...body, dataSource: { application: { googleWebClientId: CLIENT } } };
@@ -138,11 +147,11 @@ describe("logging an entry again for today", () => {
 
   it("adds the copy to today's diary when today is shown", async () => {
     const { diary } = await startApp();
-    expect(rows()).toEqual(["Toast (30 g)"]);
+    expect(rows()).toEqual(["Toast (30 g)", "Milk (500 ml)"]);
     button(/^Log Toast \(30 g\) again today$/)!.click();
     await settle();
-    expect(rows()).toEqual(["Toast (30 g)", "Toast (30 g)"]);
-    expect(onDay(diary, civilDate(new Date()))).toHaveLength(2);
+    expect(rows()).toEqual(["Toast (30 g)", "Milk (500 ml)", "Toast (30 g)"]);
+    expect(onDay(diary, civilDate(new Date()))).toHaveLength(3);
     expect((document.querySelector(".moved-notice") as HTMLElement).hidden).toBe(true);
   });
 
@@ -152,7 +161,53 @@ describe("logging an entry again for today", () => {
     button(/^Log Toast \(60 g\) again today$/)!.click();
     await settle();
     expect(document.querySelector(".row-alert")?.textContent).toContain('Could not log again "Toast (60 g)"');
-    expect(onDay(services.diary, civilDate(new Date()))).toHaveLength(1);
+    expect(onDay(services.diary, civilDate(new Date()))).toHaveLength(2);
     expect(button(/^Log Toast \(60 g\) again today$/)!.disabled).toBe(false);
+  });
+});
+
+describe("adding to an entry with +", () => {
+  it("adds the amount as logged, and keeps adding that much", async () => {
+    const { diary } = await startApp();
+    const plus = () => [...document.querySelectorAll<HTMLButtonElement>("[data-entry-increment]")].find((b) => b.getAttribute("aria-label") === "Add 30 g to Toast (30 g)");
+    expect(plus()!.textContent).toBe("+30 g");
+    plus()!.click();
+    await settle();
+    expect(rows().sort()).toEqual(["Milk (500 ml)", "Toast (60 g)"]);
+    const today = civilDate(new Date());
+    const toast = () => [...diary.entries()].filter(([, p]) => p.nutritionLog.foodDisplayName?.startsWith("Toast") && civilDate(new Date(p.nutritionLog.interval.startTime)) === today);
+    expect(toast()).toHaveLength(1);
+    expect(entryStep(toast()[0]![0])).toBe(30);
+    expect(toast()[0]![1].nutritionLog.energy?.kcal).toBe(150);
+    expect(toast()[0]![1].nutritionLog.mealType).toBe("BREAKFAST");
+
+    const again = [...document.querySelectorAll<HTMLButtonElement>("[data-entry-increment]")].find((b) => b.getAttribute("aria-label") === "Add 30 g to Toast (60 g)")!;
+    again.click();
+    await settle();
+    expect(rows().sort()).toEqual(["Milk (500 ml)", "Toast (90 g)"]);
+    expect(toast()).toHaveLength(1);
+  });
+
+  it("adds one of the unit an entry was logged in", async () => {
+    await startApp();
+    const plus = [...document.querySelectorAll<HTMLButtonElement>("[data-entry-increment]")].find((b) => b.getAttribute("aria-label") === "Add 250 ml to Milk (500 ml)")!;
+    expect(plus.textContent).toBe("+250 ml");
+    plus.click();
+    await settle();
+    expect(rows().sort()).toEqual(["Milk (750 ml)", "Toast (30 g)"]);
+  });
+
+  it("is only on today", async () => {
+    await startApp(addCivilDays(civilDate(new Date()), -1));
+    expect(document.querySelector("[data-entry-increment]")).toBeNull();
+  });
+
+  it("says so when Google Health refuses the larger entry, and keeps the original", async () => {
+    const services = await startApp();
+    services.failCreates();
+    [...document.querySelectorAll<HTMLButtonElement>("[data-entry-increment]")].find((b) => b.textContent === "+30 g")!.click();
+    await settle();
+    expect(document.querySelector(".row-alert")?.textContent).toContain('Could not add to "Toast (30 g)"');
+    expect(rows().sort()).toEqual(["Milk (500 ml)", "Toast (30 g)"]);
   });
 });

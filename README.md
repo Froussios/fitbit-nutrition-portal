@@ -15,7 +15,8 @@ This is the MVP, a proof of concept (milestone M0):
    The page URL names the day (`?day=2026-11-09`), so a day can be linked to; without it the diary shows today. Entries made by this app can be edited (amount, meal, and day, which moves the entry to another day), with the pencil button or a double-click on the row (Escape or a click outside the row cancels), and deleted. Deleting asks for no confirmation: a
    deleted entry stays crossed out with an undo button until the page is reloaded. Any entry, from any day and any
    app, can be logged again for today with the button beside it (same food, amount and meal, at the current time),
-   except a deleted entry or a meal prep share.
+   except a deleted entry or a meal prep share. On today, a + button beside this app's entries adds one more of what was
+   logged: a portion or household measure (`+35 g` for a slice), or the amount as logged (`+90 g`).
 4. Where the site serves its API, cook a batch and eat it in shares (**Meal prep**), or keep meals you eat often
    (**Saved meals**). A saved meal is logged as one entry under its name. Its ingredients can be changed for that
    one entry, and a saved meal can be added to another as its ingredients.
