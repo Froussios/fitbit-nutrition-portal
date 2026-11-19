@@ -1,3 +1,4 @@
+import type { EnergyExtras } from "./energy-check";
 import type { FoodItem } from "./food";
 import { kjToKcal, NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "./nutrients";
 import { isRescaledUnit, SIZE_TOLERANCE } from "./portions";
@@ -32,6 +33,14 @@ export class OffNormalizationError extends Error {
 function num(v: unknown): number | undefined {
   const n = typeof v === "string" ? Number(v) : v;
   return typeof n === "number" && Number.isFinite(n) ? n : undefined;
+}
+
+/** Alcohol and sugar alcohols, which the energy check needs and the app doesn't keep (DR-40). */
+export function offEnergyExtras(p: Pick<OffProduct, "nutriments">): EnergyExtras {
+  const n = p.nutriments ?? {};
+  const alcoholPercent = num(n["alcohol_100g"]);
+  const polyols = num(n["polyols_100g"]);
+  return { ...(alcoholPercent ? { alcoholPercent } : {}), ...(polyols ? { polyols } : {}) };
 }
 
 function baseUnitOf(unit: string | undefined): BaseUnit | undefined {

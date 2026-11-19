@@ -266,6 +266,8 @@ export interface RankedProduct {
   readonly productWordCount: number;
   /** Entries of any brand with this exact name, weighted towards the index's country: an estimate of how popular the food is. */
   readonly sameNameCount: number;
+  /** The stated energy disagrees with the macronutrients (DR-40). */
+  readonly energyMismatch?: boolean;
   readonly popularity: number;
   readonly key: string;
 }
@@ -273,8 +275,8 @@ export interface RankedProduct {
 /**
  * The fixed order products are numbered in (docs/FOOD_SEARCH.md section 4.3):
  * branded before no brand listed, then fewer words in the name, then fewer words in
- * the name and brand together, then more entries with the same name, then more
- * popular. It does not depend on the query, so the index can store every product
+ * the name and brand together, then more entries with the same name, then energy that agrees
+ * with the macronutrients, then more popular. It does not depend on the query, so the index can store every product
  * list in this order. matchRank() refines it for a particular query.
  */
 export function compareRank(
@@ -286,6 +288,7 @@ export function compareRank(
     a.nameWordCount - b.nameWordCount ||
     a.productWordCount - b.productWordCount ||
     b.sameNameCount - a.sameNameCount ||
+    Number(a.energyMismatch ?? false) - Number(b.energyMismatch ?? false) ||
     b.popularity - a.popularity ||
     (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
   );

@@ -501,3 +501,23 @@ guess for `Chobani`. A diet version stored under the same bare name (`Cola (Coca
 Different products under one name and brand whose energy is within 10% now show as one.
 **Reopen if.** Collapsed entries hide products people look for by name, or a better tie-break than popularity is
 needed (energy agreeing with the macros, or with the group's median).
+
+### DR-40 Open Food Facts energy is checked against the macronutrients, and a product that fails is flagged
+**Decision.** When the index is built, each Open Food Facts product's energy is compared with what its fat,
+carbohydrate and protein imply, with fibre, alcohol and sugar alcohols accounted for
+([FOOD_SEARCH.md](FOOD_SEARCH.md#53-slimming-the-dataset)). A product more than 20% off (10 kcal for low-energy foods)
+is flagged. Its dropdown row says **⚠ Energy doesn't add up**, and the tooltip gives the implied energy. It ranks after
+otherwise equal products, just before popularity, so a group of duplicates (DR-39) shows an entry that adds up if it
+has one. Flagged products stay searchable and can be logged. Generic foods (AFCD, FNDDS) are not checked. A product
+missing fat, carbohydrate or protein can't be checked and is not flagged.
+**Why.** Owner request (19 November 2026): after DR-39, `Vegemite (Vegemite)` showed its more scanned entry at 6 kcal
+per 100 g over the one at 177. The owner asked for poor entries to be hidden behind better ones, and for every food to
+be validated, with one beyond the tolerance flagged in the suggestions. #48 counted 3.6% of products whose energy
+disagrees with their macros.
+**Consequence.** Summary rows gain an optional last field, so older indexes, and apps reading newer ones, keep
+working. A label can be wrong and still add up (`Vegemite` at 6 kcal with 5 g of carbohydrate and no protein, which
+is flagged only because 6 is 14 kcal short of 20). Per-serving values typed as per 100 g also add up, so they pass
+(#48 item 2). About 1% of measured foods disagree for real reasons, such as the organic acids in citrus and vinegar,
+and the same goes for products like them.
+**Reopen if.** Flags turn up often on products that are right, the tolerance needs to differ by food type, or a
+flagged product should be hidden from search rather than ranked lower.

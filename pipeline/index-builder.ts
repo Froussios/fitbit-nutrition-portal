@@ -1,5 +1,6 @@
 import { summarise } from "../src/core/food-summary";
-import { fromOffProduct, type OffProduct } from "../src/core/off";
+import { energyMismatch } from "../src/core/energy-check";
+import { fromOffProduct, offEnergyExtras, type OffProduct } from "../src/core/off";
 import { usefulPortions } from "../src/core/portions";
 import { ingredientLimitProblem } from "../src/core/prep";
 import { compareRank, headWords, indexWords, nameWordCount, nameWords, popularity, productWordCount, sameNameKey } from "../src/core/tokens";
@@ -113,6 +114,8 @@ interface Doc {
   readonly nameKey: string;
   /** Sold in INDEX_COUNTRY. */
   readonly soldHere: boolean;
+  /** The stated energy disagrees with the macronutrients (DR-40): ranked below entries that agree. */
+  readonly energyMismatch: boolean;
   readonly popularity: number;
   /** Products with the same key are told apart only by their energy, if at all. */
   readonly dedupeKey: string;
@@ -183,7 +186,10 @@ export class IndexBuilder {
     if (this.seenCodes.has(code)) return this.drop("duplicateCode");
     this.seenCodes.add(code);
 
-    const sum = summaryRow(summarise(food));
+    const macroKcal = energyMismatch(food.per100, offEnergyExtras(raw));
+    if (macroKcal !== undefined) this.bump("energyMismatch");
+    const summary = summarise(food);
+    const sum = summaryRow(macroKcal === undefined ? summary : { ...summary, macroKcalPer100: macroKcal });
     const sortedWords = [...words].sort().join(" ");
     // Without a brand, or with a name that only repeats it, nothing on the row tells these products apart.
     const repeatsBrand = food.brand !== undefined && nameRepeatsBrand(food.name, food.brand);
@@ -197,6 +203,7 @@ export class IndexBuilder {
       sameNameCount: 0,
       nameKey: sameNameKey(food.name),
       soldHere: countries.includes(INDEX_COUNTRY),
+      energyMismatch: macroKcal !== undefined,
       popularity: popularity(raw.unique_scans_n, countries.includes(INDEX_COUNTRY), raw.completeness),
       dedupeKey: !food.brand
         ? `unbranded|${sameNameKey(food.name)}`
