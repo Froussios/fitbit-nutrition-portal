@@ -1,7 +1,7 @@
 import type { AiState, AmountAi } from "../ai/amount-ai";
 import { el } from "./dom";
 
-const ABOUT = "Reads amounts the app's own rules cannot, such as a mistyped unit, using the model built into Chrome. What you type stays on this computer. You check the result before it is logged.";
+const ABOUT = "Reads amounts the app's own rules cannot, such as a mistyped unit, using the model built into Chrome, and runs the chat. What you type stays on this computer. You check the result before it is logged.";
 
 function noteFor(state: AiState): string {
   switch (state.kind) {

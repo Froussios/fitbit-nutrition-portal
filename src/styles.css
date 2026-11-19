@@ -178,9 +178,9 @@ button.link { border: none; background: none; color: var(--accent); text-decorat
 button.icon { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; padding: 0; border: none; background: none; color: var(--muted); line-height: 1; }
 button.icon:focus-visible { outline-offset: -2px; }
 button.icon:not(:disabled):hover { color: var(--danger); }
-button.icon.undo:not(:disabled):hover, button.icon.edit:not(:disabled):hover, button.icon.repeat:not(:disabled):hover { color: var(--accent); }
+button.icon.undo:not(:disabled):hover, button.icon.edit:not(:disabled):hover, button.icon.repeat:not(:disabled):hover, button.icon.ask:not(:disabled):hover { color: var(--accent); }
 button.not-owned:not(:disabled):hover { color: var(--text); }
-.not-owned svg, button.edit svg, button.repeat svg { display: block; width: 1em; height: 1em; }
+.not-owned svg, button.edit svg, button.repeat svg, button.ask svg { display: block; width: 1em; height: 1em; }
 /*
  * Room for three icons on every row (Log again, Edit, Delete), with Delete on the right: Undo and the lock take its
  * place, and nothing moves.
@@ -519,3 +519,67 @@ button.day-pick svg { display: block; width: 1em; height: 1em; }
 .chart-line-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
 .chart-table { margin: 8px 0 0; }
 .chart-table summary { font-size: 0.85rem; margin-bottom: 4px; }
+
+/* Chat (DR-41): a panel on the right, beside the diary. */
+:root { --chat-width: 380px; }
+.chat-toggle[aria-expanded="true"] { background: var(--row-alt); border-color: var(--accent); }
+.chat-toggle[hidden] { display: none; }
+body.chat-open main { margin-right: calc(var(--chat-width) + 16px); }
+.chat-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  width: var(--chat-width);
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+.chat-panel[hidden] { display: none; }
+.chat-head { display: flex; align-items: center; gap: 8px; }
+.chat-head h2 { flex: 1; margin: 0; }
+.chat-head button.icon { width: 2.25rem; height: 2.25rem; }
+.chat-head button.icon:not(:disabled):hover { color: var(--text); }
+.chat-about { margin: 6px 0 0; color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
+.chat-about[hidden], .chat-unavailable[hidden] { display: none; }
+.chat-unavailable { margin: 8px 0 0; padding: 8px 10px; border: 1px solid var(--notice-border); border-radius: 6px; background: var(--notice-bg); font-size: 0.9rem; }
+.chat-log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 0; }
+.msg { max-width: 90%; padding: 8px 10px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-user { align-self: flex-end; background: var(--accent); color: var(--accent-text); }
+.msg-assistant { align-self: flex-start; background: var(--row-alt); border: 1px solid var(--border); }
+.msg-activity, .msg-note { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.msg-error { margin: 0; color: var(--danger); font-size: 0.9rem; }
+.chat-form textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font: inherit;
+  color: inherit;
+  resize: vertical;
+}
+.chat-form textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chat-form .actions { margin-top: 8px; }
+.chat-status { margin: 6px 0 0; min-height: 1.45em; color: var(--muted); font-size: 0.85rem; }
+.proposal { padding: 10px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface); }
+.proposal.settled { border-color: var(--border); }
+.proposal h3 { margin: 0 0 8px; font-size: 1rem; }
+.proposal-facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0 0 8px; font-size: 0.9rem; }
+.proposal-facts dt { color: var(--muted); }
+.proposal-facts dd { margin: 0; overflow-wrap: anywhere; }
+.proposal-sub { margin: 4px 0; font-size: 0.85rem; font-weight: 600; }
+.change .before { color: var(--muted); text-decoration: line-through; }
+.change .after { font-weight: 600; }
+.proposal-status { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.proposal-status:empty { display: none; }
+button.primary.danger { background: var(--danger); border-color: var(--danger); color: var(--bg); }
+
+/* Without room for both, the chat covers the diary. */
+@media (max-width: 900px) {
+  body.chat-open main { margin-right: auto; }
+  .chat-panel { width: min(100vw, var(--chat-width)); box-shadow: -4px 0 16px rgb(0 0 0 / 0.2); }
+}
