@@ -294,7 +294,7 @@ is on and the model is ready.
   `EntryEdit`, and the entry it would write, made by the same mapping functions as a real write, so the card shows the
   exact values.
 * **Handles.** Entries and foods reach the model as `E1`, `F1`… (`ChatHandles`), one per entry or food for the whole
-  chat, never as IDs. The instructions are sent once per chat as `initialPrompts`, which the Prompt API never evicts,
+  chat, never as IDs. An entry's handle is taken back once the chat edits or deletes it, since that entry has gone. The instructions are sent once per chat as `initialPrompts`, which the Prompt API never evicts,
   so the entry a chat was opened on stays known as `E1`.
 * **Writing.** Accept calls `applyFromChat` in `src/main.ts`: it reads the entry's day again, refuses if the entry has
   gone or changed, and then logs, edits or deletes it with the same methods as the diary's buttons, so pending rows,

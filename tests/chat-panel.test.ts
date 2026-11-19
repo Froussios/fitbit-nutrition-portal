@@ -62,13 +62,15 @@ function aiSwitch(kind: AiState["kind"]): AiSwitch & { set(kind: AiState["kind"]
 function fakeModel(...answers: string[]) {
   const destroy = vi.fn();
   const prompts: string[] = [];
+  const constraints: { properties: { entry: { enum: string[] } } }[] = [];
   const initial: unknown[] = [];
   const model: ChatModel = {
     async open(initialPrompts) {
       initial.push(initialPrompts);
       const session: ChatSession = {
-        async prompt(text) {
+        async prompt(text, options) {
           prompts.push(text);
+          constraints.push(options.responseConstraint as (typeof constraints)[number]);
           const next = answers.shift();
           if (!next) throw new Error("No more answers");
           return next;
@@ -78,7 +80,7 @@ function fakeModel(...answers: string[]) {
       return session;
     },
   };
-  return { model, prompts, initial, destroy };
+  return { model, prompts, constraints, initial, destroy };
 }
 
 function setup(answers: string[], kind: AiState["kind"] = "ready") {
@@ -132,8 +134,10 @@ describe("chat panel", () => {
     await vi.waitFor(() => expect(t.log().querySelector(".msg-assistant")?.textContent).toBe("Deleted."));
     expect(t.apply).toHaveBeenCalledWith(expect.objectContaining({ kind: "delete" }));
     expect(t.log().querySelector(".proposal-status")?.textContent).toBe("Deleted Oats.");
-    expect(t.fake.prompts.at(-1)).toBe("The user accepted, and it was done: Deleted Oats.");
+    expect(t.fake.prompts.at(-1)).toMatch(/^The user accepted, and it was done: Deleted Oats\. That entry's handle no longer works/);
     expect(t.input.disabled).toBe(false);
+    // The deleted entry's handle is taken back, so the model can no longer name it.
+    expect(t.fake.constraints.at(-1)?.properties.entry.enum).toEqual([""]);
   });
 
   it("writes nothing when the user rejects a change", async () => {

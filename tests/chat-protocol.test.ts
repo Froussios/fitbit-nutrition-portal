@@ -78,6 +78,17 @@ describe("ChatHandles", () => {
     expect(handles.entry("E2")).toBe(b);
     expect(handles.entry("E3")).toBeUndefined();
   });
+
+  it("takes back an entry's handle, and never hands it out again", () => {
+    const handles = new ChatHandles();
+    const a = entryOf(oats, 40, "g", `${TODAY}T08:00:00`, { id: "e-abc-aa11-off-123" });
+    const b = entryOf(bread, 1, "portion:slice (35 g)", `${TODAY}T09:00:00`, { id: "e-abc-bb22-fnds-555" });
+    handles.entryHandle(a);
+    handles.forgetEntry(a.id);
+    expect(handles.entry("E1")).toBeUndefined();
+    expect(handles.entryHandles()).toEqual([]);
+    expect(handles.entryHandle(b)).toBe("E2");
+  });
 });
 
 describe("describing the diary", () => {

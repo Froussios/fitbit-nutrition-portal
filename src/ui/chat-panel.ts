@@ -247,6 +247,7 @@ export function createChatPanel(model: ChatModel, ai: AiSwitch, host: ChatPanelH
       card.set({ kind: "applying" });
       const result = await host.apply(proposal);
       card.set(result.ok ? { kind: "done", text: result.message } : { kind: "failed", text: result.message });
+      if (result.ok && proposal.kind !== "log") c.tools.handles.forgetEntry(proposal.entry.id);
       outcome = outcomeText(proposal, { accepted: true, ...result }, host.today());
     } else {
       card.set({ kind: "rejected" });

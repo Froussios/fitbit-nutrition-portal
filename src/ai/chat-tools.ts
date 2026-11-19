@@ -269,7 +269,9 @@ export function createChatTools(host: ChatHost, handles: ChatHandles = new ChatH
 export function outcomeText(proposal: Proposal, outcome: { readonly accepted: false } | { readonly accepted: true; readonly ok: boolean; readonly message: string }, today: string): string {
   if (!outcome.accepted) return "The user rejected this change, so nothing was done. Do not propose it again unless the user asks.";
   if (!outcome.ok) return `The user accepted, but it failed: ${outcome.message}`;
-  return `The user accepted, and it was done: ${outcome.message || describeDone(proposal, today)}`;
+  const done = `The user accepted, and it was done: ${outcome.message || describeDone(proposal, today)}`;
+  // The entry's handle was taken back (ChatHandles.forgetEntry): say so, or the model would try to use it again.
+  return proposal.kind === "log" ? done : `${done} That entry's handle no longer works. To change it again, use read_day to see it as it is now.`;
 }
 
 /** What a done proposal did, in words. */
@@ -278,7 +280,7 @@ export function describeDone(proposal: Proposal, today: string): string {
     case "log":
       return `logged ${proposal.preview.displayName}, ${proposal.preview.amount ?? "as one entry"}, ${dayWords(entryDay(proposal.preview), today)}.`;
     case "edit":
-      return `changed ${proposal.entry.displayName}. Its handle no longer works: read the day again to see it.`;
+      return `changed ${proposal.entry.displayName}.`;
     case "delete":
       return `deleted ${proposal.entry.displayName}.`;
   }

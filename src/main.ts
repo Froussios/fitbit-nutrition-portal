@@ -672,8 +672,11 @@ class App {
     return { key, created };
   }
 
-  /** Deletes an entry. Resolves to why it failed, or undefined when it was deleted. */
-  private async remove(entry: DiaryEntry): Promise<string | undefined> {
+  /**
+   * Deletes an entry. Resolves to why it failed, or undefined when it was deleted. `fromChat`: the chat's card says why
+   * it failed, so the diary only says so too when the row is on the day shown.
+   */
+  private async remove(entry: DiaryEntry, fromChat = false): Promise<string | undefined> {
     if (this.busy.has(entry.id)) return `${entry.displayName} is busy. Try again in a moment.`;
     // Disabling the button takes keyboard focus from it, so it is given back at the end.
     const hadFocus = focusedEntryId() === entry.id;
@@ -696,7 +699,7 @@ class App {
       appLog.error("Deleting the entry failed", describeError(e));
       this.handleError(e, false);
       failure = isConnectionFailure(e) ? deleteFailed(entry.displayName) : actionRefused("delete", entry.displayName, refusalReason(e));
-      this.showRowFailure(entry, failure);
+      this.showRowFailure(entry, failure, fromChat);
     }
     this.busy.delete(entry.id);
     this.renderDiary(hadFocus ? entry.id : undefined);
@@ -849,7 +852,8 @@ class App {
    * Applies an edit: writes the corrected entry, then deletes the original, so that a failure can
    * never lose the entry (DR-22). If nothing was saved, the row stays open with what the user typed.
    */
-  private async saveEdit(entry: DiaryEntry, edit: EntryEdit): Promise<string | undefined> {
+  /** Resolves to why the edit failed, or undefined when it was saved. `fromChat` as for `remove`. */
+  private async saveEdit(entry: DiaryEntry, edit: EntryEdit, fromChat = false): Promise<string | undefined> {
     const log = entry.point.nutritionLog;
     if (this.busy.has(entry.id)) return `${entry.displayName} is busy. Try again in a moment.`;
     if (!log) return `${entry.displayName} has nothing to edit.`;
@@ -860,7 +864,7 @@ class App {
     } catch (e) {
       appLog.error("Could not build the edited entry", describeError(e));
       const failure = actionRefused("edit", entry.displayName, errorMessage(e));
-      this.showRowFailure(entry, failure);
+      this.showRowFailure(entry, failure, fromChat);
       return failure;
     }
     this.startRowAction(entry, "saving…");
@@ -880,7 +884,7 @@ class App {
       this.handleError(e, false);
       this.busy.delete(entry.id);
       const failure = isConnectionFailure(e) ? editNotConfirmed(entry.displayName) : actionRefused("edit", entry.displayName, refusalReason(e));
-      this.showRowFailure(entry, failure);
+      this.showRowFailure(entry, failure, fromChat);
       if (stillEditing()) editor?.setSaving(false);
       this.renderDiary();
       if (stillEditing()) editor?.focusSave();
@@ -960,14 +964,14 @@ class App {
         case "edit": {
           const current = await this.currentEntry(proposal.entry);
           if (typeof current === "string") return { ok: false, message: current };
-          const failure = await this.saveEdit(current, proposal.edit);
+          const failure = await this.saveEdit(current, proposal.edit, true);
           return failure ? { ok: false, message: failure } : { ok: true, message: `Changed ${current.displayName}.` };
         }
         case "delete": {
           const current = await this.currentEntry(proposal.entry);
           if (typeof current === "string") return { ok: false, message: current };
-          const failure = await this.remove(current);
-          return failure ? { ok: false, message: failure } : { ok: true, message: `Deleted ${current.displayName}. The diary can undo it until the page is reloaded.` };
+          const failure = await this.remove(current, true);
+          return failure ? { ok: false, message: failure } : { ok: true, message: `Deleted ${current.displayName}. Until the page is reloaded, the diary for ${dayInWords(entryDay(current))} shows it crossed out, with an undo.` };
         }
       }
     } catch (e) {
@@ -1022,7 +1026,9 @@ class App {
     this.renderDiary();
   }
 
-  private showRowFailure(entry: DiaryEntry, message: string) {
+  /** `fromChat`: the chat changes entries on any day and its card says why it failed, so a row not on screen gets no alert. */
+  private showRowFailure(entry: DiaryEntry, message: string, fromChat = false) {
+    if (fromChat && entryDay(entry) !== this.day()) return;
     this.rowAlert.hidden = false;
     const failure = el("p", {}, message);
     this.rowFailures.set(entry.id, failure);

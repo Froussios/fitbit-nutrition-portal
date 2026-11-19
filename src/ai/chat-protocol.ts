@@ -160,11 +160,14 @@ export class ChatHandles {
   private readonly entryById = new Map<string, string>();
   private readonly foods = new Map<string, FoodSummary>();
   private readonly foodByRef = new Map<string, string>();
+  /** Handles handed out so far. Counted, not taken from the maps' sizes, so that a forgotten handle is never reused. */
+  private entryCount = 0;
+  private foodCount = 0;
 
   entryHandle(entry: DiaryEntry): string {
     let handle = this.entryById.get(entry.id);
     if (!handle) {
-      handle = `E${this.entries.size + 1}`;
+      handle = `E${++this.entryCount}`;
       this.entryById.set(entry.id, handle);
     }
     this.entries.set(handle, entry);
@@ -175,7 +178,7 @@ export class ChatHandles {
     const key = `${food.ref.source}:${food.ref.id}`;
     let handle = this.foodByRef.get(key);
     if (!handle) {
-      handle = `F${this.foods.size + 1}`;
+      handle = `F${++this.foodCount}`;
       this.foodByRef.set(key, handle);
     }
     this.foods.set(handle, food);
@@ -188,6 +191,18 @@ export class ChatHandles {
 
   food(handle: string): FoodSummary | undefined {
     return this.foods.get(handle);
+  }
+
+  /**
+   * Takes back an entry's handle once it has been edited or deleted: the entry has gone (an edit writes a new one), so
+   * the handle must not keep offering the old values. The schema stops allowing it, and reading the day gives the new
+   * entry a new handle.
+   */
+  forgetEntry(id: string): void {
+    const handle = this.entryById.get(id);
+    if (!handle) return;
+    this.entryById.delete(id);
+    this.entries.delete(handle);
   }
 
   entryHandles(): string[] {
@@ -335,7 +350,7 @@ export function chatInstructions(ctx: ChatContext): { readonly role: "system" | 
     // A worked example on a made-up day, so that its handles and numbers can't be mistaken for the user's.
     { role: "user", content: `(Example, not the user's diary. Today is ${formatCivilDate(EXAMPLE_TODAY)}.) Log a banana for breakfast` },
     { role: "assistant", content: json({ action: "search_food", query: "banana" }) },
-    { role: "user", content: 'Result of search_food "banana":\nX1: Banana, raw, 89 kcal per 100 g, serving "1 medium (118 g)" (118 g), from FNDDS' },
+    { role: "user", content: 'Result of search_food:\nX1: Banana, raw, 89 kcal per 100 g, serving "1 medium (118 g)" (118 g), from FNDDS' },
     { role: "assistant", content: json({ action: "log_food", food: "X1", amount: "1 medium", day: "today", meal: "breakfast" }) },
     { role: "user", content: "The user accepted, and it was done: logged Banana, raw, 118 g, breakfast, today." },
     { role: "assistant", content: json({ action: "reply", text: "Logged a banana for breakfast." }) },

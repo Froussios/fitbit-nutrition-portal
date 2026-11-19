@@ -172,6 +172,15 @@ describe("outcomeText", () => {
     const proposal: Proposal = { kind: "delete", entry: breakfast() };
     expect(outcomeText(proposal, { accepted: false }, TODAY)).toContain("rejected");
     expect(outcomeText(proposal, { accepted: true, ok: false, message: "Offline." }, TODAY)).toBe("The user accepted, but it failed: Offline.");
-    expect(outcomeText(proposal, { accepted: true, ok: true, message: "" }, TODAY)).toBe(`The user accepted, and it was done: ${describeDone(proposal, TODAY)}`);
+    expect(outcomeText(proposal, { accepted: true, ok: true, message: "" }, TODAY)).toBe(
+      `The user accepted, and it was done: ${describeDone(proposal, TODAY)} That entry's handle no longer works. To change it again, use read_day to see it as it is now.`,
+    );
+  });
+
+  it("says nothing about handles after a log, which has none yet", () => {
+    const tools = createChatTools(hostWith({}));
+    const proposal: Proposal = { kind: "log", draft: { food: oats, quantity: 40, unit: "g", time: new Date(`${TODAY}T08:00:00`) }, preview: breakfast() };
+    expect(outcomeText(proposal, { accepted: true, ok: true, message: "Logged Oats." }, TODAY)).toBe("The user accepted, and it was done: Logged Oats.");
+    expect(tools.handles.entryHandles()).toEqual([]);
   });
 });
