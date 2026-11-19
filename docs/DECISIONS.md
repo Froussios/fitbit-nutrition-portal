@@ -445,7 +445,26 @@ edited like any other entry. Repeating an entry already on today logs a second o
 **Reopen if.** Copies need another time (the original's clock time, or one picked), or several entries, such as a whole
 meal, should be repeated at once.
 
-### DR-37 A dashboard charts the viewed day and the 7 days ending on it
+### DR-37 A + button on today's entries adds one more of what was logged, recorded in the entry's ID
+**Decision.** On today's diary, each entry made by this app that has an amount in grams or millilitres has a + button
+first in its row, which says what it adds (`+35 g`, `+250 ml`). Its step is one of the portion or household measure
+(tsp, tbsp, cup) the entry was logged in, else the entry's amount as logged (`90 g` steps by 90 g, `2 oz` by 2 oz). A
+tap replaces the entry with a corrected copy at the larger amount, every value scaled with it, as an edit does (DR-22).
+The step is recorded in the entry's ID, after its 4 random characters, in hundredths of a gram or millilitre in base
+36 (ARCHITECTURE.md section 4.3). Copies keep it (undo, Log again). An edit to a portion or measure records one of
+it; an edit in grams or millilitres keeps the step; an edit that turns grams into millilitres, or back, drops it. The
+first + on an entry with no step records its amount as logged, so later taps add the same again rather than double it.
+Log again (DR-36) stays on today's rows beside it.
+**Why.** Owner request (19 November 2026): a button to increase the amount is better than logging a second entry. The
+owner asked to store the unit logged so that it can be the step, since a serving in grams can't say a slice was meant,
+and for the button to show how much it adds.
+**Consequence.** The step is the portion's size when logged: a food whose portion has since changed still steps by the
+old size, which the button shows. Entries logged before this change, and those logged in grams or millilitres, step by
+their whole amount until the first tap fixes it. Saved meals, meal prep shares and other apps' entries have no +.
+Each tap is a write and a delete, so the entry's ID changes on every tap.
+**Reopen if.** The step should be chosen (half a portion), the + is wanted on other days, or a minus is wanted too.
+
+### DR-38 A dashboard charts the viewed day and the 7 days ending on it
 **Decision.** Under the diary, a Dashboard card shows the day the diary shows: its energy, protein, carbs and fat, a bar
 splitting its energy by macronutrient (by the Atwater factors, 4 kcal a gram of protein and carbohydrate and 9 of fat,
 each part labelled with its share and its grams in the legend) and a bar splitting its energy by meal. Below, the 7 days

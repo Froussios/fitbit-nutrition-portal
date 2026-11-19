@@ -1,5 +1,5 @@
 import { canReload, foodLabel, nutrientsForAmount, type FoodItem, type FoodRef } from "../core/food";
-import { idFromName, parseEntryId } from "../core/ids";
+import { entryStep, idFromName, parseEntryId } from "../core/ids";
 import type { LoggedFood } from "../core/logged-foods";
 import { NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "../core/nutrients";
 import { civilDate, onCivilDate, utcOffsetDuration } from "../core/time";
@@ -129,6 +129,52 @@ export function repeatedNutritionLogPoint(log: NutritionLog, id: string, time: D
   const end = new Date(time.getTime() + (Number.isFinite(length) && length > 0 ? length : ENTRY_DURATION_MS));
   copy.interval = { startTime: time.toISOString(), endTime: end.toISOString(), startUtcOffset: utcOffsetDuration(time), endUtcOffset: utcOffsetDuration(end) };
   return point;
+}
+
+/** Units counted one at a time, like a portion: the + button adds one of them. */
+const COUNTED_UNITS = new Set(["tsp", "tbsp", "cup"]);
+
+/**
+ * The step to record for an entry logged in `unit` of `food` (DR-37): the size of one portion or household measure, in
+ * the grams or millilitres its serving is written in (`2 slices` steps by a slice, `1.5 cups` by a cup). Undefined for
+ * any other unit (`90 g`, `2 oz`), whose entry steps by the whole amount as logged.
+ */
+export function countedStep(food: Measurable, unit: string): number | undefined {
+  if (!unit.startsWith(PORTION_PREFIX) && !COUNTED_UNITS.has(unit)) return undefined;
+  try {
+    const step = metricAmount(food, 1, unit).amount;
+    return step > 0 ? step : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The step to record for an entry after an edit: one of the counted unit its amount was changed to; else the step it had,
+ * while its serving stays in the same unit (a step in grams means nothing in millilitres); else none.
+ */
+export function stepAfterEdit(log: NutritionLog, amount: AmountEdit | undefined, step: number | undefined, unitNames?: ReadonlyMap<string, string>): number | null {
+  if (!amount || amount.unit === AS_LOGGED_UNIT) return step ?? null;
+  const logged = loggedAmount(log, unitNames);
+  const measure = amount.food ?? (logged && basicMeasure(logged.unit));
+  if (!measure) return null;
+  const counted = countedStep(measure, amount.unit);
+  if (counted !== undefined) return counted;
+  try {
+    return step !== undefined && metricAmount(measure, amount.quantity, amount.unit).unit === logged?.unit ? step : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The entry that replaces `log` with `step` more of it, in the unit of its serving: every value scales with the amount.
+ * Like any edit, it is a copy under a new ID (DR-22), on the same day and at the same time.
+ */
+export function incrementedNutritionLogPoint(log: NutritionLog, step: number, opts: EditOptions): DataPoint {
+  const logged = loggedAmount(log, opts.unitNames);
+  if (!logged) throw new Error("This entry has no amount to add to.");
+  return editedNutritionLogPoint(log, { ...(log.mealType ? { mealType: log.mealType } : {}), amount: { quantity: logged.amount + step, unit: logged.unit } }, opts);
 }
 
 /** How much of a food an entry says was eaten. */
@@ -322,6 +368,11 @@ export interface DiaryEntry {
   readonly sourceLabel?: string;
   /** The data point it was read from, which undoing a delete writes again. */
   readonly point: DataPoint;
+  /**
+   * What the + button adds (DR-37): the step its ID records, else the amount as logged. Only on this app's entries that
+   * have an amount in grams or millilitres, and never on a meal prep share or a saved meal.
+   */
+  readonly increment?: LoggedAmount;
 }
 
 const NUTRIENT_BY_GOOGLE = new Map<string, NutrientKey>(
@@ -392,6 +443,9 @@ export function toDiaryEntry(point: DataPoint, ctx: DiaryContext = {}): DiaryEnt
   const ref = own ? parseEntryId(id)?.ref : undefined;
   const label = own ? undefined : sourceLabel(point);
   const amount = servingText(log, ctx.unitNames);
+  // A meal prep share is changed from its batch, and a saved meal has no amount of its own, even if its name ends in one.
+  const logged = own && ref?.source !== "prep" && ref?.source !== "meal" ? loggedAmount(log, ctx.unitNames) : undefined;
+  const increment = logged && { amount: entryStep(id) ?? logged.amount, unit: logged.unit };
   const entry: DiaryEntry = {
     name: point.name,
     id,
@@ -404,6 +458,7 @@ export function toDiaryEntry(point: DataPoint, ctx: DiaryContext = {}): DiaryEnt
     ...(ref ? { ref } : {}),
     ...(label ? { sourceLabel: label } : {}),
     point,
+    ...(increment ? { increment } : {}),
   };
   return entry;
 }

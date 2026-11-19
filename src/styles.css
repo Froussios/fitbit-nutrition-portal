@@ -13,7 +13,7 @@
   /* The log button when the entry goes on another day than today. */
   --other-day: #8a4f00;
   --other-day-text: #ffffff;
-  /* Dashboard series (DR-37), validated for colour-blind separation on the card's surface in each theme. */
+  /* Dashboard series (DR-38), validated for colour-blind separation on the card's surface in each theme. */
   --macro-protein: #2a78d6;
   --macro-carbohydrates: #eb6834;
   --macro-fat: #1baf7a;
@@ -163,6 +163,9 @@ button.not-owned:not(:disabled):hover { color: var(--text); }
  * place, and nothing moves.
  */
 .row-actions { display: flex; justify-content: flex-end; min-width: 8.25rem; }
+/* The + button says what it adds ("+250 ml"), so it is as wide as its text, on today's rows only. */
+button.icon.increment { width: auto; min-width: 2.75rem; padding: 0 6px; font-size: 0.85rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+button.icon.increment:not(:disabled):hover { color: var(--accent); }
 .not-owned-note {
   max-width: min(22em, calc(100vw - 32px));
   padding: 10px 14px;
@@ -442,7 +445,7 @@ button.day-pick svg { display: block; width: 1em; height: 1em; }
 .prep-card-head button { white-space: nowrap; }
 .prep-card > .status:empty { display: none; }
 
-/* Dashboard (DR-37): the viewed day, then the 7 days ending on it. */
+/* Dashboard (DR-38): the viewed day, then the 7 days ending on it. */
 .dashboard { display: grid; gap: 24px; }
 .dashboard h3 { font-size: 1rem; margin: 0 0 12px; }
 .dash-summary { margin: -6px 0 12px; }

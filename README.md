@@ -15,7 +15,8 @@ This is the MVP, a proof of concept (milestone M0):
    The page URL names the day (`?day=2026-11-09`), so a day can be linked to; without it the diary shows today. Entries made by this app can be edited (amount, meal, and day, which moves the entry to another day), with the pencil button or a double-click on the row (Escape or a click outside the row cancels), and deleted. Deleting asks for no confirmation: a
    deleted entry stays crossed out with an undo button until the page is reloaded. Any entry, from any day and any
    app, can be logged again for today with the button beside it (same food, amount and meal, at the current time),
-   except a deleted entry or a meal prep share.
+   except a deleted entry or a meal prep share. On today, a + button beside this app's entries adds one more of what was
+   logged: a portion or household measure (`+35 g` for a slice), or the amount as logged (`+90 g`).
 4. A **Dashboard** under the diary charts the day shown: its energy and macronutrients, and its energy split by
    macronutrient and by meal. For the 7 days ending on that day it charts each day's protein, carbs and fat, and each
    day's energy by meal, with a table of the figures under each chart.

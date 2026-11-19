@@ -1,6 +1,6 @@
 /**
  * The dashboard: the viewed day's totals by macronutrient and by meal, and the 7 days ending on it, each day's
- * macronutrients and each day's energy by meal (DR-37).
+ * macronutrients and each day's energy by meal (DR-38).
  */
 
 import { averageEnergy, byMealGroup, dailyTotals, macroEnergy, MACROS, MEAL_GROUPS, totals, type DashboardEntry, type Macro, type MealGroup } from "../core/dashboard";

@@ -78,7 +78,7 @@ export function deleteFailed(name: string): string {
 }
 
 /** A delete, undo or edit that got an answer, and the answer was no. */
-export function actionRefused(action: "delete" | "undo deleting" | "edit" | "log again", name: string, reason: string): string {
+export function actionRefused(action: "delete" | "undo deleting" | "edit" | "log again" | "add to", name: string, reason: string): string {
   return `Could not ${action} "${name}": ${reason}`;
 }
 
@@ -95,6 +95,11 @@ export function undoNotConfirmed(name: string): string {
 /** Like LOG_NOT_CONFIRMED: saving again sends a new ID, so it could create a second entry. */
 export function editNotConfirmed(name: string): string {
   return `Google Health did not answer, so your change to "${name}" may not have been saved. When the connection is back, check today's diary before saving again.`;
+}
+
+/** Like editNotConfirmed: adding again sends a new ID, so it could add twice. */
+export function incrementNotConfirmed(name: string): string {
+  return `Google Health did not answer, so "${name}" may not have been increased. When the connection is back, check today's diary before adding again.`;
 }
 
 /** An edit writes the new entry first, so this leaves two entries where the user expects one. */

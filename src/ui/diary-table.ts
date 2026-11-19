@@ -1,6 +1,7 @@
 import { sumProfiles } from "../core/nutrients";
 import { byMeal, mealLabel, type DiaryEntry } from "../health/mapping";
 import { el } from "./dom";
+import { formatAmount } from "../core/units";
 import { energyLabel, fmtEnergy, fmtGrams } from "./format";
 import type { RowEditor } from "./row-editor";
 
@@ -21,6 +22,10 @@ export interface DiaryTableOptions {
   readonly onUndo: (entry: DiaryEntry) => void;
   /** Logs the same food, amount and meal again, today at the current time (DR-36). */
   readonly onRepeat: (entry: DiaryEntry) => void;
+  /** Whether the day shown is today: only today's entries have a + button. */
+  readonly today?: boolean;
+  /** Adds the entry's step to its amount (DR-37). */
+  readonly onIncrement?: (entry: DiaryEntry) => void;
   /** What an empty day says. */
   readonly emptyText?: string;
 }
@@ -87,7 +92,7 @@ function rowTag(id: string, deleted: ReadonlySet<string>, busy: ReadonlyMap<stri
   return text ? el("span", { class: "tag" }, text) : undefined;
 }
 
-export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo, onRepeat, emptyText = "Nothing logged today yet." }: DiaryTableOptions): HTMLElement {
+export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo, onRepeat, today = false, onIncrement, emptyText = "Nothing logged today yet." }: DiaryTableOptions): HTMLElement {
   if (entries.length === 0 && deleted.length === 0) {
     return el("p", { class: "empty" }, emptyText);
   }
@@ -114,6 +119,16 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
           const hasEdit = e.own && !deletedIds.has(e.id) && e.ref?.source !== "prep";
           const canEdit = !offline && !busy.has(e.id) && !editing;
           const editable = hasEdit && canEdit;
+          // On today's entries, + adds one more of what was logged (DR-37). It replaces the entry, like an edit.
+          const step = today && onIncrement && !deletedIds.has(e.id) ? e.increment : undefined;
+          const stepText = step && `${formatAmount(step.amount)} ${step.unit}`;
+          const incrementButton =
+            step &&
+            el(
+              "button",
+              { type: "button", class: "icon increment", "data-entry-increment": e.id, title: offline ? "Changing needs a connection" : `Add ${stepText}`, "aria-label": `Add ${stepText} to ${e.displayName}`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onIncrement?.(e) },
+              `+${stepText}`,
+            );
           // Any entry can be logged again, whichever app logged it, but a meal prep share would need a portion of its batch.
           const repeatButton =
             !deletedIds.has(e.id) &&
@@ -163,6 +178,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
                         "↩\uFE0E",
                       )
                     : [
+                        incrementButton,
                         repeatButton,
                         hasEdit &&
                         el(

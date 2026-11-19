@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copiedEntryId, ID_PATTERN, idFromName, newEntryId, parseEntryId } from "../src/core/ids";
+import { copiedEntryId, entryStep, ID_PATTERN, idFromName, newEntryId, parseEntryId } from "../src/core/ids";
 import { addCivilDays, civilDate, dayLabel, formatCivilDate, nextCivilDate, nutritionDayFilter, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../src/core/time";
 
 describe("entry ids", () => {
@@ -104,5 +104,41 @@ describe("time helpers", () => {
     expect(nutritionDayFilter("2026-11-01")).toBe(
       'nutrition_log.interval.civil_start_time >= "2026-11-01" AND nutrition_log.interval.civil_start_time < "2026-11-02"',
     );
+  });
+});
+
+describe("entry step in the ID (DR-37)", () => {
+  const now = Date.UTC(2026, 10, 19);
+
+  it("records a step after the 4 random characters, in hundredths, and reads it back", () => {
+    const id = newEntryId({ source: "off", id: "123" }, now, "ab12", 28.35);
+    expect(id).toBe(`e-${now.toString(36)}-ab12${(2835).toString(36)}-off-123`);
+    expect(entryStep(id)).toBe(28.35);
+    expect(parseEntryId(id)?.ref).toEqual({ source: "off", id: "123" });
+    expect(ID_PATTERN.test(id)).toBe(true);
+  });
+
+  it("records nothing for no step, and reads none from IDs without one", () => {
+    expect(newEntryId({ source: "off", id: "123" }, now, "ab12")).toBe(`e-${now.toString(36)}-ab12-off-123`);
+    expect(entryStep(`e-${now.toString(36)}-ab12-off-123`)).toBeUndefined();
+    expect(entryStep("1234567890")).toBeUndefined();
+    expect(newEntryId({ source: "off", id: "123" }, now, "ab12", 0.001)).toBe(`e-${now.toString(36)}-ab12-off-123`);
+  });
+
+  it("keeps the step in a copy, unless given another or null", () => {
+    const original = newEntryId({ source: "manual", id: "toast" }, now, "ab12", 250);
+    expect(entryStep(copiedEntryId(original, now, "cd34"))).toBe(250);
+    expect(entryStep(copiedEntryId(original, now, "cd34", 35))).toBe(35);
+    expect(copiedEntryId(original, now, "cd34", null)).toBe(`e-${now.toString(36)}-cd34-man-toast`);
+    expect(entryStep(copiedEntryId("1234567890", now, "cd34", 60))).toBe(60);
+  });
+
+  it("drops the food reference rather than go past 63 characters", () => {
+    const long = "f".repeat(40);
+    const original = newEntryId({ source: "off", id: long }, now, "ab12");
+    expect(parseEntryId(original)?.ref?.id).toBe(long);
+    const copy = copiedEntryId(original, now, "cd34", 123456.78);
+    expect(copy.length).toBeLessThanOrEqual(63);
+    expect(entryStep(copy)).toBe(123456.78);
   });
 });

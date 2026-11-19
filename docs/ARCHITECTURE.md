@@ -116,13 +116,18 @@ Google `food` resources. Anonymous logs cannot be updated, so an edit writes a c
 `NutritionLog` has nowhere to store which food an entry came from, so the data point ID carries it:
 
 ```
-e-<logged-at base36>-<random4>-<source>[-<food id>]     e.g. e-mvxb00vd-9gcl-smp-oats
+e-<logged-at base36>-<random4>[<step base36>]-<source>[-<food id>]     e.g. e-mvxb00vd-9gcl-smp-oats, e-mvxb00vd-9gcl2p8-man
 ```
 
 `source` is `off`, `afcd`, `aus` (AUSNUT), `fnds` (USDA FNDDS), `usda`, `smp` (sample), `man` (manual), `prep` (a meal prep
 portion, section 4.5) or `meal` (a saved meal, section 4.6), so usage per database can be counted from the diary. The food ID is dropped when it does not
 fit in 63 characters or is not ID-safe. Editing an entry uses this reference to load the food again, for its exact values
 and its portions, and the copy that replaces the entry keeps the same source and food (DR-22).
+
+`step`, after the 4 random characters, is how much the diary's + button adds, in hundredths of the entry's gram or
+millilitre unit (`2p8` is 3500, so 35 g): the size of the portion or household measure the entry was logged in, since its
+`serving` keeps only grams or millilitres. An entry logged in any other unit has none and steps by its amount as logged,
+which the first + records (DR-37).
 
 ### 4.4 Reading the diary
 
@@ -134,7 +139,9 @@ writer is unknown. Deleting asks nothing: the row stays crossed out and out of t
 Undo that logs an equivalent entry under a new ID (DR-20). If a delete or undo fails, the row is enabled again and
 an alert says so until it is dismissed or the action is tried again. Editing changes an entry's amount, meal and day in its
 own row, which replaces the entry with a corrected copy under a new ID (DR-22, DR-33). A Log again button on every row but
-a deleted one or a meal prep share logs a copy today at the current time, whichever app logged the original (DR-36). It shows one day, today unless the
+a deleted one or a meal prep share logs a copy today at the current time, whichever app logged the original (DR-36). On today's entries made by this app, a + button that says what it adds
+(`+35 g`) adds one more of the portion or measure the entry was logged in, or its amount as logged; like an edit, it
+replaces the entry with a corrected copy (DR-37). It shows one day, today unless the
 arrows beside its heading step to another (#19); there is no step past today. A calendar icon
 button opens the browser's own date picker (`showPicker()` on a hidden date field, `max` today), and a Today button jumps back. The day is
 in the page URL as `?day=YYYY-MM-DD`, a query parameter because GitHub Pages has no fallback for unknown paths. The URL is
@@ -145,7 +152,7 @@ app falls back to its own entries and says so.
 
 A Dashboard card under the diary charts the day shown (energy and macronutrient totals, energy by macronutrient and by
 meal) and the 7 days ending on it (macronutrients and energy by meal per day), from one listing of those 7 days made after
-each diary load; the day shown takes its figures from the diary's own listing (DR-37).
+each diary load; the day shown takes its figures from the diary's own listing (DR-38).
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
 background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-foods-logged-before)).
