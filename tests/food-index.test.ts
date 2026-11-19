@@ -178,6 +178,7 @@ describe("food index", () => {
       product("8302", "Chobani", { brands: "Chobani", nutriments: { "energy-kcal_100g": 167 } }),
       product("8303", "Cola", { brands: "Coca-Cola", unique_scans_n: 9, nutriments: { "energy-kcal_100g": 42 } }),
       product("8304", "Cola", { brands: "Coca-Cola", nutriments: { "energy-kcal_100g": 0 } }),
+      product("8309", "Coca Cola", { brands: "Coca Cola", nutriments: { "energy-kcal_100g": 84 } }),
       product("8307", "Weet-Bix", { brands: "Weetbix", unique_scans_n: 9, nutriments: { "energy-kcal_100g": 350 } }),
       product("8308", "Weetbix", { brands: "Weetbix", nutriments: { "energy-kcal_100g": 107 } }),
       // The name says more than the brand, so energy still tells these apart.

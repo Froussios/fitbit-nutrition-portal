@@ -201,7 +201,7 @@ export class IndexBuilder {
       dedupeKey: !food.brand
         ? `unbranded|${sameNameKey(food.name)}`
         : repeatsBrand
-          ? `brand only|${sameNameKey(food.brand)}`
+          ? `brand only|${nameWords(food.brand).join("")}` // "Coca-Cola", "Coca Cola" and "CocaCola" are one brand
           : `branded|${sortedWords}`,
       kcal,
       anyEnergy: !food.brand || repeatsBrand,
