@@ -17,7 +17,10 @@ This is the MVP, a proof of concept (milestone M0):
    app, can be logged again for today with the button beside it (same food, amount and meal, at the current time),
    except a deleted entry or a meal prep share. On today, a + button beside this app's entries adds one more of what was
    logged: a portion or household measure (`+35 g` for a slice), or the amount as logged (`+90 g`).
-4. Where the site serves its API, cook a batch and eat it in shares (**Meal prep**), or keep meals you eat often
+4. A **Dashboard** under the diary charts the day shown: its energy and macronutrients, and its energy split by
+   macronutrient and by meal. For the 7 days ending on that day it charts each day's protein, carbs and fat, and each
+   day's energy by meal, with a table of the figures under each chart.
+5. Where the site serves its API, cook a batch and eat it in shares (**Meal prep**), or keep meals you eat often
    (**Saved meals**). A saved meal is logged as one entry under its name. Its ingredients can be changed for that
    one entry, and a saved meal can be added to another as its ingredients.
 
@@ -135,12 +138,12 @@ One-time setup:
 
 ```
 src/
-  core/      domain logic, no I/O: units, nutrients, food model, Open Food Facts normaliser, ids, time
+  core/      domain logic, no I/O: units, nutrients, food model, Open Food Facts normaliser, ids, time, dashboard sums
   health/    Google Health API types (from the discovery document), client and mapping
   auth/      Google sign-in: popup, checks on Google's answer
   food/      FoodCatalog interface, the static index engine and catalogue, sample foods
   ai/        the optional on-device model that reads amounts the rules refuse
-  ui/        DOM helpers, log form, food search combobox, diary table, meal prep and saved meal tabs and builder
+  ui/        DOM helpers, log form, food search combobox, diary table, dashboard charts, meal prep and saved meal tabs and builder
   prep/      the browser's client for the meal prep and saved meal API
   main.ts    app shell
 pipeline/    food index builder (Open Food Facts export → public/food-index/), generic foods builder

@@ -57,8 +57,13 @@ export function dayLabel(date: string, today: string): string {
 
 /** List filter for nutrition logs whose civil (local) start falls on `date`. */
 export function nutritionDayFilter(date: string): string {
+  return nutritionDaysFilter(date, date);
+}
+
+/** List filter for nutrition logs whose civil (local) start falls on any day from `first` to `last`, both included. */
+export function nutritionDaysFilter(first: string, last: string): string {
   const f = "nutrition_log.interval.civil_start_time";
-  return `${f} >= "${date}" AND ${f} < "${nextCivilDate(date)}"`;
+  return `${f} >= "${first}" AND ${f} < "${nextCivilDate(last)}"`;
 }
 
 /** Value for <input type="datetime-local">, in local time. */

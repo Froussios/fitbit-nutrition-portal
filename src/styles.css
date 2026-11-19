@@ -13,6 +13,17 @@
   /* The log button when the entry goes on another day than today. */
   --other-day: #8a4f00;
   --other-day-text: #ffffff;
+  /* Dashboard series (DR-38), validated for colour-blind separation on the card's surface in each theme. */
+  --macro-protein: #2a78d6;
+  --macro-carbohydrates: #eb6834;
+  --macro-fat: #1baf7a;
+  --meal-breakfast: #eda100;
+  --meal-lunch: #e87ba4;
+  --meal-dinner: #6250d6;
+  --meal-snacks: #008300;
+  --meal-other: #9a9d96;
+  --chart-grid: #e6e8e3;
+  --chart-axis: #c3c7bf;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 16px;
   line-height: 1.45;
@@ -34,6 +45,16 @@
     --row-alt: #20251f;
     --other-day: #e8a93c;
     --other-day-text: #1d1405;
+    --macro-protein: #3987e5;
+    --macro-carbohydrates: #d95926;
+    --macro-fat: #199e70;
+    --meal-breakfast: #c98500;
+    --meal-lunch: #d55181;
+    --meal-dinner: #9085e9;
+    --meal-snacks: #0ca30c;
+    --meal-other: #6f756b;
+    --chart-grid: #2b3029;
+    --chart-axis: #474e44;
   }
 }
 
@@ -423,3 +444,55 @@ button.day-pick svg { display: block; width: 1em; height: 1em; }
 .day-pick-field { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; border: 0; padding: 0; }
 .prep-card-head button { white-space: nowrap; }
 .prep-card > .status:empty { display: none; }
+
+/* Dashboard (DR-38): the viewed day, then the 7 days ending on it. */
+.dashboard { display: grid; gap: 24px; }
+.dashboard h3 { font-size: 1rem; margin: 0 0 12px; }
+.dash-summary { margin: -6px 0 12px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.stat-label { font-size: 0.8rem; color: var(--muted); }
+.stat-value { font-size: 1.35rem; font-weight: 600; }
+.dash-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; }
+.chart { margin: 0 0 16px; min-width: 0; }
+.chart-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; }
+.chart-empty { color: var(--muted); font-size: 0.9rem; margin: 0; }
+.chart-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 0; margin: 8px 0; font-size: 0.85rem; color: var(--muted); }
+.chart-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.chart-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.chart-figure { color: var(--text); font-variant-numeric: tabular-nums; }
+/* The segmented bar: each block as wide as its share, a 2px gap of the surface between them. */
+.seg-bar { display: flex; gap: 2px; height: 28px; }
+.seg {
+  flex: 1 1 0; min-width: 0; border-radius: 4px; overflow: hidden;
+  display: flex; align-items: center; padding: 0 8px;
+  color: #ffffff; font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+}
+/* Near-black where white would fall under 4.5:1: breakfast's yellow in both themes, dinner's light violet in the dark one. */
+.seg-breakfast { color: #0b0b0b; }
+@media (prefers-color-scheme: dark) { .seg-dinner { color: #0b0b0b; } }
+/* The column chart: an SVG scaled to its box, with a tooltip laid over it. */
+.chart-plot { position: relative; }
+.chart-plot svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-grid line { stroke: var(--chart-grid); stroke-width: 1; shape-rendering: crispEdges; }
+.chart-grid line.chart-baseline { stroke: var(--chart-axis); }
+.chart-tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart-column { outline: none; }
+.chart-column.current .chart-day { fill: var(--text); font-weight: 600; }
+.chart-hit { fill: transparent; pointer-events: all; }
+.chart-column.active .chart-hit { fill: var(--row-alt); }
+.chart-column:focus-visible .chart-hit { stroke: var(--accent); stroke-width: 2; }
+.chart-tooltip {
+  position: absolute; top: 0; transform: translateX(4px); pointer-events: none; z-index: 1;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.12); font-size: 0.8rem; white-space: nowrap;
+}
+.chart-tooltip.flip { transform: translateX(calc(-100% - 4px)); }
+.chart-tooltip[hidden] { display: none; }
+.chart-tooltip-title { color: var(--muted); margin-bottom: 4px; }
+.chart-tooltip-row { display: flex; align-items: center; gap: 6px; }
+.chart-tooltip-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
+.chart-tooltip-note { color: var(--muted); margin-top: 2px; }
+.chart-line-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+.chart-table { margin: 8px 0 0; }
+.chart-table summary { font-size: 0.85rem; margin-bottom: 4px; }
