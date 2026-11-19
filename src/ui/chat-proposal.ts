@@ -4,12 +4,12 @@
  * never by ID.
  */
 
-import { clockTime } from "../ai/chat-protocol";
+import { clockTime, energyRecorded } from "../ai/chat-protocol";
 import type { Proposal } from "../ai/chat-tools";
 import { dayLabel } from "../core/time";
 import { entryDay, mealLabel, type DiaryEntry } from "../health/mapping";
 import { el } from "./dom";
-import { amountText, summary } from "./format";
+import { amountText, energyLabel, fmtEnergy, fmtGrams } from "./format";
 
 export type ProposalState =
   | { readonly kind: "waiting" }
@@ -33,8 +33,16 @@ function facts(e: DiaryEntry, today: string): [string, string][] {
     ["Amount", amountText(e)],
     ["Meal", mealText(e)],
     ["When", whenText(e, today)],
-    ["Nutrients", summary(e.profile)],
+    ["Nutrients", nutrients(e)],
   ];
+}
+
+/** Energy and the main nutrients. A value the entry doesn't state says so, rather than showing as 0. */
+function nutrients(e: DiaryEntry): string {
+  const n = e.profile.nutrients;
+  const energy = energyRecorded(e) ? `${fmtEnergy(e.profile.energyKcal)} ${energyLabel()}` : "energy not recorded";
+  const grams = (g: number | undefined) => (g === undefined ? "not recorded" : fmtGrams(g));
+  return `${energy} · protein ${grams(n.protein)} · carbs ${grams(n.carbohydrates)} · fat ${grams(n.fat)}`;
 }
 
 function list(rows: readonly (readonly [string, string | HTMLElement])[]): HTMLElement {

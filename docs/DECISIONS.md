@@ -590,7 +590,7 @@ can change its amount but only to units of the same kind.
 ### DR-44 A saved meal's entry shows "saved meal" for its amount
 **Decision.** In the diary, the Amount of a saved meal's entry (ID source `meal`, DR-29) is a small muted label,
 **saved meal**, with a tooltip saying it was logged from a saved meal as one entry with no amount of its own. The
-chat's description of an entry says the same. Every other entry without an amount, a meal prep share or another app's
+chat's approval card says the same, and the chat model is told the entry is a saved meal with no amount of its own. Every other entry without an amount, a meal prep share or another app's
 entry, still shows "–".
 **Why.** Owner request (19 November 2026): a saved meal's "–" looked the same as an amount that had wrongly not been
 recorded. A label says where the entry came from without inventing a number: "1 serving" would be wrong after

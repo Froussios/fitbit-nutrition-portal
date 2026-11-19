@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ChatHandles, chatInstructions, describeDay, describeDays, describeEntry, mealOf, parseStep, resolveDay, stepSchema } from "../src/ai/chat-protocol";
-import { bread, entryOf, oats, TODAY } from "./chat-fixtures";
+import type { DiaryEntry } from "../src/health/mapping";
+import { bread, entryOf, oats, TODAY, withoutEnergy } from "./chat-fixtures";
 
 const step = (fields: Record<string, string>) => JSON.stringify({ text: "", day: "", from: "", to: "", query: "", food: "", entry: "", amount: "", meal: "", ...fields });
 
@@ -96,8 +97,33 @@ describe("describing the diary", () => {
 
   it("names an entry by what the user sees, never its ID", () => {
     const line = describeEntry("E1", breakfast, "kcal");
-    expect(line).toBe("E1: Oats, 40 g, breakfast, 160 kcal (protein 4 g, carbs 24 g, fat 2 g), at 8:05 am, logged by this app");
+    expect(line).toBe("E1: Oats, 40 g, breakfast, 160 kcal (protein 4 g, carbs 24 g, fat 2 g), complete, at 8:05 am, logged by this app");
     expect(line).not.toContain(breakfast.id);
+  });
+
+  it("says energy is not recorded rather than 0, and that the entry is incomplete", () => {
+    const line = describeEntry("E1", withoutEnergy(breakfast), "kcal");
+    expect(line).toBe("E1: Oats, 40 g, breakfast, energy not recorded (protein 4 g, carbs 24 g, fat 2 g), incomplete, not recorded: energy, at 8:05 am, logged by this app");
+    expect(line).not.toContain("0 kcal");
+  });
+
+  it("says which entries a day's total leaves out, for energy and for each nutrient", () => {
+    const noProtein = entryOf({ ...bread, per100: { energyKcal: 250, nutrients: { fat: 3, carbohydrates: 45 } } }, 1, "portion:slice (35 g)", `${TODAY}T08:20:00`, { id: "e-abc-cc33-fnds-555" });
+    const toast = withoutEnergy(entryOf(bread, 1, "portion:slice (35 g)", `${TODAY}T08:10:00`, { id: "e-abc-bb22-fnds-555" }));
+    const text = describeDay(TODAY, TODAY, [breakfast, toast, noProtein], new ChatHandles(), "kcal");
+    expect(text).toMatch(/\nTotal: .* \(leaves out what is not recorded: energy of 1 entry, protein of 1 entry\)$/);
+  });
+
+  it("says what a range's average leaves out", () => {
+    const toast = withoutEnergy(entryOf(bread, 1, "portion:slice (35 g)", `${TODAY}T08:10:00`, { id: "e-abc-bb22-fnds-555" }));
+    const text = describeDays([{ day: TODAY, entries: [breakfast, toast] }], "kcal");
+    expect(text).toMatch(/Average over the 1 day with entries: .* \(leaves out what is not recorded: energy of 1 entry across the range\)$/);
+  });
+
+  it("says a saved meal has no amount of its own, rather than none recorded", () => {
+    const meal = { ...breakfast, displayName: "Porridge", amount: undefined, ref: { source: "meal", id: "m1" } } as DiaryEntry;
+    expect(describeEntry("E1", meal, "kcal")).toContain("E1: Porridge, a saved meal, logged as one entry with no amount of its own, breakfast,");
+    expect(describeEntry("E1", { ...meal, ref: undefined } as DiaryEntry, "kcal")).toContain("E1: Porridge, no amount, breakfast,");
   });
 
   it("says when another app logged an entry", () => {
@@ -137,6 +163,7 @@ describe("chatInstructions", () => {
     expect(system!.content).toContain("Today is Thursday, 19 Nov 2026.");
     expect(system!.content).toContain("2026-11-18 is Wednesday (yesterday)");
     expect(system!.content).toContain("The diary on the screen shows Tuesday, 17 Nov 2026.");
+    expect(system!.content).toContain('"This", "it" and "this entry" mean E1, not the whole day.');
     expect(system!.content).toContain("E1: Oats, 40 g");
   });
 });
