@@ -148,6 +148,42 @@ describe("food index", () => {
     expect(rows.map((r) => r[1].toLowerCase()).sort()).toEqual(["chocolate milk", "milk chocolate", "milk with chocolate"]);
   });
 
+  it("collapses branded products with the same words and energy within 10%, or 5 kcal", async () => {
+    const { reader, builder } = build([
+      product("8201", "Cola", { brands: "Fizz Co", unique_scans_n: 9, nutriments: { "energy-kcal_100g": 42 } }),
+      product("8202", "Cola", { brands: "Fizz Co", nutriments: { "energy-kcal_100g": 39 } }),
+      product("8203", "Cola", { brands: "Fizz Co", nutriments: { "energy-kcal_100g": 46 } }),
+      product("8204", "Cola", { brands: "Fizz Co", nutriments: { "energy-kcal_100g": 84 } }),
+      product("8205", "Muesli", { brands: "Oats Co", unique_scans_n: 9, nutriments: { "energy-kcal_100g": 400 } }),
+      product("8206", "Muesli", { brands: "Oats Co", nutriments: { "energy-kcal_100g": 440 } }),
+      product("8207", "Muesli", { brands: "Oats Co", nutriments: { "energy-kcal_100g": 445 } }),
+    ]);
+    expect(builder.counts.duplicates).toBe(3);
+    const index = await FoodIndex.open(reader);
+    const kcal = async (q: string) => (await index.summaries(await index.search(parseQuery(q)))).map((r) => fromSummaryRow(r).kcalPer100);
+    // 42 stands for 39 and 46; 84 is another product.
+    expect((await kcal("cola")).sort((a, b) => a - b)).toEqual([42, 84]);
+    // 440 is within 10% of 400; 445 is not.
+    expect((await kcal("muesli")).sort((a, b) => a - b)).toEqual([400, 445]);
+  });
+
+  it("collapses products whose name only repeats the brand, whatever their energy", async () => {
+    const { reader } = build([
+      product("8301", "Chobani", { brands: "Chobani", unique_scans_n: 9, nutriments: { "energy-kcal_100g": 59 } }),
+      product("8302", "Chobani", { brands: "Chobani", nutriments: { "energy-kcal_100g": 167 } }),
+      product("8303", "Cola", { brands: "Coca-Cola", unique_scans_n: 9, nutriments: { "energy-kcal_100g": 42 } }),
+      product("8304", "Cola", { brands: "Coca-Cola", nutriments: { "energy-kcal_100g": 0 } }),
+      // The name says more than the brand, so energy still tells these apart.
+      product("8305", "Chobani Greek Yogurt", { brands: "Chobani", nutriments: { "energy-kcal_100g": 59 } }),
+      product("8306", "Chobani Greek Yogurt", { brands: "Chobani", nutriments: { "energy-kcal_100g": 97 } }),
+    ]);
+    const index = await FoodIndex.open(reader);
+    const rows = (await index.summaries(await index.search(parseQuery("chobani")))).map(fromSummaryRow);
+    expect(rows.map((r) => `${r.name} ${r.kcalPer100}`).sort()).toEqual(["Chobani 59", "Chobani Greek Yogurt 59", "Chobani Greek Yogurt 97"]);
+    expect((await index.summaries(await index.search(parseQuery("cola")))).map((r) => r[0])).toEqual(["8303"]);
+    expect(await index.findBarcode("8302")).toBeDefined(); // a collapsed duplicate
+  });
+
   it("ranks more entries with the same name above fewer, across brands", async () => {
     const index = await FoodIndex.open(
       build([

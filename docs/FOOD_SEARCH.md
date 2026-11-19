@@ -303,11 +303,13 @@ Worker; the index does not change.
    text longer than the API's limits (`ingredientLimitProblem` in `src/core/prep.ts`, #91). Open Food Facts is trusted,
    so the limits are generous and long texts are assumed to be real. The build report lists the first 20, and the run
    shows a warning, so the limits can be raised if real products are lost.
-6. Duplicates (same words in name and brand, same kcal per 100) are collapsed in the word index to the most
-   popular one. Products with no brand and the same name (every word in order: `Milk chocolate` is neither
-   `Chocolate milk` nor `Milk with chocolate`) are collapsed whatever their kcal: without a brand,
-   nothing in the dropdown tells them apart, and `Vanilla` would otherwise fill every row. All of them stay
-   reachable by barcode.
+6. Duplicates are collapsed in the word index to the best-ranked one (DR-39). Branded products with the same words in
+   name and brand are collapsed when their kcal per 100 are within 10% (5 kcal for low-energy foods) of a kept one:
+   `Coca Cola (Coca Cola)` at 39, 42 and 45 is one product entered three times. Products with no brand and the same
+   name (every word in order: `Milk chocolate` is neither `Chocolate milk` nor `Milk with chocolate`) are collapsed
+   whatever their kcal: without a brand, nothing in the dropdown tells them apart, and `Vanilla` would otherwise fill
+   every row. So are products whose name only repeats their brand, either way round (`Chobani (Chobani)`,
+   `Cookie (Cookie)`), within the same brand. All of them stay reachable by barcode.
 6. Only if the index exceeds the host's limit: a popularity floor (never scanned and incomplete). Never a
    country filter.
 
@@ -717,8 +719,9 @@ paid plans and makes quotas and abuse minor concerns for the Worker option.
   straight to checking too, so it finds brand-only matches only among those candidates.
 * **Other languages.** Word order is assumed to be English. Open Food Facts records a language per product, which
   could vary the rule when the index is built; Chrome's language detection could help with the query's language.
-* **Duplicates.** Whether collapsing same-name, same-energy products hides pack sizes people want to see.
-  Branded products with different energy still repeat: `Weet-Bix (Sanitarium)` has several rows.
+* **Duplicates.** Whether collapsing same-name, similar-energy products hides pack sizes people want to see.
+  Branded products more than 10% apart still repeat: `Weet-Bix (Sanitarium)` has rows near 350 kcal and others at
+  46 and 107 that are likely mistakes (#48).
 * **Per-serving kcal.** Open Food Facts serving sizes are sometimes wrong. If the coverage test finds many,
   show per-serving values only when they agree with the per-100 values.
 
