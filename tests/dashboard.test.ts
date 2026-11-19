@@ -179,6 +179,8 @@ describe("dashboard view", () => {
     it("places the bar's marker allowing for the gaps between blocks", () => {
       expect(markerLeft(1500, [400, 800, 300])).toBe("100%");
       expect(markerLeft(100, [400, 800])).toBe("calc(8.333333333333332% - 0.167px)");
+      // On a boundary reached by a sum of floats (0.1 + 0.2 is not 0.3): still the middle of the gap.
+      expect(markerLeft(0.3, [0.1, 0.2, 0.3])).toMatch(/ \+ 1px\)$/);
       // On the boundary between two blocks: the middle of the gap.
       expect(markerLeft(400, [400, 800])).toBe(`calc(${(400 / 1200) * 100}% + ${Number((1 - (400 / 1200) * 2).toFixed(3))}px)`);
     });

@@ -115,9 +115,11 @@ export function markerLeft(value: number, blocks: readonly number[]): string {
   let onBoundary = false;
   for (const b of blocks.slice(0, -1)) {
     end += b;
-    if (end < value) passed++;
+    // Sums of floats: a value within a rounding error of a boundary is on it.
+    const close = Math.abs(end - value) <= 1e-9 * whole;
+    if (end < value && !close) passed++;
     else {
-      onBoundary = end === value;
+      onBoundary = close;
       break;
     }
   }
@@ -144,7 +146,6 @@ export function segmentedBar({ title, series, values, format, emptyText, referen
   // The reference's figure, and how far it is from the whole ("2,300 kcal, 450 kcal more than eaten").
   const gap = ref ? ref.value - total : 0;
   const refText = ref && `${ref.format(ref.value)}, ${ref.format(Math.abs(gap))} ${gap >= 0 ? ref.above : ref.below}`;
-  const scale = Math.max(total, ref?.value ?? 0);
   return el(
     "figure",
     { class: "chart segmented" },
