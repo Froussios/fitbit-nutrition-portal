@@ -161,6 +161,12 @@ against the energy eaten: a note under the day's energy, a marker on its bar by 
 column. The viewed day is today's up to the current local time. Without the scope no request is made and the dashboard
 draws as before (DR-46).
 
+Beside the log card, a totals card sums up the same day in a few lines (`renderDaySummary`): the energy eaten against the
+calories burnt, a slim bar of energy by meal drawn up to the calories burnt, and the grams of protein, carbs and fat. It is
+redrawn with the dashboard from the same figures. The log card alone sets the height of their row: the totals card has
+`contain: size` and stretches to the row, so it never makes the page taller. Below 720px for the row it goes under the log
+(DR-47).
+
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
 background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-foods-logged-before)).
 

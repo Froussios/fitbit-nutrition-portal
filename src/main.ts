@@ -18,7 +18,7 @@ import { LoggedFoodsCatalog } from "./food/logged-catalog";
 import { buildNutritionLogPoint, buildPortionPoint, byTime, copyNutritionLogPoint, countedStep, incrementedNutritionLogPoint, stepAfterEdit, NUTRITION_LOG_PARENT, editedNutritionLogPoint, entryDay, findServingUnits, reconcilePending, repeatedNutritionLogPoint, toDiaryEntries, toDiaryEntry, toLoggedFoods, withoutEntries, type DiaryEntry, type DiaryContext, type EntryEdit, type LogDraft } from "./health/mapping";
 import type { DataPoint } from "./health/types";
 import { renderDiaryTable } from "./ui/diary-table";
-import { renderDashboard } from "./ui/dashboard";
+import { dayTotalsHeading, renderDashboard, renderDaySummary } from "./ui/dashboard";
 import { el, errorMessage, replaceChildren } from "./ui/dom";
 import { getEnergyUnit, setEnergyUnit, type EnergyUnit } from "./ui/energy-unit";
 import { createLogForm, type LogForm, type PrepOutcome } from "./ui/log-form";
@@ -161,6 +161,9 @@ class App {
   private energyControl?: HTMLElement;
   private clientIdLink?: HTMLElement;
   private readonly diary = el("div", { class: "diary" });
+  /** The viewed day's totals in a few lines, in a card beside the log (DR-47), redrawn with the diary. */
+  private readonly daySummary = el("div");
+  private readonly daySummaryTitle = el("h2", { id: "day-summary-title" });
   /** The dashboard's charts (DR-38), redrawn with the diary. */
   private readonly dashboard = el("div");
   /** The entries of the 7 days ending on `weekDay`, for the dashboard. The viewed day's own come from `entries`. */
@@ -1640,7 +1643,36 @@ class App {
       header,
       this.connectionNotice,
       this.notice && el("p", { class: "notice" }, this.notice),
-      this.ready ? this.entryCard.element : this.connectError ? this.renderConnectError() : el("p", { class: "status" }, "Connecting to Google Health…"),
+      this.ready
+        ? // The day's totals beside the log, or under it on a narrow screen, so they are seen at every entry (DR-47).
+          el(
+            "div",
+            { class: "log-area" },
+            el(
+              "div",
+              { class: "log-row" },
+              this.entryCard.element,
+              el(
+                "section",
+                { class: "card day-card", "aria-labelledby": "day-summary-title" },
+                this.daySummaryTitle,
+                this.daySummary,
+                !this.canReadActivity &&
+                  el(
+                    "p",
+                    { class: "hint" },
+                    el(
+                      "button",
+                      { type: "button", class: "link", title: "Sign in again and allow access to your activity data, to compare with the calories you burn", onclick: () => void this.signIn("consent") },
+                      "Show calories burnt",
+                    ),
+                  ),
+              ),
+            ),
+          )
+        : this.connectError
+          ? this.renderConnectError()
+          : el("p", { class: "status" }, "Connecting to Google Health…"),
       this.ready &&
         el(
           "section",
@@ -1671,16 +1703,11 @@ class App {
           el(
             "p",
             { class: "hint" },
-            "The day shown in the diary, and the 7 days ending on it, from every app's entries. Energy by macronutrient " +
+            "The day shown in the diary and the 7 days ending on it, from every app's entries. Energy by macronutrient " +
               "counts 4 kcal a gram of protein and of carbs and 9 of fat, so it can differ a little from the energy logged. " +
-              "Snacks include Google Health's snack times (such as afternoon snack); Other is entries with no meal. ",
-            this.canReadActivity
-              ? "Calories burnt are Google Health's total for each day, at rest and active, from every source; today's is what was burnt so far, up to the last sync."
-              : [
-                  "To compare with the calories you burn, allow access to your activity data: ",
-                  el("button", { type: "button", class: "link", onclick: () => void this.signIn("consent") }, "Show calories burnt"),
-                  ".",
-                ],
+              "Snacks include Google Health's snack times (such as afternoon snack); Other is entries with no meal.",
+            this.canReadActivity &&
+              " Calories burnt are Google Health's total for each day, at rest and active, from every source; today's is what was burnt so far, up to the last sync.",
           ),
         ),
       debugPanel,
@@ -1777,7 +1804,10 @@ class App {
     this.renderDashboard();
   }
 
-  /** Redraws the dashboard from the loaded day and week. Open tables stay open, and a focused column keeps focus. */
+  /**
+   * Redraws the day's summary beside the log and the dashboard from the loaded day and week. Open tables stay open,
+   * and a focused column keeps focus.
+   */
   private renderDashboard() {
     const day = this.day();
     const dayEntries = this.loadedDay === day ? this.entries : undefined;
@@ -1789,18 +1819,19 @@ class App {
     const open = [...this.dashboard.querySelectorAll("details")].map((d) => d.open);
     const columns = [...this.dashboard.querySelectorAll(".chart-column")];
     const focused = columns.findIndex((c) => c === document.activeElement);
-    replaceChildren(
-      this.dashboard,
-      renderDashboard({
-        day,
-        today: civilDate(new Date()),
-        dayEntries,
-        weekEntries,
-        weekStatus: this.weekError || (this.listError && !dayEntries ? this.listError : ""),
-        burnt: this.burntDay === day ? this.burnt : undefined,
-        burntStatus: this.burntError,
-      }),
-    );
+    const today = civilDate(new Date());
+    const options = {
+      day,
+      today,
+      dayEntries,
+      weekEntries,
+      weekStatus: this.weekError || (this.listError && !dayEntries ? this.listError : ""),
+      burnt: this.burntDay === day ? this.burnt : undefined,
+      burntStatus: this.burntError,
+    };
+    this.daySummaryTitle.textContent = dayTotalsHeading(day, today);
+    replaceChildren(this.daySummary, renderDaySummary(options));
+    replaceChildren(this.dashboard, renderDashboard(options));
     this.dashboard.querySelectorAll("details").forEach((d, i) => (d.open = open[i] ?? false));
     if (focused >= 0) this.dashboard.querySelectorAll<SVGElement>(".chart-column")[focused]?.focus();
   }

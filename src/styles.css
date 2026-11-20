@@ -160,7 +160,7 @@ tr.editing .amount-note { margin: 4px 0 0; min-width: 11em; white-space: normal;
 .entry-card[data-tab="prep"] { --tint: var(--tint-prep); }
 .entry-card[data-tab="meals"] { --tint: var(--tint-meals); }
 .diary-card { --tint: var(--tint-diary); }
-.dashboard-card { --tint: var(--tint-dashboard); }
+.dashboard-card, .day-card { --tint: var(--tint-dashboard); }
 .error-card { --tint: var(--danger); }
 .debug { --tint: var(--chart-axis); }
 
@@ -560,6 +560,33 @@ button.day-pick svg { display: block; width: 1em; height: 1em; }
 .stat-note { font-size: 0.8rem; color: var(--muted); }
 /* Two tiles a row on a phone, so that the energy tile's calories burnt fit on a line or two. */
 @media (max-width: 600px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/*
+ * The day's totals beside the log (DR-47). The log card alone sets the row's height: the totals card is sized as if
+ * empty (contain: size) and stretched to the row, so it never makes the page taller. Its summary is a few lines, which
+ * fit beside the log at rest; it scrolls in the card if it ever overflows. Below 720px for the row (a phone, or beside
+ * the open chat) the log takes the whole width and the summary goes under it.
+ */
+.log-area { container-type: inline-size; }
+.log-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(270px, 38%); gap: 16px; margin-bottom: 16px; }
+.log-row > .card { margin-bottom: 0; }
+.day-card { contain: size; overflow-y: auto; padding: 12px 14px; }
+.day-card > h2 { font-size: 1rem; margin-bottom: 6px; }
+.day-card .hint { margin: 6px 0 0; }
+.day-summary .status, .day-summary .empty { margin: 0; }
+.day-energy { margin: 0 0 4px; color: var(--muted); font-size: 0.85rem; line-height: 1.3; }
+.day-energy strong { color: var(--text); font-size: 1.35rem; font-weight: 600; margin-right: 2px; }
+.chart.segmented.compact { margin: 0 0 8px; }
+.compact .seg-bar { height: 10px; }
+.compact .seg { padding: 0; border-radius: 3px; }
+.compact .seg-marker { top: -3px; bottom: -3px; }
+.day-macros { list-style: none; display: flex; flex-wrap: wrap; gap: 0 10px; padding: 0; margin: 0; font-size: 0.82rem; color: var(--muted); }
+.day-macros li { display: inline-flex; align-items: center; gap: 5px; }
+.day-macros strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+@container (max-width: 720px) {
+  .log-row { grid-template-columns: minmax(0, 1fr); }
+  .day-card { contain: none; overflow: visible; }
+}
 .dash-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; }
 .chart { margin: 0 0 16px; min-width: 0; }
 .chart-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; }

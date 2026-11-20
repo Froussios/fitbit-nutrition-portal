@@ -1,6 +1,7 @@
 /**
  * The dashboard: the viewed day's totals by macronutrient and by meal, and the 7 days ending on it, each day's
- * macronutrients and each day's energy by meal (DR-38). With the activity scope, the calories burnt are set against
+ * macronutrients and each day's energy by meal (DR-38). The day's totals are also summed up in a few lines for the card
+ * beside the log, so that they are seen at every entry (DR-47). With the activity scope, the calories burnt are set against
  * the energy eaten: under the day's energy, on its bar by meal, and as a line on each day's column (DR-46).
  */
 
@@ -163,6 +164,55 @@ function weekSection(day: string, today: string, entries: readonly DashboardEntr
             }
           : {}),
       }),
+    ),
+  );
+}
+
+/** The heading of the card beside the log, short enough for one line there: "Today's totals", "Yesterday's totals" or "Totals for Tue 17 Nov". */
+export function dayTotalsHeading(day: string, today: string): string {
+  if (day === today) return "Today's totals";
+  if (day === addCivilDays(today, -1)) return "Yesterday's totals";
+  const [weekday, date] = formatCivilDate(day).split(", ") as [string, string];
+  const [d, month, year] = date.split(" ") as [string, string, string];
+  return `Totals for ${weekday.slice(0, 3)} ${d} ${month}${year === today.slice(0, 4) ? "" : ` ${year}`}`;
+}
+
+/**
+ * The viewed day's totals in a few lines, for the card beside the log (DR-47): the energy eaten against the calories
+ * burnt, a slim bar of energy by meal drawn up to the calories burnt, and the grams of each macronutrient. The
+ * dashboard below has the same day in full.
+ */
+export function renderDaySummary({ day, today, dayEntries, burnt }: Pick<DashboardOptions, "day" | "today" | "dayEntries" | "burnt">): HTMLElement {
+  if (!dayEntries) return el("div", { class: "day-summary" }, el("p", { class: "status" }, "Loading…"));
+  const kcal = burnt?.get(day);
+  const words = burntWords(day, today);
+  if (dayEntries.length === 0)
+    return el(
+      "div",
+      { class: "day-summary" },
+      el("p", { class: "empty" }, day === today ? "Nothing logged today yet." : "Nothing logged on this day.", kcal !== undefined && ` ${energy(kcal)} ${words}.`),
+    );
+  const t = totals(dayEntries);
+  const meals = byMealGroup(dayEntries);
+  return el(
+    "div",
+    { class: "day-summary" },
+    el("p", { class: "day-energy" }, el("strong", {}, energy(t.energyKcal)), kcal !== undefined ? ` of ${energy(kcal)} ${words}` : " eaten"),
+    segmentedBar({
+      title: "Energy by meal",
+      series: MEAL_SERIES,
+      values: MEAL_GROUPS.map((g) => meals[g].energyKcal),
+      format: (v) => energy(v),
+      emptyText: "No energy logged.",
+      compact: true,
+      ...(kcal !== undefined
+        ? { reference: { name: words[0]!.toUpperCase() + words.slice(1), color: BURNT_COLOR, value: kcal, format: energy, above: "more than eaten", below: "less than eaten" } }
+        : {}),
+    }),
+    el(
+      "ul",
+      { class: "day-macros" },
+      ...MACROS.map((m) => el("li", {}, el("span", { class: "chart-key", style: `background: var(--macro-${m})` }), `${MACRO_NAMES[m]} `, el("strong", {}, grams(t.grams[m])))),
     ),
   );
 }

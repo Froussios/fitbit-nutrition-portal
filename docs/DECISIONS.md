@@ -637,3 +637,20 @@ sync. The roll-up leaves out time a wearable was not worn; whether a day without
 known yet (V13). Wrist estimates of energy are rough, so a day's difference is a guide, not a measurement.
 **Reopen if.** V13's open points turn out otherwise (another scope, or today's figure projected to the day's end), the
 owner wants the time of the last sync shown, a target derived from the calories burnt, or a longer range than 14 days.
+
+### DR-47 The day's totals sit beside the log, without making the page taller
+**Decision.** A totals card sits to the right of the log card (38% of the row, at least 270px), headed "Today's
+totals", "Yesterday's totals" or "Totals for Tue 17 Nov" after the day shown. It sums the day up in three lines: the
+energy eaten, against the calories burnt so far when DR-46's scope is granted; a slim bar of energy by meal (no
+percentages or legend, every figure in its tooltips and accessible name), drawn up to the calories burnt with its marker;
+and the grams of protein, carbs and fat. Without the scope it has a "Show calories burnt" link. The log card alone sets
+the row's height: the totals card is sized as if empty (`contain: size`), stretched to the row and scrolls only if its
+content ever overflows, which it does not at rest. Below 720px for the row, on a phone or beside the open chat, it goes
+under the log. The Dashboard card below keeps the day in full and the week (DR-38).
+**Why.** Owner request (20 November 2026): the dashboard is a major motivation to keep logging, so the day's totals
+should be seen often, next to the logging section; they must not take vertical space, and the form has room to spare
+horizontally.
+**Consequence.** The log form is narrower on wide screens. On a phone the summary adds about 120px under the log. The
+day's figures appear twice on the page, in brief beside the log and in full in the dashboard.
+**Reopen if.** The log card's content is ever shorter than the summary at rest (it would scroll), the owner wants the
+summary on a phone above the log or hidden, or targets are added (DR-38).

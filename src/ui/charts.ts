@@ -85,6 +85,8 @@ export interface SegmentedBarOptions {
    * whole short of it leaves an outlined gap up to it; a marker shows where it falls.
    */
   readonly reference?: BarReference;
+  /** A slim bar with no percentages and no legend; its title is for screen readers only. Hover and the accessible name still give every figure. */
+  readonly compact?: boolean;
 }
 
 export interface BarReference {
@@ -136,7 +138,7 @@ const MIN_LABELLED_SHARE = 0.09;
  * One whole split into parts: a tall bar whose blocks are as wide as their share, each printing its share, with a
  * legend that names the parts and gives their amounts. Hover and the accessible name give every part's figures.
  */
-export function segmentedBar({ title, series, values, format, emptyText, reference }: SegmentedBarOptions): HTMLElement {
+export function segmentedBar({ title, series, values, format, emptyText, reference, compact = false }: SegmentedBarOptions): HTMLElement {
   const total = values.reduce((a, b) => a + b, 0);
   const share = (v: number) => (total > 0 ? v / total : 0);
   const pct = (v: number) => `${Math.round(share(v) * 100)}%`;
@@ -148,8 +150,8 @@ export function segmentedBar({ title, series, values, format, emptyText, referen
   const refText = ref && `${ref.format(ref.value)}, ${ref.format(Math.abs(gap))} ${gap >= 0 ? ref.above : ref.below}`;
   return el(
     "figure",
-    { class: "chart segmented" },
-    el("figcaption", { class: "chart-title" }, title),
+    { class: `chart segmented${compact ? " compact" : ""}` },
+    el("figcaption", { class: compact ? "visually-hidden" : "chart-title" }, title),
     total > 0
       ? el(
           "div",
@@ -158,7 +160,7 @@ export function segmentedBar({ title, series, values, format, emptyText, referen
             el(
               "div",
               { class: `seg seg-${series[i]!.key}`, style: `flex-grow: ${values[i]}; background: ${fill(series[i]!)}`, title: describe(i) },
-              share(values[i]!) >= MIN_LABELLED_SHARE ? pct(values[i]!) : "",
+              !compact && share(values[i]!) >= MIN_LABELLED_SHARE ? pct(values[i]!) : "",
             ),
           ),
           ref && gap > 0 && el("div", { class: "seg seg-rest", style: `flex-grow: ${gap}`, title: `${ref.name} ${ref.format(gap)} ${ref.above}` }),
@@ -167,6 +169,7 @@ export function segmentedBar({ title, series, values, format, emptyText, referen
       : el("p", { class: "chart-empty" }, emptyText),
     // The legend names the parts the bar draws, in its order: a part at 0 has no block to name.
     total > 0 &&
+      !compact &&
       legend(
         parts.map((i) => series[i]!),
         parts.map((i) => format(values[i]!, i)),
