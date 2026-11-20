@@ -529,8 +529,20 @@ button.on-hand-item { display: flex; align-items: baseline; gap: 8px; padding: 4
  * Every button in the diary's header, Refresh included, is one height. The arrows and the calendar are squares
  * of that height, and the buttons in words share one padding, so no button in the row stands out by its size.
  */
-.card-head button { display: inline-flex; align-items: center; justify-content: center; height: var(--bar-button); padding: 0 14px; line-height: 1; }
+.card-head button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; height: var(--bar-button); padding: 0 14px; line-height: 1; }
 .card-head button.day-step, .card-head button.day-pick { width: var(--bar-button); padding: 0; }
+/*
+ * On a phone the one row is wider than the card, so the header takes two: the day between its arrows across the
+ * full width, then the calendar and Today, with Refresh still on the right. The day bar's wrapper steps aside
+ * (display: contents) so that its buttons and Refresh share the second line. The day takes the width the arrows
+ * leave it, which pushes the calendar onto the next line, and may wrap onto two lines of its own at the narrowest.
+ */
+@media (max-width: 36rem) {
+  .card-head { flex-wrap: wrap; justify-content: flex-start; }
+  .day-nav { display: contents; }
+  .day-nav h2 { flex: 1 0 calc(100% - 2 * var(--bar-button) - 16px); min-width: 0; }
+  .card-head > button:last-child { margin-left: auto; }
+}
 /* The calendar opens the browser's date picker from a field kept out of sight under it. */
 .day-pick-wrap { position: relative; display: inline-flex; }
 button.day-pick svg { display: block; width: 1em; height: 1em; }
