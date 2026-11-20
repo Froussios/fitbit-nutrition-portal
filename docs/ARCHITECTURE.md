@@ -313,7 +313,9 @@ is on and the model is ready.
   `EntryEdit`, and the entry it would write, made by the same mapping functions as a real write, so the card shows the
   exact values.
 * **Handles.** Entries and foods reach the model as `E1`, `F1`… (`ChatHandles`), one per entry or food for the whole
-  chat, never as IDs. An entry's handle is taken back once the chat edits or deletes it, since that entry has gone. The instructions are sent once per chat as `initialPrompts`, which the Prompt API never evicts,
+  chat, never as IDs. An entry's handle is taken back once the chat edits or deletes it, since that entry has gone. The user never sees a
+  handle: `readableText` replaces any in the model's replies with the entry (food, amount, day and time) or food it
+  stands for, since a small model can't be trusted to keep them out. The instructions are sent once per chat as `initialPrompts`, which the Prompt API never evicts,
   so the entry a chat was opened on stays known as `E1`. Each message in such a chat also starts with that entry's line,
   since a small model weighs what is next to the question most, until the chat changes or deletes the entry.
 * **Missing values.** The diary reads an entry with no energy as 0 kcal. The chat says "energy not recorded" instead,
