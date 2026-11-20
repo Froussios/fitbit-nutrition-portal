@@ -236,17 +236,17 @@ function entryWords(e: DiaryEntry, today: string): string {
 /**
  * The model's words, made fit for the user. Handles are the model's own names for entries and foods, and mean nothing
  * to the user, so each one becomes the entry or food it stands for. A small model can't be trusted to keep them out of
- * its replies, however it is told. A handle that was never handed out becomes "an entry" or "a food".
+ * its replies, however it is told. A handle that was never handed out becomes "an entry" or "a food", but only below
+ * 100: food additive codes run from E100 up (E330, E621), and "E621 is MSG" must stay as it is.
  */
 export function readableText(text: string, handles: ChatHandles, today: string): string {
-  return text.replace(/\b([EF])(\d+)\b/g, (_match, kind: string, n: string) => {
+  return text.replace(/\b([EF])(\d+)\b/g, (match, kind: string, n: string) => {
     const handle = `${kind}${n}`;
-    if (kind === "E") {
-      const entry = handles.lastEntry(handle);
-      return entry ? entryWords(entry, today) : "an entry";
-    }
-    const food = handles.food(handle);
-    return food ? `“${food.brand ? `${food.name} (${food.brand})` : food.name}”` : "a food";
+    const known = kind === "E" ? handles.lastEntry(handle) : handles.food(handle);
+    if (!known) return Number(n) < 100 ? (kind === "E" ? "an entry" : "a food") : match;
+    if (kind === "E") return entryWords(known as DiaryEntry, today);
+    const food = known as FoodSummary;
+    return `“${food.brand ? `${food.name} (${food.brand})` : food.name}”`;
   });
 }
 
@@ -425,7 +425,7 @@ export function chatInstructions(ctx: ChatContext): { readonly role: "system" | 
     "- The app shows each proposed change to the user, who accepts or rejects it. Then you are told what happened. Propose one change at a time.",
     "- Only entries logged by this app can be changed or deleted.",
     "- Handles such as E1 and F1 are only for you and the app: the user never sees them. In a reply, name an entry by its food and time, and a food by its name.",
-    '- In a reply, write days as "today", "yesterday" or the weekday, as the app writes them. Never work out a date yourself.',
+    "- In a reply, write days exactly as the app writes them. Never work out a date yourself.",
     "- Keep replies short and plain.",
     `Energy is in ${ctx.energyUnit === "kj" ? "kJ" : "kcal"}.`,
     `Today is ${formatCivilDate(ctx.today)}. Days: ${week}.`,

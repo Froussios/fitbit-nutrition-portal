@@ -94,6 +94,18 @@ describe("readableText", () => {
     expect(readableText("I deleted E1.", handles, today)).toBe("I deleted “Oats”, 40 g, at 4:10 pm.");
   });
 
+  it("leaves food additive codes alone, but not a handle it handed out", () => {
+    const handles = new ChatHandles();
+    expect(readableText("E621 is MSG, and E330 is citric acid.", handles, today)).toBe("E621 is MSG, and E330 is citric acid.");
+  });
+
+  it("leaves out the amount of an entry that has none, such as a saved meal", () => {
+    const handles = new ChatHandles();
+    const { amount: _amount, ...meal } = entryOf(oats, 40, "g", `${TODAY}T12:30:00`, { id: "e-abc-dd44-off-123" });
+    handles.entryHandle({ ...meal, displayName: "Lunch bowl" });
+    expect(readableText("E1 is your lunch.", handles, today)).toBe("“Lunch bowl”, at 12:30 pm is your lunch.");
+  });
+
   it("never shows a made-up handle, and leaves other words alone", () => {
     const handles = new ChatHandles();
     expect(readableText("E9 and F4 are sweet, and so is DE1 or E1x.", handles, today)).toBe("an entry and a food are sweet, and so is DE1 or E1x.");
