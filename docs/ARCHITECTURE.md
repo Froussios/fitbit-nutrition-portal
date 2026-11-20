@@ -158,8 +158,8 @@ each diary load; the day shown takes its figures from the diary's own listing (D
 With the optional activity scope, the dashboard also rolls up `total-calories` over the same 7 days
 (`dataPoints:dailyRollUp`, one request per week listing, so polling refreshes it) and sets each day's calories burnt
 against the energy eaten: a note under the day's energy, a marker on its bar by meal and a line on each day's energy
-column. The viewed day is today's up to the current local time. Without the scope no request is made and the dashboard
-draws as before (DR-46).
+column, with the day's surplus or deficit above it. The viewed day is today's up to the current local time. Without
+the scope no request is made and the dashboard draws as before (DR-46).
 
 Beside the log card, a totals card sums up the same day in a few lines (`renderDaySummary`): the difference between the
 calories burnt and the energy eaten, with both beside it, a slim bar of energy by meal drawn up to the calories burnt, and the grams of protein, carbs and fat. It is

@@ -165,6 +165,8 @@ function weekSection(day: string, today: string, entries: readonly DashboardEntr
                 }),
                 // Today's figure is still growing.
                 partialFor: (i: number) => days[i]!.day === today,
+                // Each day's surplus or deficit above its column (DR-46).
+                difference: { above: "surplus", below: "deficit", heading: "Difference" },
               },
             }
           : {}),

@@ -214,11 +214,33 @@ export interface ColumnMarker {
   readonly values: readonly (number | undefined)[];
   /** Whether a column's figure is still growing, such as today's calories burnt: its line is dashed. */
   readonly partialFor?: (index: number) => boolean;
+  /**
+   * Also show each column's difference from its line, total − line, as a signed figure above it ("+200", "−340"), in
+   * the tooltip and the accessible name ("200 kcal surplus") and in a table column. Worked out from the two figures as
+   * shown. A column with nothing in it has none: an empty day is not a measured difference.
+   */
+  readonly difference?: ColumnDifference;
+}
+
+export interface ColumnDifference {
+  /** What a total above the line is called, e.g. "surplus". */
+  readonly above: string;
+  /** What a total below the line is called, e.g. "deficit". */
+  readonly below: string;
+  /** The table's heading for it, e.g. "Difference". */
+  readonly heading: string;
+}
+
+/** "+200", "−340" or "0": a difference as the label above a column prints it. */
+function signed(gap: number): string {
+  return gap === 0 ? "0" : `${gap > 0 ? "+" : "−"}${formatNumber(Math.abs(gap), 0)}`;
 }
 
 const W = 460;
 const H = 220;
 const PAD = { left: 40, right: 6, top: 10, bottom: 24 };
+/** The plot's top padding when columns carry a difference: room for its label above the tallest column. */
+const PAD_TOP_DIFFERENCE = 22;
 const BAR = 24;
 const GAP = 2;
 const RADIUS = 4;
@@ -242,12 +264,17 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
     return v !== undefined && v > 0 ? v : undefined;
   });
   const markName = marker?.name ?? "";
+  const difference = marker?.difference;
+  // Total − line, from the two figures as shown; none on a column with nothing in it, or with no line.
+  const diffs = columns.map((_, i) => (difference && marks[i] !== undefined && totals[i]! > 0 ? Math.round(totals[i]!) - Math.round(marks[i]!) : undefined));
+  const describeDiff = (gap: number) => (gap === 0 ? "Even" : `${formatTotal(Math.abs(gap))} ${gap > 0 ? difference!.above : difference!.below}`);
   const scale = niceScale(Math.max(0, ...totals, ...marks.map((v) => v ?? 0)));
+  const padTop = diffs.some((d) => d !== undefined) ? PAD_TOP_DIFFERENCE : PAD.top;
   const plotW = W - PAD.left - PAD.right;
-  const plotH = H - PAD.top - PAD.bottom;
+  const plotH = H - padTop - PAD.bottom;
   const band = plotW / Math.max(1, columns.length);
   const barW = Math.min(BAR, band * 0.6);
-  const y = (v: number) => PAD.top + plotH - (v / scale.max) * plotH;
+  const y = (v: number) => padTop + plotH - (v / scale.max) * plotH;
 
   const grid = svg("g", { class: "chart-grid" });
   for (let i = 0; i * scale.step <= scale.max + 1e-9; i++) {
@@ -271,6 +298,7 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
       ...(marker && marks[i] !== undefined
         ? [el("div", { class: "chart-tooltip-row" }, el("span", { class: "chart-line-key", style: `background: var(${marker.color})` }), el("strong", {}, formatTotal(marks[i]!)), ` ${markName}`)]
         : []),
+      ...(diffs[i] !== undefined ? [el("div", { class: "chart-tooltip-row chart-tooltip-diff" }, el("strong", {}, describeDiff(diffs[i]!)))] : []),
       ...(c.note ? [el("div", { class: "chart-tooltip-note" }, c.note)] : []),
     );
     // Beside the column, on the side with more room, so that it hides neither the column nor the text above the chart.
@@ -293,10 +321,10 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
       class: `chart-column${c.current ? " current" : ""}`,
       tabindex: 0,
       role: "img",
-      "aria-label": `${c.title}: ${series.map((s, k) => `${s.name} ${format(c.values[k]!)}`).join(", ")}; total ${formatTotal(totals[i]!)}${marks[i] !== undefined ? `; ${markName} ${formatTotal(marks[i]!)}` : ""}${c.note ? `; ${c.note}` : ""}`,
+      "aria-label": `${c.title}: ${series.map((s, k) => `${s.name} ${format(c.values[k]!)}`).join(", ")}; total ${formatTotal(totals[i]!)}${marks[i] !== undefined ? `; ${markName} ${formatTotal(marks[i]!)}` : ""}${diffs[i] !== undefined ? `; ${describeDiff(diffs[i]!)}` : ""}${c.note ? `; ${c.note}` : ""}`,
     });
     // The hit target is the whole band, from the top of the plot to the day's label, not just the bar.
-    column.append(svg("rect", { class: "chart-hit", x: PAD.left + band * i, y: PAD.top, width: band, height: plotH + PAD.bottom }));
+    column.append(svg("rect", { class: "chart-hit", x: PAD.left + band * i, y: padTop, width: band, height: plotH + PAD.bottom }));
     let base = 0;
     c.values.forEach((v, k) => {
       if (!(v > 0)) return;
@@ -315,6 +343,12 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
       const line = { x1: x - MARK_OVERHANG, x2: x + barW + MARK_OVERHANG, y1: y(mark), y2: y(mark) };
       column.append(svg("line", { ...line, class: "chart-marker-halo" }), svg("line", { ...line, class: `chart-marker${marker.partialFor?.(i) ? " partial" : ""}`, style: `stroke: var(${marker.color})` }));
     }
+    const diff = diffs[i];
+    if (diff !== undefined) {
+      // Above whichever is higher, the column or its line.
+      const at = Math.min(y(totals[i]!), y(mark!)) - 6;
+      column.append(svg("text", { x: x + barW / 2, y: at, class: `chart-diff${diff > 0 ? " over" : diff < 0 ? " under" : ""}`, "text-anchor": "middle" }, signed(diff)));
+    }
     column.append(svg("text", { x: x + barW / 2, y: H - 6, class: "chart-tick chart-day", "text-anchor": "middle" }, c.label));
     column.addEventListener("pointerenter", () => showTip(i, column));
     column.addEventListener("focus", () => showTip(i, column));
@@ -331,12 +365,13 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
     el("div", { class: "chart-plot" }, svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": title }, grid, plot), tooltip),
     tableView(
       title,
-      ["Day", ...series.map((s) => s.name), totalHeading, ...(marker ? [marker.name] : [])],
+      ["Day", ...series.map((s) => s.name), totalHeading, ...(marker ? [marker.name] : []), ...(difference ? [difference.heading] : [])],
       columns.map((c, i) => [
         c.title,
         ...c.values.map((v) => format(v)),
         formatTotal(totals[i]!),
         ...(marker ? [marks[i] === undefined ? "–" : formatTotal(marks[i]!)] : []),
+        ...(difference ? [diffs[i] === undefined ? "–" : describeDiff(diffs[i]!)] : []),
       ]),
     ),
   );

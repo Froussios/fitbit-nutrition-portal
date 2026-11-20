@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { averageBurnt, averageEnergy, byMealGroup, dailyTotals, macroEnergy, mealGroup, niceScale, totals, type DashboardEntry } from "../src/core/dashboard";
 import { nutritionDaysFilter } from "../src/core/time";
-import { markerLeft } from "../src/ui/charts";
+import { markerLeft, stackedColumns } from "../src/ui/charts";
 import { dayTotalsHeading, renderDashboard, renderDaySummary } from "../src/ui/dashboard";
 import { setEnergyUnit } from "../src/ui/energy-unit";
 
@@ -176,6 +176,28 @@ describe("dashboard view", () => {
       expect(meals.getAttribute("aria-label")).toContain("; Burnt 1,000 kcal, 200 kcal less than eaten");
     });
 
+    it("signs each column's difference from its line, and says even when the figures as shown are equal", () => {
+      const fmt = (v: number) => `${Math.round(v).toLocaleString("en")} kcal`;
+      const chart = stackedColumns({
+        title: "Energy",
+        series: [{ key: "a", name: "A", color: "--meal-lunch" }],
+        columns: [
+          { label: "1", title: "Day 1", values: [2200] },
+          { label: "2", title: "Day 2", values: [1999.6] },
+          { label: "3", title: "Day 3", values: [0] },
+        ],
+        format: fmt,
+        formatTotal: fmt,
+        totalHeading: "Total",
+        marker: { name: "Burnt", color: "--burnt", values: [2000, 2000.4, 1800], difference: { above: "surplus", below: "deficit", heading: "Difference" } },
+      });
+      expect([...chart.querySelectorAll(".chart-diff")].map((t) => [t.textContent, t.getAttribute("class")])).toEqual([
+        ["+200", "chart-diff over"],
+        ["0", "chart-diff"],
+      ]);
+      expect([...chart.querySelectorAll("tbody tr")].map((r) => r.lastElementChild?.textContent)).toEqual(["200 kcal surplus", "Even", "–"]);
+    });
+
     it("places the bar's marker allowing for the gaps between blocks", () => {
       expect(markerLeft(1500, [400, 800, 300])).toBe("100%");
       expect(markerLeft(100, [400, 800])).toBe("calc(8.333333333333332% - 0.167px)");
@@ -195,15 +217,28 @@ describe("dashboard view", () => {
       expect(energy!.querySelector(".chart-legend-marker")?.textContent).toBe("Burnt");
       const columns = energy!.querySelectorAll(".chart-column");
       expect(columns[6]!.getAttribute("aria-label")).toBe(
-        "Thursday, 19 Nov 2026: Breakfast 400 kcal, Lunch 0 kcal, Dinner 800 kcal, Snacks 0 kcal, Other 0 kcal; total 1,200 kcal; Burnt 1,500 kcal",
+        "Thursday, 19 Nov 2026: Breakfast 400 kcal, Lunch 0 kcal, Dinner 800 kcal, Snacks 0 kcal, Other 0 kcal; total 1,200 kcal; Burnt 1,500 kcal; 300 kcal deficit",
       );
       // The axis reaches the highest line, 2,500, above every column.
       expect([...energy!.querySelectorAll(".chart-grid text")].map((t) => t.textContent).at(-1)).toBe("2,500");
       columns[2]!.dispatchEvent(new Event("focus"));
       expect(energy!.querySelector(".chart-tooltip")?.textContent).toContain("2,300 kcal Burnt");
-      const rows = [...energy!.querySelectorAll("tbody tr")].map((r) => [...r.children].map((c) => c.textContent).at(-1));
-      expect(rows).toEqual(["–", "–", "2,300 kcal", "–", "–", "2,500 kcal", "1,500 kcal"]);
-      expect(energy!.querySelectorAll("thead th")[7]?.textContent).toBe("Burnt");
+      const rows = [...energy!.querySelectorAll("tbody tr")].map((r) => [...r.children].map((c) => c.textContent).slice(-2));
+      // The 18th has a figure but nothing logged, so it has no difference: an empty day is not a measured deficit.
+      expect(rows).toEqual([
+        ["–", "–"],
+        ["–", "–"],
+        ["2,300 kcal", "1,700 kcal deficit"],
+        ["–", "–"],
+        ["–", "–"],
+        ["2,500 kcal", "–"],
+        ["1,500 kcal", "300 kcal deficit"],
+      ]);
+      expect([...energy!.querySelectorAll("thead th")].slice(-2).map((th) => th.textContent)).toEqual(["Burnt", "Difference"]);
+      // A signed figure above each day that has one; the macronutrient chart has none.
+      expect([...energy!.querySelectorAll(".chart-diff")].map((t) => t.textContent)).toEqual(["−1,700", "−300"]);
+      expect(macros!.querySelector(".chart-diff")).toBeNull();
+      expect(energy!.querySelector(".chart-tooltip")?.textContent).toContain("1,700 kcal deficit");
       expect(view.textContent).toContain("Burnt 2,400 kcal a day, over the 2 complete days recorded.");
     });
 
@@ -211,8 +246,9 @@ describe("dashboard view", () => {
       setEnergyUnit("kj");
       const view = renderDashboard({ day, today: day, dayEntries, weekEntries: week, weekStatus: "", burnt });
       expect(view.querySelector(".stat-energy .stat-note")?.textContent).toBe("of 6,276 kJ burnt");
-      const rows = [...view.querySelectorAll(".chart.columns")[1]!.querySelectorAll("tbody tr")].map((r) => [...r.children].map((c) => c.textContent).at(-1));
-      expect(rows[6]).toBe("6,276 kJ");
+      const rows = [...view.querySelectorAll(".chart.columns")[1]!.querySelectorAll("tbody tr")].map((r) => [...r.children].map((c) => c.textContent).slice(-2));
+      // 5,021 kJ eaten, 6,276 kJ burnt: the difference is worked out in kJ from the figures as shown.
+      expect(rows[6]).toEqual(["6,276 kJ", "1,255 kJ deficit"]);
       setEnergyUnit("kcal");
     });
 
