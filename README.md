@@ -24,6 +24,8 @@ This is the MVP, a proof of concept (milestone M0):
    day's energy by meal, with a table of the figures under each chart. If you allow access to your activity data, it
    sets the energy you ate against the calories you burnt: today's so far, and each day of the week as a line on its
    column. Without that permission the dashboard leaves calories burnt out.
+   Beside the log, a small **totals** card keeps the day's energy (against the calories burnt so far), its energy by
+   meal and its protein, carbs and fat in view at every entry, without making the page any taller.
 5. Where the site serves its API, cook a batch and eat it in shares (**Meal prep**), or keep meals you eat often
    (**Saved meals**). A saved meal is logged as one entry under its name. Its ingredients can be changed for that
    one entry, and a saved meal can be added to another as its ingredients.

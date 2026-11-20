@@ -628,8 +628,8 @@ so far" (or "burnt" for a past day); on the bar of energy by meal, a marker wher
 outlined gap up to it while less was eaten, and the difference in the legend; on each day's energy column, a line at
 its calories burnt, dashed for today, with the figure in the tooltip and a Burnt column in the table. The week's summary
 adds the average burnt over the complete days recorded, leaving today out. Without the scope nothing is asked and the
-dashboard is as before, with a "Show calories burnt" link in its note to sign in again and tick it. A failed roll-up
-only adds a note under the week's summary.
+dashboard is as before, with a "Show calories burnt" link to sign in again and tick it (in the totals card beside the
+log since DR-47; first in the dashboard's note). A failed roll-up only adds a note under the week's summary.
 **Why.** Owner request (19 November 2026): pull the total calories burnt to compare calories in with calories out;
 the connection must be optional, and skipped when the user doesn't agree; calories burnt should inform the graphs and
 the dashboard rather than be a row; "burnt so far" for today, because the current day is the only one the user can
@@ -640,3 +640,21 @@ sync. The roll-up leaves out time a wearable was not worn; whether a day without
 known yet (V13). Wrist estimates of energy are rough, so a day's difference is a guide, not a measurement.
 **Reopen if.** V13's open points turn out otherwise (another scope, or today's figure projected to the day's end), the
 owner wants the time of the last sync shown, a target derived from the calories burnt, or a longer range than 14 days.
+
+### DR-47 The day's totals sit beside the log, without making the page taller
+**Decision.** A totals card sits to the right of the log card (38% of the row, at least 270px), headed "Today's
+totals", "Yesterday's totals" or "Totals for Tue 17 Nov" after the day shown. It sums the day up in three lines: the
+energy eaten, against the calories burnt so far when DR-46's scope is granted; a slim bar of energy by meal (no
+percentages or legend, every figure in its tooltips and accessible name), drawn up to the calories burnt with its marker;
+and the grams of protein, carbs and fat. Without the scope it has DR-46's "Show calories burnt" link, moved here from
+the dashboard's note. If the day could not be loaded it says so. The log card alone sets
+the row's height: the totals card is sized as if empty (`contain: size`), stretched to the row and scrolls only if its
+content ever overflows, which it does not at rest. Below 720px for the row, on a phone or beside the open chat, it goes
+under the log. The Dashboard card below keeps the day in full and the week (DR-38).
+**Why.** Owner request (20 November 2026): the dashboard is a major motivation to keep logging, so the day's totals
+should be seen often, next to the logging section; they must not take vertical space, and the form has room to spare
+horizontally.
+**Consequence.** The log form is narrower on wide screens. On a phone the summary adds about 120px under the log. The
+day's figures appear twice on the page, in brief beside the log and in full in the dashboard.
+**Reopen if.** The log card's content is ever shorter than the summary at rest (it would scroll), the owner wants the
+summary on a phone above the log or hidden, or targets are added (DR-38).

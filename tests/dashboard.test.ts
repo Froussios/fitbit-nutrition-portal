@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { averageBurnt, averageEnergy, byMealGroup, dailyTotals, macroEnergy, mealGroup, niceScale, totals, type DashboardEntry } from "../src/core/dashboard";
 import { nutritionDaysFilter } from "../src/core/time";
 import { markerLeft } from "../src/ui/charts";
-import { renderDashboard } from "../src/ui/dashboard";
+import { dayTotalsHeading, renderDashboard, renderDaySummary } from "../src/ui/dashboard";
 import { setEnergyUnit } from "../src/ui/energy-unit";
 
 /** An entry at local noon on `day`, so that it falls on that civil date in any time zone the tests run in. */
@@ -226,6 +226,44 @@ describe("dashboard view", () => {
       expect([...view.querySelectorAll(".chart.columns")[1]!.querySelectorAll("thead th")].map((th) => th.textContent).at(-1)).toBe("Total");
       const failed = renderDashboard({ day, today: day, dayEntries, weekEntries: week, weekStatus: "", burntStatus: "Calories burnt could not be loaded." });
       expect(failed.textContent).toContain("Calories burnt could not be loaded.");
+    });
+  });
+
+  describe("summary beside the log (DR-47)", () => {
+    it("heads the card with the day, short enough for one line", () => {
+      expect(dayTotalsHeading(day, day)).toBe("Today's totals");
+      expect(dayTotalsHeading("2026-11-18", day)).toBe("Yesterday's totals");
+      expect(dayTotalsHeading("2026-11-17", day)).toBe("Totals for Tue 17 Nov");
+      expect(dayTotalsHeading("2025-12-31", day)).toBe("Totals for Wed 31 Dec 2025");
+    });
+
+    it("sums the day up in a line of energy, a slim bar by meal and the grams of each macronutrient", () => {
+      setEnergyUnit("kcal");
+      const view = renderDaySummary({ day, today: day, dayEntries });
+      expect(view.querySelector(".day-energy")?.textContent).toBe("1,200 kcal eaten");
+      const bar = view.querySelector(".chart.segmented.compact")!;
+      // No percentages or legend; the title and every figure are still in the accessible name.
+      expect([...bar.querySelectorAll(".seg")].map((s) => s.textContent)).toEqual(["", ""]);
+      expect(bar.querySelector(".chart-legend")).toBeNull();
+      expect(bar.querySelector("figcaption")?.className).toBe("visually-hidden");
+      expect(bar.querySelector(".seg-bar")?.getAttribute("aria-label")).toBe("Energy by meal: Breakfast 400 kcal, 33%; Dinner 800 kcal, 67%");
+      expect([...view.querySelectorAll(".day-macros li")].map((li) => li.textContent)).toEqual(["Protein 60 g", "Carbs 110 g", "Fat 40 g"]);
+    });
+
+    it("sets the energy against what was burnt so far, with the marker on the bar", () => {
+      const view = renderDaySummary({ day, today: day, dayEntries, burnt: new Map([[day, 1500]]) });
+      expect(view.querySelector(".day-energy")?.textContent).toBe("1,200 kcal of 1,500 kcal burnt so far");
+      expect(view.querySelector<HTMLElement>(".seg-rest")?.style.flexGrow).toBe("300");
+      expect(view.querySelector(".seg-marker")).not.toBeNull();
+    });
+
+    it("says when nothing is logged or the day is loading", () => {
+      expect(renderDaySummary({ day, today: day, dayEntries: [], burnt: new Map([[day, 900]]) }).textContent).toBe("Nothing logged today yet. 900 kcal burnt so far.");
+      expect(renderDaySummary({ day, today: "2026-11-20", dayEntries: [] }).textContent).toBe("Nothing logged on this day.");
+      expect(renderDaySummary({ day, today: day, dayEntries: undefined }).textContent).toBe("Loading…");
+      const failed = renderDaySummary({ day, today: day, dayEntries: undefined, dayStatus: "The day could not be loaded." });
+      expect(failed.textContent).toBe("The day could not be loaded.");
+      expect(failed.querySelector(".status")?.classList.contains("error")).toBe(true);
     });
   });
 });
