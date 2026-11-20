@@ -278,15 +278,26 @@ tfoot th, tfoot td { font-weight: 600; border-bottom: none; }
 tbody td:last-child { padding: 0; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.pending { opacity: 0.7; }
-/* Each meal's stats close its entries (DR-48): unstriped, quieter than the entries, with a slim bar of its macronutrients. */
+/*
+ * Each meal's summary closes its entries (DR-48): no meal name and nothing under Meal or Food, so it reads as a summary of
+ * the rows above. Under Amount to Fat, the meal's energy and a bar of its macronutrients, as long as its share of the
+ * day's largest meal.
+ */
 tbody tr.meal-stats { background: none; }
-tr.meal-stats th, tr.meal-stats td { padding-block: 6px; color: var(--muted); font-size: 0.82rem; }
-tr.meal-stats th { font-weight: 600; }
-tbody tr.meal-stats td { vertical-align: middle; }
-/* As wide as the meal's share of the day's largest meal: only that one fills the cell. */
-.meal-bar { min-width: 4px; }
-.meal-bar .chart.segmented.compact { margin: 0; }
-.meal-bar .chart-empty { font-size: inherit; white-space: normal; }
+tr.meal-stats td { padding-block: 2px 10px; }
+/* No line between a meal's last entry and its summary: they read as one block. */
+tbody tr:has(+ tr.meal-stats) td { border-bottom: none; }
+.meal-summary { display: flex; align-items: center; gap: 8px; }
+/* The largest meal's bar (--share: 1) leaves room for its energy after it; every other bar is to the same scale. */
+.meal-bar { flex: none; display: flex; gap: 2px; height: 18px; width: calc((100% - 6em) * var(--share)); min-width: 4px; }
+.meal-seg {
+  flex: 1 1 0; min-width: 0; border-radius: 4px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  /* Black: at least 4.5:1 on every macronutrient colour in both themes, where white falls to 2.8:1 on fat. */
+  color: #000000; font-size: 0.72rem; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.meal-energy { flex: none; color: var(--muted); font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.meal-none { color: var(--muted); font-size: 0.8rem; }
 /* A row being edited keeps its height and the table's width. If the window is too narrow for that, Save and Cancel stay in view. */
 tr.editing td { padding-block: 0; }
 /* Their controls make these the widest cells in their columns, so a little less padding keeps the table its width. */
