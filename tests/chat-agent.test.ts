@@ -39,6 +39,12 @@ describe("ChatAgent", () => {
     ]);
   });
 
+  it("shows the user the entry, never the model's handle for it", async () => {
+    const t = run([answer({ action: "read_day", day: "today" }), answer({ action: "reply", text: "E1 is not sweet." })]);
+    await t.agent.send("Which foods are sweets?", t.signal, t.onEvent);
+    expect(t.events.at(-1)).toEqual({ kind: "say", text: "“Oats”, 40 g, at 8:05 am is not sweet." });
+  });
+
   it("tells the model what was wrong with an answer, and lets it try again", async () => {
     const t = run(["{oops", answer({ action: "read_day", day: "next week" }), answer({ action: "reply", text: "OK" })]);
     expect(await t.agent.send("Hi", t.signal, t.onEvent)).toBe("done");

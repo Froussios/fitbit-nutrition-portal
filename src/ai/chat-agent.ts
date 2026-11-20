@@ -78,13 +78,13 @@ export class ChatAgent {
         }
         const { step } = parsed;
         if (step.action === "reply") {
-          onEvent({ kind: "say", text: step.text });
+          onEvent({ kind: "say", text: this.tools.readable(step.text) });
           return "done";
         }
         const outcome = await this.tools.run(step, signal);
         if (outcome.kind === "proposal") {
           this.waiting = outcome.proposal;
-          onEvent({ kind: "proposal", proposal: outcome.proposal, ...(step.text ? { note: step.text } : {}) });
+          onEvent({ kind: "proposal", proposal: outcome.proposal, ...(step.text ? { note: this.tools.readable(step.text) } : {}) });
           return "awaiting";
         }
         if (outcome.kind === "result") {

@@ -29,7 +29,7 @@ import {
   type LogDraft,
 } from "../health/mapping";
 import type { MealType } from "../health/types";
-import { ChatHandles, dayWords, describeDay, describeDays, describeFood, mealOf, resolveDay, stepSchema, type ChatStep, type EnergyUnitName } from "./chat-protocol";
+import { ChatHandles, dayWords, readableText, describeDay, describeDays, describeFood, mealOf, resolveDay, stepSchema, type ChatStep, type EnergyUnitName } from "./chat-protocol";
 
 /** How many search results the model is shown. Few, because its context is small. */
 export const SEARCH_RESULTS = 5;
@@ -70,6 +70,8 @@ export interface ChatTools {
   schema(): Record<string, unknown>;
   /** Runs any action but `reply`. Never rejects for a problem with what the model asked: it says so in an error. */
   run(step: ChatStep, signal: AbortSignal): Promise<ToolOutcome>;
+  /** The model's words for the user, with its handles turned into the entries and foods they stand for. */
+  readable(text: string): string;
 }
 
 const error = (text: string): ToolOutcome => ({ kind: "error", text });
@@ -243,6 +245,7 @@ export function createChatTools(host: ChatHost, handles: ChatHandles = new ChatH
   return {
     handles,
     schema: () => stepSchema(handles.entryHandles(), handles.foodHandles()),
+    readable: (text) => readableText(text, handles, today()),
     async run(step, signal) {
       switch (step.action) {
         case "read_day":

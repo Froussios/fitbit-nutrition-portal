@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ChatHandles, chatInstructions, describeDay, describeDays, describeEntry, mealOf, parseStep, resolveDay, stepSchema } from "../src/ai/chat-protocol";
+import { ChatHandles, chatInstructions, describeDay, describeDays, describeEntry, mealOf, parseStep, readableText, resolveDay, stepSchema } from "../src/ai/chat-protocol";
+import { summarise } from "../src/core/food-summary";
 import type { DiaryEntry } from "../src/health/mapping";
 import { bread, entryOf, oats, TODAY, withoutEnergy } from "./chat-fixtures";
 
@@ -65,6 +66,37 @@ describe("stepSchema", () => {
     expect(schema.properties["entry"]!.enum).toEqual(["E1", "E2", ""]);
     expect(schema.properties["food"]!.enum).toEqual([""]);
     expect(schema.required).toContain("amount");
+  });
+});
+
+describe("readableText", () => {
+  const today = TODAY;
+  const sweets = entryOf(oats, 40, "g", `${TODAY}T16:10:00`, { mealType: "SNACK", id: "e-abc-aa11-off-123" });
+  const earlier = entryOf(bread, 1, "portion:slice (35 g)", "2026-11-18T08:10:00", { id: "e-abc-bb22-fnds-555" });
+
+  it("turns entry handles into the entry as the diary shows it", () => {
+    const handles = new ChatHandles();
+    handles.entryHandle(sweets);
+    handles.entryHandle(earlier);
+    expect(readableText("The entries E1 and E2 are sweet.", handles, today)).toBe("The entries “Oats”, 40 g, at 4:10 pm and “Bread, wholemeal”, 35 g, yesterday at 8:10 am are sweet.");
+  });
+
+  it("turns food handles into the food's name", () => {
+    const handles = new ChatHandles();
+    handles.foodHandle(summarise(bread));
+    expect(readableText("F1 fits best.", handles, today)).toBe("“Bread, wholemeal” fits best.");
+  });
+
+  it("still names an entry whose handle was taken back after a change", () => {
+    const handles = new ChatHandles();
+    handles.entryHandle(sweets);
+    handles.forgetEntry(sweets.id);
+    expect(readableText("I deleted E1.", handles, today)).toBe("I deleted “Oats”, 40 g, at 4:10 pm.");
+  });
+
+  it("never shows a made-up handle, and leaves other words alone", () => {
+    const handles = new ChatHandles();
+    expect(readableText("E9 and F4 are sweet, and so is DE1 or E1x.", handles, today)).toBe("an entry and a food are sweet, and so is DE1 or E1x.");
   });
 });
 

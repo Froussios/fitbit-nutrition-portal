@@ -160,6 +160,8 @@ export class ChatHandles {
   private readonly entryById = new Map<string, string>();
   private readonly foods = new Map<string, FoodSummary>();
   private readonly foodByRef = new Map<string, string>();
+  /** Every entry ever given a handle, as last described, kept after the handle is taken back: for `readableText` only. */
+  private readonly shownEntries = new Map<string, DiaryEntry>();
   /** Handles handed out so far. Counted, not taken from the maps' sizes, so that a forgotten handle is never reused. */
   private entryCount = 0;
   private foodCount = 0;
@@ -171,7 +173,13 @@ export class ChatHandles {
       this.entryById.set(entry.id, handle);
     }
     this.entries.set(handle, entry);
+    this.shownEntries.set(handle, entry);
     return handle;
+  }
+
+  /** The entry a handle stood for when last described, even if the handle has since been taken back. */
+  lastEntry(handle: string): DiaryEntry | undefined {
+    return this.shownEntries.get(handle);
   }
 
   /** The handle an entry has now, without handing one out. Undefined if it has none, or it was taken back. */
@@ -217,6 +225,29 @@ export class ChatHandles {
   foodHandles(): string[] {
     return [...this.foods.keys()];
   }
+}
+
+/** An entry as the user sees it in the diary: "Melomakarona (Θεανώ)", 60 g, at 4:10 pm, with the day unless it is today. */
+function entryWords(e: DiaryEntry, today: string): string {
+  const when = `${e.day === today ? "" : `${dayWords(e.day, today)} `}at ${clockTime(e)}`;
+  return [`“${e.displayName}”`, e.amount, when].filter(Boolean).join(", ");
+}
+
+/**
+ * The model's words, made fit for the user. Handles are the model's own names for entries and foods, and mean nothing
+ * to the user, so each one becomes the entry or food it stands for. A small model can't be trusted to keep them out of
+ * its replies, however it is told. A handle that was never handed out becomes "an entry" or "a food".
+ */
+export function readableText(text: string, handles: ChatHandles, today: string): string {
+  return text.replace(/\b([EF])(\d+)\b/g, (_match, kind: string, n: string) => {
+    const handle = `${kind}${n}`;
+    if (kind === "E") {
+      const entry = handles.lastEntry(handle);
+      return entry ? entryWords(entry, today) : "an entry";
+    }
+    const food = handles.food(handle);
+    return food ? `“${food.brand ? `${food.name} (${food.brand})` : food.name}”` : "a food";
+  });
 }
 
 export type EnergyUnitName = "kcal" | "kj";
@@ -393,6 +424,8 @@ export function chatInstructions(ctx: ChatContext): { readonly role: "system" | 
     "- The amount must say a unit, as the user would type it. Use only units the app lists for the food.",
     "- The app shows each proposed change to the user, who accepts or rejects it. Then you are told what happened. Propose one change at a time.",
     "- Only entries logged by this app can be changed or deleted.",
+    "- Handles such as E1 and F1 are only for you and the app: the user never sees them. In a reply, name an entry by its food and time, and a food by its name.",
+    '- In a reply, write days as "today", "yesterday" or the weekday, as the app writes them. Never work out a date yourself.',
     "- Keep replies short and plain.",
     `Energy is in ${ctx.energyUnit === "kj" ? "kJ" : "kcal"}.`,
     `Today is ${formatCivilDate(ctx.today)}. Days: ${week}.`,
