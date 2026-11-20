@@ -162,7 +162,7 @@ class App {
   private clientIdLink?: HTMLElement;
   private readonly diary = el("div", { class: "diary" });
   /** The viewed day's totals in a few lines, in a card beside the log (DR-47), redrawn with the diary. */
-  private readonly daySummary = el("div");
+  private readonly daySummary = el("div", { class: "day-summary-slot" });
   private readonly daySummaryTitle = el("h2", { id: "day-summary-title" });
   /** The dashboard's charts (DR-38), redrawn with the diary. */
   private readonly dashboard = el("div");
@@ -1655,18 +1655,19 @@ class App {
               el(
                 "section",
                 { class: "card day-card", "aria-labelledby": "day-summary-title" },
-                this.daySummaryTitle,
-                this.daySummary,
-                !this.canReadActivity &&
-                  el(
-                    "p",
-                    { class: "hint" },
+                // Without the activity scope, the way to it sits beside the heading, so that it takes no height (DR-49).
+                el(
+                  "div",
+                  { class: "day-card-head" },
+                  this.daySummaryTitle,
+                  !this.canReadActivity &&
                     el(
                       "button",
                       { type: "button", class: "link", title: "Sign in again and allow access to your activity data, to compare with the calories you burn", onclick: () => void this.signIn("consent") },
                       "Show calories burnt",
                     ),
-                  ),
+                ),
+                this.daySummary,
               ),
             ),
           )

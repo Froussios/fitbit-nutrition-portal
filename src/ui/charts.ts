@@ -1,8 +1,9 @@
 /**
- * The dashboard's two kinds of chart, drawn without a library: a segmented bar (one whole split into parts) and a
+ * The dashboard's charts, drawn without a library: a segmented bar and a ring (one whole split into parts) and a
  * stacked column chart (one column per day). Colours are CSS custom properties named by the caller, so they follow
- * the light and dark themes. Text goes through textContent, as everywhere else (dom.ts). Either chart can carry a
- * reference figure to set the parts against, such as the calories burnt (DR-46): a marker on the bar, a line on each column.
+ * the light and dark themes. Text goes through textContent, as everywhere else (dom.ts). Each chart can carry a
+ * reference figure to set the parts against, such as the calories burnt (DR-46): a marker on the bar or the ring, a line
+ * on each column.
  */
 
 import { niceScale } from "../core/dashboard";
@@ -85,8 +86,6 @@ export interface SegmentedBarOptions {
    * whole short of it leaves an outlined gap up to it; a marker shows where it falls.
    */
   readonly reference?: BarReference;
-  /** A slim bar with no percentages and no legend; its title is for screen readers only. Hover and the accessible name still give every figure. */
-  readonly compact?: boolean;
 }
 
 export interface BarReference {
@@ -131,6 +130,22 @@ export function markerLeft(value: number, blocks: readonly number[]): string {
   return `calc(${share * 100}% ${offset < 0 ? "-" : "+"} ${Math.abs(offset)}px)`;
 }
 
+/**
+ * What a bar and a ring both work out from their parts: the whole, each part's share and description, the parts with
+ * something in them, and the reference with its difference from the whole ("2,300 kcal, 450 kcal more than eaten").
+ */
+function wholeOf(series: readonly Series[], values: readonly number[], format: (value: number, index: number) => string, reference: BarReference | undefined) {
+  const total = values.reduce((a, b) => a + b, 0);
+  const share = (v: number) => (total > 0 ? v / total : 0);
+  const pct = (v: number) => `${Math.round(share(v) * 100)}%`;
+  const describe = (i: number) => `${series[i]!.name} ${format(values[i]!, i)}, ${pct(values[i]!)}`;
+  const parts = series.flatMap((s, i) => (values[i]! > 0 ? [i] : []));
+  const ref = reference && reference.value > 0 ? reference : undefined;
+  const gap = ref ? ref.value - total : 0;
+  const refText = ref && `${ref.format(ref.value)}, ${ref.format(Math.abs(gap))} ${gap >= 0 ? ref.above : ref.below}`;
+  return { total, share, pct, describe, parts, ref, gap, refText };
+}
+
 /** A part narrower than this share of the bar prints no percentage: it would not fit. Its legend entry still has the amount. */
 const MIN_LABELLED_SHARE = 0.09;
 
@@ -138,20 +153,12 @@ const MIN_LABELLED_SHARE = 0.09;
  * One whole split into parts: a tall bar whose blocks are as wide as their share, each printing its share, with a
  * legend that names the parts and gives their amounts. Hover and the accessible name give every part's figures.
  */
-export function segmentedBar({ title, series, values, format, emptyText, reference, compact = false }: SegmentedBarOptions): HTMLElement {
-  const total = values.reduce((a, b) => a + b, 0);
-  const share = (v: number) => (total > 0 ? v / total : 0);
-  const pct = (v: number) => `${Math.round(share(v) * 100)}%`;
-  const describe = (i: number) => `${series[i]!.name} ${format(values[i]!, i)}, ${pct(values[i]!)}`;
-  const parts = series.flatMap((s, i) => (values[i]! > 0 ? [i] : []));
-  const ref = reference && reference.value > 0 ? reference : undefined;
-  // The reference's figure, and how far it is from the whole ("2,300 kcal, 450 kcal more than eaten").
-  const gap = ref ? ref.value - total : 0;
-  const refText = ref && `${ref.format(ref.value)}, ${ref.format(Math.abs(gap))} ${gap >= 0 ? ref.above : ref.below}`;
+export function segmentedBar({ title, series, values, format, emptyText, reference }: SegmentedBarOptions): HTMLElement {
+  const { total, share, pct, describe, parts, ref, gap, refText } = wholeOf(series, values, format, reference);
   return el(
     "figure",
-    { class: `chart segmented${compact ? " compact" : ""}` },
-    el("figcaption", { class: compact ? "visually-hidden" : "chart-title" }, title),
+    { class: "chart segmented" },
+    el("figcaption", { class: "chart-title" }, title),
     total > 0
       ? el(
           "div",
@@ -160,7 +167,7 @@ export function segmentedBar({ title, series, values, format, emptyText, referen
             el(
               "div",
               { class: `seg seg-${series[i]!.key}`, style: `flex-grow: ${values[i]}; background: ${fill(series[i]!)}`, title: describe(i) },
-              !compact && share(values[i]!) >= MIN_LABELLED_SHARE ? pct(values[i]!) : "",
+              share(values[i]!) >= MIN_LABELLED_SHARE ? pct(values[i]!) : "",
             ),
           ),
           ref && gap > 0 && el("div", { class: "seg seg-rest", style: `flex-grow: ${gap}`, title: `${ref.name} ${ref.format(gap)} ${ref.above}` }),
@@ -169,13 +176,118 @@ export function segmentedBar({ title, series, values, format, emptyText, referen
       : el("p", { class: "chart-empty" }, emptyText),
     // The legend names the parts the bar draws, in its order: a part at 0 has no block to name.
     total > 0 &&
-      !compact &&
       legend(
         parts.map((i) => series[i]!),
         parts.map((i) => format(values[i]!, i)),
         ref && { name: ref.name, color: ref.color, figure: refText },
       ),
   );
+}
+
+export interface RingOptions {
+  /** The start of its accessible name, e.g. "Energy by meal". */
+  readonly title: string;
+  readonly series: readonly Series[];
+  /** One value per series, in the series' order. */
+  readonly values: readonly number[];
+  /** A value with its unit, e.g. "400 kcal". */
+  readonly format: (value: number) => string;
+  /**
+   * A figure to set the whole against, such as the calories burnt. The ring goes round once for the larger of the two:
+   * a whole short of it leaves an outlined gap up to it, and a whole past it a band outside the ring from it to the
+   * end. A tick shows where it falls, and the middle gives the whole as a share of it ("80%", "of burnt").
+   */
+  readonly reference?: BarReference;
+}
+
+const RING_R = 40;
+const RING_W = 12;
+const RING_C = 2 * Math.PI * RING_R;
+/** The gap of the surface after each part, along the ring, in the same units as its radius. */
+const RING_GAP = 1.5;
+/** How far the tick reaches past the ring on each side, and how far out the band past the reference sits. */
+const RING_OUT = 3;
+
+/** A point at `fraction` of the way round a circle of radius `r` about the ring's middle, clockwise from the top. */
+function ringXY(r: number, fraction: number): [number, number] {
+  const a = fraction * 2 * Math.PI - Math.PI / 2;
+  return [Number((50 + r * Math.cos(a)).toFixed(3)), Number((50 + r * Math.sin(a)).toFixed(3))];
+}
+
+const ringPoint = (r: number, fraction: number) => ringXY(r, fraction).join(" ");
+
+/** An arc of radius `r` from fraction `from` to `to` of the way round, clockwise. */
+function ringArc(r: number, from: number, to: number): string {
+  return `A ${r} ${r} 0 ${to - from > 0.5 ? 1 : 0} 1 ${ringPoint(r, to)}`;
+}
+
+/**
+ * One whole split into parts, bent round into a ring: the segmented bar's shape for a square space (DR-49). It has no
+ * legend of its own; hover and the accessible name give every part's figures, as the bar's do.
+ */
+export function ringChart({ title, series, values, format, reference }: RingOptions): HTMLElement {
+  const { total, describe, parts, ref, gap, refText } = wholeOf(series, values, format, reference);
+  const full = Math.max(total, ref?.value ?? 0);
+  const ring = svg("svg", {
+    class: "ring",
+    viewBox: "-4 -4 108 108",
+    role: "img",
+    "aria-label": `${title}: ${parts.length ? parts.map(describe).join("; ") : "none"}${ref ? `; ${ref.name} ${refText}` : ""}`,
+  });
+  ring.append(svg("circle", { class: "ring-track", r: RING_R, cx: 50, cy: 50 }));
+  let at = 0;
+  for (const i of parts) {
+    const len = (values[i]! / full) * RING_C;
+    // A part too short for its gap keeps half its length, so that it still shows.
+    const drawn = len > RING_GAP * 2 ? len - RING_GAP : len / 2;
+    ring.append(
+      svg(
+        "circle",
+        {
+          class: `ring-part ring-${series[i]!.key}`,
+          r: RING_R,
+          cx: 50,
+          cy: 50,
+          style: `stroke: ${fill(series[i]!)}`,
+          "stroke-dasharray": `${drawn.toFixed(3)} ${RING_C.toFixed(3)}`,
+          "stroke-dashoffset": (-at).toFixed(3),
+          transform: "rotate(-90 50 50)",
+        },
+        svg("title", {}, describe(i)),
+      ),
+    );
+    at += len;
+  }
+  if (ref) {
+    const outer = RING_R + RING_W / 2;
+    const inner = RING_R - RING_W / 2;
+    if (gap > 0) {
+      // Less eaten than the reference: an outline of the ring from the end of the parts up to it, with nothing in it.
+      // Just short of a full turn when nothing was eaten, since an arc can't end where it starts.
+      const from = total / full + (total > 0 ? RING_GAP / RING_C / 2 : 0);
+      const to = 1 - RING_GAP / RING_C / 2;
+      const d = `M ${ringPoint(outer, from)} ${ringArc(outer, from, to)} L ${ringPoint(inner, to)} A ${inner} ${inner} 0 ${to - from > 0.5 ? 1 : 0} 0 ${ringPoint(inner, from)} Z`;
+      ring.append(svg("path", { class: "ring-rest", d }, svg("title", {}, `${ref.name} ${ref.format(gap)} ${ref.above}`)));
+    }
+    const mark = ref.value / full;
+    if (gap < 0) {
+      // More eaten than the reference: a band outside the ring from the reference to the end.
+      const band = outer + RING_OUT;
+      ring.append(
+        svg("path", { class: "ring-over", d: `M ${ringPoint(band, mark)} ${ringArc(band, mark, 1)}`, style: `stroke: var(${ref.color})` }, svg("title", {}, `${ref.name} ${ref.format(-gap)} ${ref.below}`)),
+      );
+    }
+    const [x1, y1] = ringXY(inner - RING_OUT, mark);
+    const [x2, y2] = ringXY(outer + RING_OUT, mark);
+    const tick = { x1, y1, x2, y2 };
+    ring.append(
+      svg("line", { ...tick, class: "ring-tick-halo" }),
+      svg("line", { ...tick, class: "ring-tick", style: `stroke: var(${ref.color})` }, svg("title", {}, `${ref.name} ${ref.format(ref.value)}`)),
+      svg("text", { x: 50, y: 50, class: "ring-figure", "text-anchor": "middle", "aria-hidden": "true" }, `${Math.round((total / ref.value) * 100)}%`),
+      svg("text", { x: 50, y: 62, class: "ring-caption", "text-anchor": "middle", "aria-hidden": "true" }, `of ${ref.name.toLowerCase()}`),
+    );
+  }
+  return el("figure", { class: "chart ring-chart" }, ring);
 }
 
 export interface Column {
@@ -233,7 +345,7 @@ export interface ColumnDifference {
 }
 
 /** "+200", "−340" or "0": a difference as the label above a column prints it. */
-function signed(gap: number): string {
+export function signed(gap: number): string {
   return gap === 0 ? "0" : `${gap > 0 ? "+" : "−"}${formatNumber(Math.abs(gap), 0)}`;
 }
 

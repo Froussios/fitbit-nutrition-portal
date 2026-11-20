@@ -662,6 +662,8 @@ strongest number is the difference; "so far" is unnecessary.
 day's figures appear twice on the page, in brief beside the log and in full in the dashboard.
 **Reopen if.** The log card's content is ever shorter than the summary at rest (it would scroll), the owner wants the
 summary on a phone above the log or hidden, or targets are added (DR-38).
+**Revised by DR-49** (20 November 2026): the card fills the height the log card gives it, with a ring in place of the
+slim bar, and a signed difference.
 
 ### DR-48 Each meal's summary closes its entries in the diary, with a bar of its macronutrients to scale
 **Decision.** The diary's entries stay grouped by meal type, in the table's meal order, and each meal is now a
@@ -686,3 +688,31 @@ A meal's bar is scaled by the energy its macronutrients give, not its logged ene
 from another app has no bar, and two meals of similar logged energy can differ a little in length.
 **Reopen if.** The owner wants the bars scaled by logged energy or by grams, the summary above a meal's entries, or meal
 types merged as on the dashboard.
+
+### DR-49 The totals card fills the height the log card gives it, and signs the difference
+**Decision.** The totals card beside the log (DR-47) keeps its place and its rule that the log card alone sets the
+row's height, but shows more as that height grows. Always: the difference as its strongest figure, now signed eaten −
+burnt as on the dashboard's energy chart (DR-46): "−340 kcal deficit", "+200 kcal surplus" or "Even", with Eaten and
+Burnt beside it alike; a ring of energy by meal in place of the slim bar, going round once for the larger of eaten and
+burnt, with an outlined gap from the last meal up to the calories burnt after a deficit, a band outside the ring from
+them to the end after a surplus, a tick where they fall, and in the middle the energy eaten as a share of them ("44%",
+"of burnt"; without DR-46's scope a plain ring by meal with nothing in the middle); and beside the ring each
+macronutrient's grams, share of the energy by the Atwater factors (DR-38) and a bar of that share. From 250px for the
+card's content a larger ring and its legend: Breakfast, Lunch, Dinner and Snacks always (a dash for one with nothing
+yet), Other only when it has some, and the key of the calories burnt. From 340px the 7 days ending on the day: a
+column of each day's energy eaten, a line at its calories burnt (dashed for today), the signed difference above it
+(none on a day with nothing eaten), and the average difference over the complete days with both, leaving today out (or
+the average eaten without the scope); the week is left out until it loads. Every figure is in hover titles and
+accessible names. The heights are CSS container queries on the card (a size container), so nothing is measured in
+script. Without the scope, "Show calories burnt" sits beside the card's heading. Below 720px for the row the card goes
+under the log as before, with the legend but not the week.
+**Why.** Owner request (20 November 2026): the panel next to the input form had too much empty space; once a food is
+picked the log card is about 410px tall and the summary filled its top 120px. Of four layouts mocked up, the owner
+chose the ring with macronutrient bars, on condition that eaten against burnt stays its main comparison, and that a
+deficit and a surplus of the same size read apart at a glance: by a sign, not by colour or a badge, which the owner
+found ugly.
+**Consequence.** At rest the card is as full as before (DR-47's three lines, with a 72px ring in place of the bar's
+line); it never scrolls in the heights checked. The week is drawn twice on a wide screen, small here and in full in the
+dashboard. A meal under 1% of the ring is a sliver.
+**Reopen if.** The log card's height at rest changes enough that the card scrolls or leaves space again, the owner
+wants the week or the legend at other heights, or targets are added (DR-38).
