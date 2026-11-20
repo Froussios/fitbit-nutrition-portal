@@ -216,8 +216,9 @@ export interface ColumnMarker {
   readonly partialFor?: (index: number) => boolean;
   /**
    * Also show each column's difference from its line, total − line, as a signed figure above it ("+200", "−340"), in
-   * the tooltip and the accessible name ("200 kcal surplus") and in a table column. Worked out from the two figures as
-   * shown. A column with nothing in it has none: an empty day is not a measured difference.
+   * the tooltip and the accessible name ("200 kcal surplus") and in a table column. Worked out from the two figures
+   * rounded to whole numbers, so it matches them as shown when `formatTotal` prints whole numbers, as the energy chart's
+   * does. A column with nothing in it has none: an empty day is not a measured difference.
    */
   readonly difference?: ColumnDifference;
 }
@@ -346,7 +347,8 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
     const diff = diffs[i];
     if (diff !== undefined) {
       // Above whichever is higher, the column or its line.
-      const at = Math.min(y(totals[i]!), y(mark!)) - 6;
+      const at = Math.min(y(totals[i]!), y(marks[i]!)) - 6;
+      // `over` and `under` carry no colour today (DR-46): they name the sign for tests and any later styling.
       column.append(svg("text", { x: x + barW / 2, y: at, class: `chart-diff${diff > 0 ? " over" : diff < 0 ? " under" : ""}`, "text-anchor": "middle" }, signed(diff)));
     }
     column.append(svg("text", { x: x + barW / 2, y: H - 6, class: "chart-tick chart-day", "text-anchor": "middle" }, c.label));
