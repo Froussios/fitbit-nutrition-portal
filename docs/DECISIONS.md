@@ -627,7 +627,8 @@ into the charts there are, not given a row of their own: under the day's energy,
 far" for today; the owner found it unnecessary, 20 November 2026); on the bar of energy by meal, a marker where the
 calories burnt fall, with an outlined gap up to it while less was eaten, and the difference in the legend; on each day's
 energy column, a line at its calories burnt, dashed for today, with the figure in the tooltip and a Burnt column in the
-table. The week's summary adds the average burnt over the complete days recorded, leaving today out. Without the scope
+table, and above it the day's difference, eaten − burnt as shown ("+200", "−340"; "200 kcal surplus" in the tooltip and a
+Difference column; none on a day with nothing logged; owner request, 20 November 2026). The week's summary adds the average burnt over the complete days recorded, leaving today out. Without the scope
 nothing is asked and the dashboard is as before, with a "Show calories burnt" link to sign in again and tick it (in the
 totals card beside the log since DR-47; first in the dashboard's note). A failed roll-up only adds a note under the
 week's summary.

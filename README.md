@@ -25,7 +25,8 @@ This is the MVP, a proof of concept (milestone M0):
    macronutrient and by meal. For the 7 days ending on that day it charts each day's protein, carbs and fat, and each
    day's energy by meal, with a table of the figures under each chart. If you allow access to your activity data, it
    sets the energy you ate against the calories you burnt: today's so far, and each day of the week as a line on its
-   column. Without that permission the dashboard leaves calories burnt out.
+   column, with that day's surplus or deficit above it. Without that permission the dashboard leaves calories burnt
+   out.
    Beside the log, a small **totals** card keeps the day in view at every entry, without making the page any taller:
    the difference between the calories burnt and eaten (a deficit or a surplus), the two figures themselves, its energy
    by meal and its protein, carbs and fat.
