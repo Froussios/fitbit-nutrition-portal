@@ -139,15 +139,13 @@ function mealName(e: DiaryEntry): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-/** A block narrower than this share of the largest meal's bar prints no grams: they would not fit. Its tooltip still has them. */
-const MIN_LABELLED_SHARE = 0.1;
-
 /**
- * A meal's summary, under its entries (DR-48): a bar of its protein, carbs and fat, each block as wide as the energy it
- * gives and printing its grams, then the meal's energy. It sits under Amount to Fat, leaving the meal and food columns
- * empty so it reads as a summary of the rows above rather than another row. The bar is as long as the meal's share of
- * `largest`, the most any meal of the day has, so meals compare at a glance. A meal whose entries are all deleted has
- * none.
+ * A meal's summary, under its entries (DR-48): a slim bar of its protein, carbs and fat across Amount to Fat, each block
+ * as wide as the energy it gives, and the meal's energy in the column after Fat. Meal and Food are left empty so it reads
+ * as a summary of the rows above rather than another row. The bar is as long as the meal's share of `largest`, the most
+ * any meal of the day has, so meals compare at a glance; its blocks print nothing, and their tooltips and the bar's
+ * accessible name give the grams. The energy keeps its place whatever the bar's length. A meal whose entries are all
+ * deleted has none.
  */
 function mealStats(live: readonly DiaryEntry[], sum: ReturnType<typeof sumProfiles>, largest: number): HTMLElement | undefined {
   if (live.length === 0) return undefined;
@@ -164,28 +162,18 @@ function mealStats(live: readonly DiaryEntry[], sum: ReturnType<typeof sumProfil
     el(
       "td",
       { colspan: 5 },
-      el(
-        "div",
-        { class: "meal-summary" },
-        whole > 0
-          ? el(
-              "div",
-              { class: "meal-bar", role: "img", "aria-label": label, style: `--share: ${Number((whole / largest).toFixed(4))}` },
-              ...parts.map((i) =>
-                el(
-                  "div",
-                  { class: "meal-seg", style: `flex-grow: ${values[i]}; background: var(${MACRO_SERIES[i]!.color})`, title: `${MACRO_SERIES[i]!.name} ${grams[i]}` },
-                  values[i]! / largest >= MIN_LABELLED_SHARE ? grams[i] : "",
-                ),
-              ),
-            )
-          : // The bar's accessible name says which meal it sums; without a bar, a hidden name does.
-            el("span", { class: "meal-none" }, el("span", { class: "visually-hidden" }, `${mealName(live[0]!)}: `), "No protein, carbs or fat recorded"),
-        // After the bar's end, so that the bar starts under Amount like the figures above it.
-        el("span", { class: "meal-energy", "aria-hidden": whole > 0 ? "true" : undefined }, energy),
-      ),
+      whole > 0
+        ? el(
+            "div",
+            { class: "meal-bar", role: "img", "aria-label": label, style: `width: ${Number(((whole / largest) * 100).toFixed(2))}%` },
+            ...parts.map((i) =>
+              el("div", { class: "meal-seg", style: `flex-grow: ${values[i]}; background: var(${MACRO_SERIES[i]!.color})`, title: `${MACRO_SERIES[i]!.name} ${grams[i]}` }),
+            ),
+          )
+        : // The bar's accessible name says which meal it sums; without a bar, a hidden name does.
+          el("span", { class: "meal-none" }, el("span", { class: "visually-hidden" }, `${mealName(live[0]!)}: `), "No protein, carbs or fat recorded"),
     ),
-    el("td", {}),
+    el("td", {}, el("span", { class: "meal-sum-energy", "aria-hidden": whole > 0 ? "true" : undefined }, energy)),
   );
 }
 

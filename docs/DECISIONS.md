@@ -665,22 +665,23 @@ summary on a phone above the log or hidden, or targets are added (DR-38).
 ### DR-48 Each meal's summary closes its entries in the diary, with a bar of its macronutrients to scale
 **Decision.** The diary's entries stay grouped by meal type, in the table's meal order, and each meal is now a
 `tbody` of its own, closed by a summary row that reads as a summary of the rows above rather than another row: no meal
-name, nothing under Meal or Food, and no line between it and the meal's last entry. Across Amount to Fat it has a bar of
-the meal's protein, carbs and fat, then the meal's energy. Like the dashboard's bar by macronutrient (DR-38), each block
-is as wide as the energy that macronutrient gives by the Atwater factors; each prints its grams where it is wide enough
-(a tenth of the largest bar), and its tooltip always gives them. The bar's whole length is the meal's energy from
-macronutrients as a share of the largest meal's, so only that meal's bar is full length (the width less room for its
-energy) and the others compare at a glance. Deleted entries count in neither a meal's summary nor the scale, and a meal
-whose entries are all deleted has no summary. A meal with no protein, carbs or fat recorded says so instead of a bar.
-Meal types are not merged as the dashboard merges them into snacks: the rows above each summary are what it sums, and
-meal types the API adds later are kept apart by name.
+name, nothing under Meal or Food, and no line between it and the meal's last entry. Across Amount to Fat it has a slim
+bar of the meal's protein, carbs and fat, with no text in it; in the column after Fat, the meal's energy, which keeps its
+place whatever the bar's length. Like the dashboard's bar by macronutrient (DR-38), each block is as wide as the energy
+that macronutrient gives by the Atwater factors, and its tooltip and the bar's accessible name give the grams. The
+bar's whole length is the meal's energy from macronutrients as a share of the largest meal's, so only that meal's bar
+spans Amount to Fat and the others compare at a glance. Deleted entries count in neither a meal's summary nor the
+scale, and a meal whose entries are all deleted has no summary. A meal with no protein, carbs or fat recorded says so
+instead of a bar. Meal types are not merged as the dashboard merges them into snacks: the rows above each summary are
+what it sums, and meal types the API adds later are kept apart by name.
 **Why.** Owner request (20 November 2026): per-meal stats between the entries, with a horizontal bar breaking down the
 macros; the bars must stay proportional between meals rather than each fill the width, and only the largest meal may.
 The first version, with the meal's name and its figures in the table's columns, looked like "just an uglier row" rather
 than a summary: the owner asked for no repeated meal name and the bar across Amount to Fat, not in the Food column.
-**Consequence.** The diary is one short row taller per meal. A meal's grams are on its bar rather than in the Protein,
-Carbs and Fat columns, and a small block's grams only in its tooltip. A meal's bar is scaled by the energy its
-macronutrients give, not its logged energy, so a meal of energy-only entries from another app has no bar, and two meals
-of similar logged energy can differ a little in length.
+The second printed grams in the blocks and the energy right after the bar's end; the owner found the grams clipped and
+the energy taking room from the bar and moving with it, so the bar prints nothing and the energy has a column of its own.
+**Consequence.** The diary is one short row taller per meal. A meal's grams are only in its bar's tooltips, not printed.
+A meal's bar is scaled by the energy its macronutrients give, not its logged energy, so a meal of energy-only entries
+from another app has no bar, and two meals of similar logged energy can differ a little in length.
 **Reopen if.** The owner wants the bars scaled by logged energy or by grams, the summary above a meal's entries, or meal
 types merged as on the dashboard.
