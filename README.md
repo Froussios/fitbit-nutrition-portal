@@ -27,9 +27,11 @@ This is the MVP, a proof of concept (milestone M0):
    sets the energy you ate against the calories you burnt: today's so far, and each day of the week as a line on its
    column, with that day's surplus or deficit above it. Without that permission the dashboard leaves calories burnt
    out.
-   Beside the log, a small **totals** card keeps the day in view at every entry, without making the page any taller:
-   the difference between the calories burnt and eaten (a deficit or a surplus), the two figures themselves, its energy
-   by meal and its protein, carbs and fat.
+   Beside the log, a **totals** card keeps the day in view at every entry, without making the page any taller: the
+   difference between the energy eaten and the calories burnt, signed (`−300 kcal deficit`, `+200 kcal surplus`), the
+   two figures themselves, a ring of its energy by meal drawn round to the calories burnt, and each macronutrient's grams
+   and share of the energy. When the log form is taller, as when a food is picked, the card also shows the ring's legend
+   and the 7 days ending on the day, each with its difference.
 5. Where the site serves its API, cook a batch and eat it in shares (**Meal prep**), or keep meals you eat often
    (**Saved meals**). A saved meal is logged as one entry under its name. Its ingredients can be changed for that
    one entry, and a saved meal can be added to another as its ingredients.
