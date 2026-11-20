@@ -56,10 +56,17 @@ function stat(label: string, value: string, tint: string, note?: string): HTMLEl
 /** "burnt" or, for today, whose figure is still growing, "burnt so far". */
 const burntWords = (day: string, today: string) => (day === today ? "burnt so far" : "burnt");
 
+/** Civil date `day` in parts, as `formatCivilDate` writes it: "Thursday", "19", "Nov", "2026". */
+function dateParts(day: string): { weekday: string; date: string; month: string; year: string } {
+  const [weekday, rest] = formatCivilDate(day).split(", ") as [string, string];
+  const [date, month, year] = rest.split(" ") as [string, string, string];
+  return { weekday, date, month, year };
+}
+
 /** "Thu 19": a column's label. */
 function shortDay(day: string): string {
-  const [weekday, date] = formatCivilDate(day).split(", ") as [string, string];
-  return `${weekday.slice(0, 3)} ${date.split(" ")[0]}`;
+  const { weekday, date } = dateParts(day);
+  return `${weekday.slice(0, 3)} ${date}`;
 }
 
 function daySection(day: string, today: string, entries: readonly DashboardEntry[] | undefined, burnt: number | undefined): HTMLElement {
@@ -172,9 +179,8 @@ function weekSection(day: string, today: string, entries: readonly DashboardEntr
 export function dayTotalsHeading(day: string, today: string): string {
   if (day === today) return "Today's totals";
   if (day === addCivilDays(today, -1)) return "Yesterday's totals";
-  const [weekday, date] = formatCivilDate(day).split(", ") as [string, string];
-  const [d, month, year] = date.split(" ") as [string, string, string];
-  return `Totals for ${weekday.slice(0, 3)} ${d} ${month}${year === today.slice(0, 4) ? "" : ` ${year}`}`;
+  const { weekday, date, month, year } = dateParts(day);
+  return `Totals for ${weekday.slice(0, 3)} ${date} ${month}${year === today.slice(0, 4) ? "" : ` ${year}`}`;
 }
 
 /**
@@ -182,8 +188,17 @@ export function dayTotalsHeading(day: string, today: string): string {
  * burnt, a slim bar of energy by meal drawn up to the calories burnt, and the grams of each macronutrient. The
  * dashboard below has the same day in full.
  */
-export function renderDaySummary({ day, today, dayEntries, burnt }: Pick<DashboardOptions, "day" | "today" | "dayEntries" | "burnt">): HTMLElement {
-  if (!dayEntries) return el("div", { class: "day-summary" }, el("p", { class: "status" }, "Loading…"));
+export function renderDaySummary({
+  day,
+  today,
+  dayEntries,
+  burnt,
+  dayStatus = "",
+}: Pick<DashboardOptions, "day" | "today" | "dayEntries" | "burnt"> & {
+  /** Said instead of "Loading…" while the day has no entries to show, e.g. that it could not be loaded. */
+  readonly dayStatus?: string;
+}): HTMLElement {
+  if (!dayEntries) return el("div", { class: "day-summary" }, el("p", { class: dayStatus ? "status error" : "status" }, dayStatus || "Loading…"));
   const kcal = burnt?.get(day);
   const words = burntWords(day, today);
   if (dayEntries.length === 0)

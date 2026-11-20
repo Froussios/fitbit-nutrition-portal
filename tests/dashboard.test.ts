@@ -261,6 +261,9 @@ describe("dashboard view", () => {
       expect(renderDaySummary({ day, today: day, dayEntries: [], burnt: new Map([[day, 900]]) }).textContent).toBe("Nothing logged today yet. 900 kcal burnt so far.");
       expect(renderDaySummary({ day, today: "2026-11-20", dayEntries: [] }).textContent).toBe("Nothing logged on this day.");
       expect(renderDaySummary({ day, today: day, dayEntries: undefined }).textContent).toBe("Loading…");
+      const failed = renderDaySummary({ day, today: day, dayEntries: undefined, dayStatus: "The day could not be loaded." });
+      expect(failed.textContent).toBe("The day could not be loaded.");
+      expect(failed.querySelector(".status")?.classList.contains("error")).toBe(true);
     });
   });
 });

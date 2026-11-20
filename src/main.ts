@@ -1830,7 +1830,8 @@ class App {
       burntStatus: this.burntError,
     };
     this.daySummaryTitle.textContent = dayTotalsHeading(day, today);
-    replaceChildren(this.daySummary, renderDaySummary(options));
+    // The diary says why in full; the card beside the log only that the figures are missing.
+    replaceChildren(this.daySummary, renderDaySummary({ ...options, dayStatus: this.listError && !dayEntries ? "The day could not be loaded." : "" }));
     replaceChildren(this.dashboard, renderDashboard(options));
     this.dashboard.querySelectorAll("details").forEach((d, i) => (d.open = open[i] ?? false));
     if (focused >= 0) this.dashboard.querySelectorAll<SVGElement>(".chart-column")[focused]?.focus();

@@ -625,8 +625,8 @@ so far" (or "burnt" for a past day); on the bar of energy by meal, a marker wher
 outlined gap up to it while less was eaten, and the difference in the legend; on each day's energy column, a line at
 its calories burnt, dashed for today, with the figure in the tooltip and a Burnt column in the table. The week's summary
 adds the average burnt over the complete days recorded, leaving today out. Without the scope nothing is asked and the
-dashboard is as before, with a "Show calories burnt" link in its note to sign in again and tick it. A failed roll-up
-only adds a note under the week's summary.
+dashboard is as before, with a "Show calories burnt" link to sign in again and tick it (in the totals card beside the
+log since DR-47; first in the dashboard's note). A failed roll-up only adds a note under the week's summary.
 **Why.** Owner request (19 November 2026): pull the total calories burnt to compare calories in with calories out;
 the connection must be optional, and skipped when the user doesn't agree; calories burnt should inform the graphs and
 the dashboard rather than be a row; "burnt so far" for today, because the current day is the only one the user can
@@ -643,7 +643,8 @@ owner wants the time of the last sync shown, a target derived from the calories 
 totals", "Yesterday's totals" or "Totals for Tue 17 Nov" after the day shown. It sums the day up in three lines: the
 energy eaten, against the calories burnt so far when DR-46's scope is granted; a slim bar of energy by meal (no
 percentages or legend, every figure in its tooltips and accessible name), drawn up to the calories burnt with its marker;
-and the grams of protein, carbs and fat. Without the scope it has a "Show calories burnt" link. The log card alone sets
+and the grams of protein, carbs and fat. Without the scope it has DR-46's "Show calories burnt" link, moved here from
+the dashboard's note. If the day could not be loaded it says so. The log card alone sets
 the row's height: the totals card is sized as if empty (`contain: size`), stretched to the row and scrolls only if its
 content ever overflows, which it does not at rest. Below 720px for the row, on a phone or beside the open chat, it goes
 under the log. The Dashboard card below keeps the day in full and the week (DR-38).
