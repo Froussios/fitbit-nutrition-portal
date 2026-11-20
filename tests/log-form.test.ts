@@ -111,7 +111,7 @@ describe("log form", () => {
   });
 
   it("logs a share of the chosen prep at the time and meal given", async () => {
-    const { form, $, actions } = setUp();
+    const { form, $, visible, actions } = setUp();
     form.choosePrep(PREPS[0]!);
     const portion = $<HTMLInputElement>("#portion");
     portion.value = "1/6";
@@ -122,7 +122,9 @@ describe("log form", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(actions.eat).toHaveBeenCalledWith(PREPS[0], 1 / 6, "DINNER", new Date(2026, 10, 11, 19, 5));
     expect(portion.value).toBe("");
-    // The next entry is likely from the same meal.
+    // The form starts again from the search, but the next entry is likely from the same meal.
+    expect($<HTMLInputElement>("#food").value).toBe("");
+    expect(visible("#portion")).toBe(false);
     expect($<HTMLSelectElement>("#meal").value).toBe("DINNER");
   });
 
@@ -179,6 +181,24 @@ describe("log form", () => {
     expect((onSubmit.mock.calls[0]![0] as { time: Date }).time).toEqual(new Date(2026, 10, 11, 8, 30));
   });
 
+  it("empties the form after a portion even when the preps reload while it saves", async () => {
+    const { form, $, visible, actions } = setUp();
+    let finish!: () => void;
+    vi.mocked(actions.eat).mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve({ text: "Logged.", error: false, eaten: true }))));
+    form.choosePrep(PREPS[0]!);
+    const portion = $<HTMLInputElement>("#portion");
+    portion.value = "1/6";
+    portion.dispatchEvent(new Event("input"));
+    form.element.dispatchEvent(new Event("submit", { cancelable: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    // A reload lands mid-save, with a new object for the same prep.
+    form.setPreps({ available: true, preps: PREPS.map((p) => ({ ...p })), busy: new Set() });
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(portion.value).toBe("");
+    expect(visible("#portion")).toBe(false);
+  });
+
   it("logs a portion for today with the regular button beside one for another day", async () => {
     const { form, $, actions } = setUp();
     form.choosePrep(PREPS[0]!);
@@ -193,6 +213,39 @@ describe("log form", () => {
     today.click();
     await vi.advanceTimersByTimeAsync(0);
     expect(actions.eat).toHaveBeenCalledWith(PREPS[0], 1 / 6, undefined, new Date(2026, 10, 11, 12, 15));
+  });
+
+  it("empties the food, amount and custom food once logged, keeping the status", async () => {
+    const { form, $, visible, type, onSubmit } = setUp(null);
+    await type("Chickpeas");
+    [...form.element.querySelectorAll<HTMLElement>("[role=option]")].find((o) => o.textContent?.includes("Chickpeas"))!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    const qty = $<HTMLInputElement>("#qty");
+    qty.value = "120 g";
+    qty.dispatchEvent(new Event("input"));
+    form.element.dispatchEvent(new Event("submit", { cancelable: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect($("p.form-status").textContent).toBe("Logged Chickpeas.");
+    expect($<HTMLInputElement>("#food").value).toBe("");
+    expect(visible("#qty")).toBe(false);
+    expect(qty.value).toBe("");
+
+    await type("Granola");
+    [...form.element.querySelectorAll<HTMLElement>("[role=option]")].find((o) => o.textContent?.includes("Custom food"))!.click();
+    const energy = $<HTMLInputElement>("#c-energy");
+    energy.value = "400";
+    $<HTMLSelectElement>("#c-energy-unit").value = "kcal";
+    energy.dispatchEvent(new Event("input", { bubbles: true }));
+    qty.value = "50";
+    qty.dispatchEvent(new Event("input"));
+    form.element.dispatchEvent(new Event("submit", { cancelable: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+    expect($<HTMLInputElement>("#c-name").value).toBe("");
+    expect(energy.value).toBe("0");
+    expect($<HTMLSelectElement>("#c-energy-unit").value).toBe("kcal"); // kept, like the meal
+    expect(visible("#c-name")).toBe(false);
   });
 
   it("keeps the meal for the next food logged", async () => {
@@ -350,8 +403,11 @@ describe("log form, saved meals", () => {
     expect(logMeal).toHaveBeenCalledWith(MEALS[0], [expect.objectContaining({ label: "Rice", quantity: 100, profile: { energyKcal: 100, nutrients: { protein: 10 } } })], "LUNCH", new Date(2026, 10, 11, 19, 5));
     expect($("p.form-status").textContent).toBe("Logged Chicken burrito bowl.");
     expect($<HTMLSelectElement>("#meal").value).toBe("LUNCH");
-    // The saved meal is untouched, and the next entry starts from it.
+    // The form starts again from the search. The saved meal is untouched, and choosing it again starts from it.
+    expect($<HTMLInputElement>("#food").value).toBe("");
+    expect(visible(".meal-fields")).toBe(false);
     expect(MEALS[0]!.ingredients[0]!.quantity).toBe(150);
+    form.chooseMeal(MEALS[0]!);
     expect(amounts(form.element).map((i) => i.value)).toEqual(["150", "100"]);
     expect($(".adjusted").hidden).toBe(true);
   });
