@@ -13,10 +13,12 @@
   /* The log button when the entry goes on another day than today. */
   --other-day: #8a4f00;
   --other-day-text: #ffffff;
-  /* Dashboard series (DR-38), validated for colour-blind separation on the card's surface in each theme. */
-  --macro-protein: #2a78d6;
-  --macro-carbohydrates: #eb6834;
-  --macro-fat: #1baf7a;
+  /* Dashboard series (DR-38), validated for colour-blind separation on the card's surface in each theme.
+     Macros take familiar colours: protein red, carbs green, fat yellow. The green leans teal and the red is
+     darker so the pair still separates for red-green colour blindness. */
+  --macro-protein: #d12a36;
+  --macro-carbohydrates: #26a37a;
+  --macro-fat: #f0b400;
   --meal-breakfast: #eda100;
   --meal-lunch: #e87ba4;
   --meal-dinner: #6250d6;
@@ -57,9 +59,9 @@
     --row-alt: #20251f;
     --other-day: #e8a93c;
     --other-day-text: #1d1405;
-    --macro-protein: #3987e5;
-    --macro-carbohydrates: #d95926;
-    --macro-fat: #199e70;
+    --macro-protein: #ee4a55;
+    --macro-carbohydrates: #33c28c;
+    --macro-fat: #f0c63e;
     --meal-breakfast: #c98500;
     --meal-lunch: #d55181;
     --meal-dinner: #9085e9;

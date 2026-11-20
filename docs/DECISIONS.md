@@ -482,7 +482,7 @@ snack times, such as `BEFORE_DINNER`, included) and Other (`ANYTIME` and no meal
 (`listNutritionLogsBetween`), made after each diary load; the viewed day's own figures come from the diary's listing,
 so this session's writes, edits and deletes show at once. Charts are SVG and HTML drawn by the app, with no chart
 library; each has a legend, a tooltip on hover and keyboard focus, and a table of its figures; colours are checked for
-colour-blind separation in both themes.
+colour-blind separation in both themes. Protein is red, carbs green and fat yellow (owner request, 20 November 2026).
 **Why.** Owner request (19 November 2026): graphs for the basic metrics, presented as a dashboard; for the day, a
 breakdown by macro and by meal; for the week, daily totals by macro and by meal.
 **Consequence.** One more request to Google Health per diary load (polling included). Energy by macronutrient can differ
