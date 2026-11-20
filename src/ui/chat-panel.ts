@@ -12,7 +12,7 @@ import { chatInstructions, clockTime, focusPrompt } from "../ai/chat-protocol";
 import { createChatTools, outcomeText, type ChatHost, type ChatTools, type Proposal } from "../ai/chat-tools";
 import { dayLabel } from "../core/time";
 import { describeError, logger } from "../debug/log";
-import { entryDay, isSavedMeal, mealLabel, type DiaryEntry } from "../health/mapping";
+import { isSavedMeal, mealLabel, type DiaryEntry } from "../health/mapping";
 import { createProposalCard, type ProposalCard } from "./chat-proposal";
 import { el } from "./dom";
 import { SAVED_MEAL_AMOUNT } from "./format";
@@ -82,7 +82,7 @@ function unavailableText(state: AiState): string {
 export function entryLine(e: DiaryEntry, today: string): string {
   const meal = e.mealType === "MEAL_TYPE_UNSPECIFIED" ? "no meal" : mealLabel(e.mealType);
   const amount = e.amount ?? (isSavedMeal(e) ? SAVED_MEAL_AMOUNT : undefined);
-  return [e.displayName, amount, meal, `${dayLabel(entryDay(e), today)}, ${clockTime(e.start)}`].filter(Boolean).join(" · ");
+  return [e.displayName, amount, meal, `${dayLabel(e.day, today)}, ${clockTime(e.start)}`].filter(Boolean).join(" · ");
 }
 
 export function createChatPanel(model: ChatModel, ai: AiSwitch, host: ChatPanelHost): ChatPanel {

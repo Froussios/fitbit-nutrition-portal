@@ -2,7 +2,7 @@ import { canReload, foodLabel, nutrientsForAmount, type FoodItem, type FoodRef }
 import { entryStep, idFromName, parseEntryId } from "../core/ids";
 import type { LoggedFood } from "../core/logged-foods";
 import { NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "../core/nutrients";
-import { civilDate, onCivilDate, utcOffsetDuration } from "../core/time";
+import { civilDate, civilDateOf, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../core/time";
 import { formatAmount, formatMeasurementLabel, formatNumber, metricAmount, PORTION_PREFIX, toBaseAmount, type BaseUnit, type Measurable } from "../core/units";
 import type { DataPoint, EnergyQuantity, MealType, NutrientQuantity, NutritionLog, WeightQuantity } from "./types";
 
@@ -324,9 +324,18 @@ function atNewAmount(log: NutritionLog, edit: AmountEdit, opts: EditOptions): Nu
   return out;
 }
 
-/** The day an entry is on, as the diary lists it: the local civil date of its start. */
-export function entryDay(entry: Pick<DiaryEntry, "start">): string {
-  return civilDate(entry.start);
+/**
+ * The civil day an entry is on, as Google lists it: the date on the clock where it was logged, whatever this browser's
+ * time zone (#133). From Google's own civil start time when it sends one, else from the start and its UTC offset.
+ */
+export function entryDay(interval: Pick<NutritionLog["interval"], "startTime" | "startUtcOffset" | "civilStartTime">): string {
+  if (interval.civilStartTime) return civilDateOf(interval.civilStartTime);
+  try {
+    return new Date(Date.parse(interval.startTime) + parseDurationSeconds(interval.startUtcOffset) * 1000).toISOString().slice(0, 10);
+  } catch {
+    // No offset, or one that can't be read: the browser's own clock is the best guess.
+    return civilDate(new Date(interval.startTime));
+  }
 }
 
 /**
@@ -355,6 +364,8 @@ export interface DiaryEntry {
   readonly name: string;
   readonly id: string;
   readonly start: Date;
+  /** The civil day it is on (`entryDay`), as YYYY-MM-DD. */
+  readonly day: string;
   readonly mealType: MealType;
   readonly displayName: string;
   /** The serving, e.g. "40 g" or "1 cup", when the entry has one. */
@@ -453,6 +464,7 @@ export function toDiaryEntry(point: DataPoint, ctx: DiaryContext = {}): DiaryEnt
     name: point.name,
     id,
     start: new Date(log.interval.startTime),
+    day: entryDay(log.interval),
     mealType: log.mealType ?? "MEAL_TYPE_UNSPECIFIED",
     displayName: (log.foodDisplayName ?? "(unnamed food)").replace(AMOUNT_IN_NAME, (text) => formatMeasurementLabel(text)),
     ...(amount ? { amount } : {}),

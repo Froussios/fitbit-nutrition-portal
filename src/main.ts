@@ -134,6 +134,8 @@ class App {
   /** False once the site answers that it has no meal prep API: the card then stays hidden. */
   private prepAvailable = true;
   private prepLoading = false;
+  /** A change finished while a load was under way: load again, so the list shows it. */
+  private prepReload = false;
   private prepError = "";
   /** Whose preps these are, so that signing in as someone else starts afresh. */
   private prepUser?: string;
@@ -547,8 +549,8 @@ class App {
       // Only this day's listing can show an entry, so ones written for another day wait until it is viewed
       // (if it never is, they stay pending for the session, which only costs memory).
       const onDay = (key: string) => {
-        const start = this.pending.get(key)?.nutritionLog?.interval.startTime;
-        return start !== undefined && civilDate(new Date(start)) === day;
+        const interval = this.pending.get(key)?.nutritionLog?.interval;
+        return interval !== undefined && entryDay(interval) === day;
       };
       const stale = matched.stillPending.filter((key) => onDay(key) && Date.now() - (this.pendingSince.get(key) ?? 0) > PENDING_TTL_MS);
       if (stale.length) {
@@ -561,7 +563,7 @@ class App {
       const waiting = matched.stillPending.filter((key) => this.pending.has(key));
       if (waiting.length) appLog.info("Entries written but not listed by the API yet", waiting);
       // An edit's old entry leaves the diary before its delete is answered, and may be one written this session.
-      const pending = withoutEntries([...this.pending.values()], this.deletedIds).filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === day);
+      const pending = withoutEntries([...this.pending.values()], this.deletedIds).filter((p) => entryDay(p.nutritionLog!.interval) === day);
       this.entries = toDiaryEntries([...points, ...pending], this.diaryContext());
       this.loadedDay = day;
       const listed = new Set([...points.flatMap((p) => (p.name ? [idFromName(p.name)] : [])), ...this.pending.keys()]);
@@ -618,7 +620,7 @@ class App {
         }),
         this.deletedIds,
       ).filter((p) => {
-        const start = civilDate(new Date(p.nutritionLog!.interval.startTime));
+        const start = entryDay(p.nutritionLog!.interval);
         return start >= first && start <= day;
       });
       this.weekEntries = toDiaryEntries([...points, ...pending], this.diaryContext());
@@ -813,8 +815,8 @@ class App {
       const { created } = await this.write(point);
       this.catalog.merge(toLoggedFoods([created], this.clientId));
       const copy = toDiaryEntry(created, this.diaryContext());
-      if (copy && entryDay(copy) === this.day()) this.entries = [...this.entries, copy].sort(byTime);
-      else if (copy) this.showOnOtherDay(`Logged ${entry.displayName} again for today.`, entryDay(copy));
+      if (copy && copy.day === this.day()) this.entries = [...this.entries, copy].sort(byTime);
+      else if (copy) this.showOnOtherDay(`Logged ${entry.displayName} again for today.`, copy.day);
     } catch (e) {
       appLog.error("Logging the entry again failed", describeError(e));
       this.handleError(e, false);
@@ -862,7 +864,7 @@ class App {
     this.deletedIds.add(entry.id);
     this.catalog.merge(toLoggedFoods([created], this.clientId));
     const replacement = toDiaryEntry(created, this.diaryContext());
-    const here = replacement && entryDay(replacement) === this.day() ? replacement : undefined;
+    const here = replacement && replacement.day === this.day() ? replacement : undefined;
     this.entries = [...this.entries.filter((e) => e.id !== entry.id), ...(here ? [here] : [])].sort(byTime);
     this.renderDiary(undefined, undefined, undefined, hadFocus ? key : undefined);
     void this.removeReplaced(entry);
@@ -942,10 +944,10 @@ class App {
     this.catalog.merge(toLoggedFoods([created], this.clientId));
     const replacement = toDiaryEntry(created, this.diaryContext());
     // Moved to another day, it leaves this one: the listing for that day shows it, pending until the API does.
-    const here = replacement && entryDay(replacement) === this.day() ? replacement : undefined;
+    const here = replacement && replacement.day === this.day() ? replacement : undefined;
     this.entries = [...this.entries.filter((e) => e.id !== entry.id), ...(here ? [here] : [])].sort(byTime);
     // Only an entry that was on the day shown has moved away from it: the chat can edit entries on other days.
-    if (replacement && !here && entryDay(entry) === this.day()) this.showMoved(entry.displayName, entryDay(replacement));
+    if (replacement && !here && entry.day === this.day()) this.showMoved(entry.displayName, replacement.day);
     if (stillEditing()) {
       this.stopEditing();
       this.renderDiary(undefined, key);
@@ -980,7 +982,7 @@ class App {
     const pending = withoutEntries(
       stillPending.flatMap((key) => this.pending.get(key) ?? []),
       this.deletedIds,
-    ).filter((p) => civilDate(new Date(p.nutritionLog!.interval.startTime)) === day);
+    ).filter((p) => entryDay(p.nutritionLog!.interval) === day);
     return toDiaryEntries([...points, ...pending], this.diaryContext());
   }
 
@@ -989,7 +991,7 @@ class App {
    * may since have been changed or deleted, here or in another app.
    */
   private async currentEntry(entry: DiaryEntry): Promise<DiaryEntry | string> {
-    const now = (await this.entriesOn(entryDay(entry), new AbortController().signal)).find((e) => e.id === entry.id);
+    const now = (await this.entriesOn(entry.day, new AbortController().signal)).find((e) => e.id === entry.id);
     if (!now) return `${entry.displayName} is no longer in the diary, so nothing was changed. It may have been changed or deleted since.`;
     const same = now.displayName === entry.displayName && now.amount === entry.amount && now.mealType === entry.mealType && now.start.getTime() === entry.start.getTime() && now.profile.energyKcal === entry.profile.energyKcal;
     return same ? now : `${entry.displayName} has changed since the chat read it, so nothing was changed. Ask again.`;
@@ -1003,7 +1005,7 @@ class App {
       switch (proposal.kind) {
         case "log": {
           await this.log(proposal.draft);
-          const day = entryDay(proposal.preview);
+          const day = proposal.preview.day;
           if (day !== this.day()) this.showOnOtherDay(`Logged ${proposal.preview.displayName} on ${dayInWords(day)}.`, day);
           return { ok: true, message: `Logged ${proposal.preview.displayName} for ${dayInWords(day)}.` };
         }
@@ -1017,7 +1019,7 @@ class App {
           const current = await this.currentEntry(proposal.entry);
           if (typeof current === "string") return { ok: false, message: current, stale: true };
           const failure = await this.remove(current, true);
-          return failure ? { ok: false, message: failure } : { ok: true, message: `Deleted ${current.displayName}. Until the page is reloaded, the diary for ${dayInWords(entryDay(current))} shows it crossed out, with an undo.` };
+          return failure ? { ok: false, message: failure } : { ok: true, message: `Deleted ${current.displayName}. Until the page is reloaded, the diary for ${dayInWords(current.day)} shows it crossed out, with an undo.` };
         }
       }
     } catch (e) {
@@ -1055,7 +1057,7 @@ class App {
       this.handleError(e, false);
       this.deletedIds.delete(entry.id);
       // Only onto its own day: after a move, the user may already be looking at the new one.
-      if (entryDay(entry) === this.day()) this.entries = [...this.entries.filter((other) => other.id !== entry.id), entry].sort(byTime);
+      if (entry.day === this.day()) this.entries = [...this.entries.filter((other) => other.id !== entry.id), entry].sort(byTime);
       this.showRowFailure(entry, oldEntryNotRemoved(entry.displayName));
     }
     this.busy.delete(entry.id);
@@ -1074,7 +1076,7 @@ class App {
 
   /** `fromChat`: the chat changes entries on any day and its card says why it failed, so a row not on screen gets no alert. */
   private showRowFailure(entry: DiaryEntry, message: string, fromChat = false) {
-    if (fromChat && entryDay(entry) !== this.day()) return;
+    if (fromChat && entry.day !== this.day()) return;
     this.rowAlert.hidden = false;
     const failure = el("p", {}, message);
     this.rowFailures.set(entry.id, failure);
@@ -1124,15 +1126,22 @@ class App {
   }
 
   private async loadPreps() {
-    if (!this.prepAvailable || this.prepLoading || !this.auth.isSignedIn) return;
+    if (!this.prepAvailable || !this.auth.isSignedIn) return;
+    // The list under way may have been read before a change it should show: load again after it (#133).
+    if (this.prepLoading) {
+      this.prepReload = true;
+      return;
+    }
     const user = this.auth.subject;
     this.prepLoading = true;
     this.renderPreps();
     try {
       const preps = await this.prepApi.list();
-      if (user !== this.auth.subject) return; // signed in as someone else meanwhile
-      this.preps = preps;
-      this.prepError = "";
+      // Signed in as someone else meanwhile: these are not theirs.
+      if (user === this.auth.subject) {
+        this.preps = preps;
+        this.prepError = "";
+      }
     } catch (e) {
       if (e instanceof PrepApiMissingError) {
         appLog.info("This site has no meal prep API; hiding meal prep");
@@ -1145,6 +1154,10 @@ class App {
     } finally {
       this.prepLoading = false;
       this.renderPreps();
+    }
+    if (this.prepReload) {
+      this.prepReload = false;
+      await this.loadPreps();
     }
   }
 
@@ -1531,8 +1544,11 @@ class App {
     this.clearRowFailures();
     this.catalog.clear();
     this.resetPreps();
+    this.resetMeals();
     this.prepUser = undefined;
+    // Open, either builder would save what it holds to whoever signs in next (#133).
     if (this.prepBuilder.isOpen) this.prepBuilder.close();
+    if (this.mealBuilder.isOpen) this.mealBuilder.close();
     this.loggedFoodsRead = undefined;
     this.entries = [];
     this.loadedDay = undefined;
@@ -1727,7 +1743,7 @@ class App {
     this.todayButton.hidden = day >= today;
     this.diaryStatus.textContent = this.loading ? "Loading…" : this.listError;
     this.diaryStatus.classList.toggle("error", !this.loading && Boolean(this.listError));
-    const deleted = [...this.deleted.values()].filter((e) => civilDate(e.start) === day);
+    const deleted = [...this.deleted.values()].filter((e) => e.day === day);
     // With nothing loaded for this day, a load or an error must not read as "Nothing logged today yet".
     const unknown = this.loadedDay !== day || (this.entries.length === 0 && deleted.length === 0 && Boolean(this.listError));
     replaceChildren(
@@ -1766,7 +1782,7 @@ class App {
     // The viewed day comes from the diary's own listing, which is newer and knows this session's edits.
     const weekEntries =
       this.weekDay === day && dayEntries
-        ? [...this.weekEntries.filter((e) => civilDate(e.start) !== day && !this.deletedIds.has(e.id)), ...dayEntries]
+        ? [...this.weekEntries.filter((e) => e.day !== day && !this.deletedIds.has(e.id)), ...dayEntries]
         : undefined;
     const open = [...this.dashboard.querySelectorAll("details")].map((d) => d.open);
     const columns = [...this.dashboard.querySelectorAll(".chart-column")];

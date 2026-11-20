@@ -535,8 +535,8 @@ export interface FoodCatalog {
   search(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<FoodSearchHit[]>;
   /** The full food: on choosing a search hit, or by barcode. */
   get(ref: FoodRef, options?: { signal?: AbortSignal }): Promise<FoodItem | undefined>;
-  /** For a catalogue whose answers can change, such as when the user logs a food (section 14). */
-  onChange?(listener: () => void): void;
+  /** For a catalogue whose answers can change, such as when the user logs a food (section 14). Returns a function that stops the listener. */
+  onChange?(listener: () => void): () => void;
 }
 ```
 

@@ -132,9 +132,10 @@ One-time setup:
    Create a second Account API token with **Account → D1 → Edit**, and add it to the **food-index** environment as
    `CLOUDFLARE_D1_TOKEN`. The next Food index run uses it to create the database `food-diary` and apply `migrations/`,
    then deploys the API with the index using `CLOUDFLARE_API_TOKEN` (attaching a database needs no D1 permission).
-   Until the secret exists, or if it can't reach D1, deploys warn and leave the API out. If preparing or deploying the
-   API fails anyway, the run publishes the index without it and is marked failed. API changes go live only with that
-   workflow, because a Pages deploy replaces the whole site.
+   Until the secret exists, deploys warn and leave the API out. Once it does, a token that can't reach D1 (it lacks the
+   permission, or has expired), or a failure to prepare or deploy the API, fails the run before anything is deployed, so
+   the live site keeps its API and last week's index. API changes go live only with that workflow, because a Pages
+   deploy replaces the whole site.
 
    To run the API locally: `npx wrangler d1 migrations apply DB --local`, then `npx wrangler pages dev` (it serves
    `food-index-dist/` and `/api/*`).

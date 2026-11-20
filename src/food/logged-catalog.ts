@@ -67,8 +67,9 @@ export class LoggedFoodsCatalog implements FoodCatalog {
     this.changed();
   }
 
-  onChange(listener: () => void): void {
+  onChange(listener: () => void): () => void {
     this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
   private changed(): void {

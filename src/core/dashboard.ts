@@ -3,7 +3,7 @@
  * Pure: it takes diary entries (from any app) and returns sums, so the charts only draw.
  */
 
-import { addCivilDays, civilDate } from "./time";
+import { addCivilDays } from "./time";
 import type { NutrientProfile } from "./nutrients";
 
 /** The macronutrients the dashboard charts, in the order they stack. */
@@ -40,6 +40,8 @@ export function mealGroup(mealType: string): MealGroup {
 /** What the dashboard needs of a diary entry. */
 export interface DashboardEntry {
   readonly start: Date;
+  /** The civil day it is on, by its own clock, as the diary lists it (`entryDay`). */
+  readonly day: string;
   readonly mealType: string;
   readonly profile: NutrientProfile;
 }
@@ -93,12 +95,12 @@ export interface DayTotals {
 
 /**
  * The `days` civil days ending on `last` (YYYY-MM-DD), oldest first, each with its totals. An entry counts on the
- * civil date of its local start, as in the diary; entries outside the range are left out.
+ * civil day it is on (`day`), as in the diary; entries outside the range are left out.
  */
 export function dailyTotals(entries: readonly DashboardEntry[], last: string, days = 7): DayTotals[] {
   const range = Array.from({ length: days }, (_, i) => addCivilDays(last, i - days + 1));
   const byDay = new Map<string, DashboardEntry[]>(range.map((d) => [d, []]));
-  for (const e of entries) byDay.get(civilDate(e.start))?.push(e);
+  for (const e of entries) byDay.get(e.day)?.push(e);
   return range.map((day) => {
     const list = byDay.get(day)!;
     return { day, total: totals(list), meals: byMealGroup(list) };

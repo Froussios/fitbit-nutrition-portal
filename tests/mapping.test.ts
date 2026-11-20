@@ -286,6 +286,32 @@ describe("toDiaryEntries", () => {
   });
 });
 
+describe("the day an entry is on (#133)", () => {
+  const tz = process.env.TZ;
+  afterEach(() => {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  });
+  // 00:30 on Wednesday 18 November in Sydney (+11), which is 21:30 on the Tuesday in Perth (+8).
+  const interval = { startTime: "2026-11-17T13:30:00Z", endTime: "2026-11-17T13:31:00Z", startUtcOffset: "39600s", endUtcOffset: "39600s" };
+  const point = (i: NutritionLog["interval"]): DataPoint => ({ name: "users/me/dataTypes/nutrition-log/dataPoints/1", nutritionLog: { interval: i, foodDisplayName: "Snack", energy: { kcal: 100 } } });
+
+  it("is the date on the clock where it was logged, as Google lists it, not the browser's", () => {
+    process.env.TZ = "Australia/Perth";
+    expect(toDiaryEntry(point(interval))!.day).toBe("2026-11-18");
+  });
+
+  it("is Google's own civil start time when it sends one", () => {
+    process.env.TZ = "Australia/Perth";
+    expect(entryDay({ ...interval, civilStartTime: { date: { year: 2026, month: 11, day: 18 }, time: { hours: 0, minutes: 30 } } })).toBe("2026-11-18");
+  });
+
+  it("falls back to the browser's clock without an offset it can read", () => {
+    process.env.TZ = "Australia/Perth";
+    expect(entryDay({ ...interval, startUtcOffset: "" })).toBe("2026-11-17");
+  });
+});
+
 describe("entry ownership", () => {
   const point = (clientId: string, packageName?: string): DataPoint => ({
     name: "users/me/dataTypes/nutrition-log/dataPoints/e-mgx-ab12-smp-oats",
@@ -633,7 +659,7 @@ describe("editing an entry", () => {
       const log = logFood(milk, 100, "ml", units, "LUNCH");
       const moved = editedNutritionLogPoint(log, { mealType: "LUNCH", day: "2026-10-28" }, opts).nutritionLog!;
       const start = new Date(moved.interval.startTime);
-      expect(entryDay({ start })).toBe("2026-10-28");
+      expect(entryDay(moved.interval)).toBe("2026-10-28");
       expect([start.getHours(), start.getMinutes(), start.getSeconds()]).toEqual([time.getHours(), time.getMinutes(), time.getSeconds()]);
       expect(Date.parse(moved.interval.endTime) - start.getTime()).toBe(Date.parse(log.interval.endTime) - Date.parse(log.interval.startTime));
       expect({ ...moved, interval: log.interval }).toEqual(log);
@@ -641,7 +667,7 @@ describe("editing an entry", () => {
 
     it("moves with a new amount too", () => {
       const moved = editedNutritionLogPoint(logFood(milk, 100, "ml"), { amount: { quantity: 200, unit: "ml", food: milk }, day: "2026-10-30" }, opts).nutritionLog!;
-      expect(entryDay({ start: new Date(moved.interval.startTime) })).toBe("2026-10-30");
+      expect(entryDay(moved.interval)).toBe("2026-10-30");
       expect(moved.serving?.amount).toBe(200);
     });
 
@@ -659,7 +685,7 @@ describe("editing an entry", () => {
       const moved = editedNutritionLogPoint(log, { day: "2026-10-04" }, opts).nutritionLog!;
       expect(moved.interval.startTime).toBe("2026-10-03T16:30:00.000Z");
       expect(moved.interval.startUtcOffset).toBe("39600s");
-      expect(entryDay({ start: new Date(moved.interval.startTime) })).toBe("2026-10-04");
+      expect(entryDay(moved.interval)).toBe("2026-10-04");
     });
   });
 

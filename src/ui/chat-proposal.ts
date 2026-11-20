@@ -7,7 +7,7 @@
 import { clockTime, energyRecorded } from "../ai/chat-protocol";
 import type { Proposal } from "../ai/chat-tools";
 import { dayLabel } from "../core/time";
-import { entryDay, mealLabel, type DiaryEntry } from "../health/mapping";
+import { mealLabel, type DiaryEntry } from "../health/mapping";
 import { el } from "./dom";
 import { amountText, energyLabel, fmtEnergy, fmtGrams } from "./format";
 
@@ -24,7 +24,7 @@ export interface ProposalCard {
 }
 
 const mealText = (e: DiaryEntry) => (e.mealType === "MEAL_TYPE_UNSPECIFIED" ? "No meal" : mealLabel(e.mealType));
-const whenText = (e: DiaryEntry, today: string) => `${dayLabel(entryDay(e), today)}, ${clockTime(e.start)}`;
+const whenText = (e: DiaryEntry, today: string) => `${dayLabel(e.day, today)}, ${clockTime(e.start)}`;
 
 /** What identifies an entry to the user: everything its diary row shows, and when it was eaten. */
 function facts(e: DiaryEntry, today: string): [string, string][] {

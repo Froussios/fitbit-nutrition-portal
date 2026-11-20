@@ -9,12 +9,12 @@ import { setEnergyUnit } from "../src/ui/energy-unit";
 /** An entry at local noon on `day`, so that it falls on that civil date in any time zone the tests run in. */
 function entry(day: string, mealType: string, energyKcal: number, protein = 0, carbohydrates = 0, fat = 0): DashboardEntry {
   const [y, m, d] = day.split("-").map(Number) as [number, number, number];
-  return { start: new Date(y, m - 1, d, 12), mealType, profile: { energyKcal, nutrients: { protein, carbohydrates, fat } } };
+  return { start: new Date(y, m - 1, d, 12), day, mealType, profile: { energyKcal, nutrients: { protein, carbohydrates, fat } } };
 }
 
 describe("dashboard sums", () => {
   it("adds up energy and macronutrients, counting a missing one as 0 g", () => {
-    const t = totals([entry("2026-11-19", "LUNCH", 500, 30, 50, 20), { start: new Date(), mealType: "SNACK", profile: { energyKcal: 100, nutrients: {} } }]);
+    const t = totals([entry("2026-11-19", "LUNCH", 500, 30, 50, 20), { start: new Date(), day: "2026-11-19", mealType: "SNACK", profile: { energyKcal: 100, nutrients: {} } }]);
     expect(t).toEqual({ energyKcal: 600, grams: { protein: 30, carbohydrates: 50, fat: 20 }, count: 2 });
   });
 
