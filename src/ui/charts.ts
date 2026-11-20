@@ -261,11 +261,12 @@ export function ringChart({ title, series, values, format, reference }: RingOpti
   if (ref) {
     const outer = RING_R + RING_W / 2;
     const inner = RING_R - RING_W / 2;
-    if (gap > 0) {
-      // Less eaten than the reference: an outline of the ring from the end of the parts up to it, with nothing in it.
-      // Just short of a full turn when nothing was eaten, since an arc can't end where it starts.
-      const from = total / full + (total > 0 ? RING_GAP / RING_C / 2 : 0);
-      const to = 1 - RING_GAP / RING_C / 2;
+    // Less eaten than the reference: an outline of the ring from the end of the parts up to it, with nothing in it.
+    // Just short of a full turn when nothing was eaten, since an arc can't end where it starts; none when the gap is
+    // narrower than the gaps either side of it, which would leave it ending before it starts.
+    const from = total / full + (total > 0 ? RING_GAP / RING_C / 2 : 0);
+    const to = 1 - RING_GAP / RING_C / 2;
+    if (gap > 0 && to > from) {
       const d = `M ${ringPoint(outer, from)} ${ringArc(outer, from, to)} L ${ringPoint(inner, to)} A ${inner} ${inner} 0 ${to - from > 0.5 ? 1 : 0} 0 ${ringPoint(inner, from)} Z`;
       ring.append(svg("path", { class: "ring-rest", d }, svg("title", {}, `${ref.name} ${ref.format(gap)} ${ref.above}`)));
     }

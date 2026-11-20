@@ -1,7 +1,7 @@
 /**
  * The dashboard: the viewed day's totals by macronutrient and by meal, and the 7 days ending on it, each day's
- * macronutrients and each day's energy by meal (DR-38). The day's totals are also summed up in a few lines for the card
- * beside the log, so that they are seen at every entry (DR-47). With the activity scope, the calories burnt are set against
+ * macronutrients and each day's energy by meal (DR-38). The day's totals are also summed up for the card beside the log,
+ * so that they are seen at every entry (DR-47). With the activity scope, the calories burnt are set against
  * the energy eaten: under the day's energy, on its bar by meal, and as a line on each day's column (DR-46). The card beside
  * the log shows more as it grows taller with the log card: a ring by meal and the macronutrients' shares, then the ring's
  * legend, then the week (DR-49).

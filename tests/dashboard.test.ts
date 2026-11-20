@@ -343,6 +343,13 @@ describe("dashboard view", () => {
       expect(ring(view).querySelector(".ring-figure")?.textContent).toBe("120%");
     });
 
+    it("draws no gap when the deficit is narrower than the gaps either side of it", () => {
+      const view = renderDaySummary({ day, today: day, dayEntries, burnt: new Map([[day, 1205]]) });
+      expect(view.querySelector(".day-delta")?.textContent).toBe("−5 kcal deficit");
+      expect(ring(view).querySelector(".ring-rest")).toBeNull();
+      expect(ring(view).querySelector(".ring-tick")).not.toBeNull();
+    });
+
     it("outlines the whole ring when the entries have no energy", () => {
       const noEnergy = [{ ...dayEntries[0]!, profile: { energyKcal: 0, nutrients: {} } }];
       const view = renderDaySummary({ day, today: day, dayEntries: noEnergy, burnt });

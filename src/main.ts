@@ -161,7 +161,7 @@ class App {
   private energyControl?: HTMLElement;
   private clientIdLink?: HTMLElement;
   private readonly diary = el("div", { class: "diary" });
-  /** The viewed day's totals in a few lines, in a card beside the log (DR-47), redrawn with the diary. */
+  /** The viewed day's totals, in a card beside the log that shows more as it grows taller (DR-47, DR-49), redrawn with the diary. */
   private readonly daySummary = el("div", { class: "day-summary-slot" });
   private readonly daySummaryTitle = el("h2", { id: "day-summary-title" });
   /** The dashboard's charts (DR-38), redrawn with the diary. */
