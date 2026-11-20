@@ -1,7 +1,6 @@
 import { KCAL_PER_GRAM, MACROS } from "../core/dashboard";
 import { sumProfiles } from "../core/nutrients";
 import { byMeal, isSavedMeal, mealLabel, type DiaryEntry } from "../health/mapping";
-import { segmentedBar } from "./charts";
 import { MACRO_SERIES } from "./dashboard";
 import { el } from "./dom";
 import { formatAmount } from "../core/units";
@@ -140,43 +139,50 @@ function mealName(e: DiaryEntry): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+/** A block narrower than this share of the largest meal's bar prints no grams: they would not fit. Its tooltip still has them. */
+const MIN_LABELLED_SHARE = 0.1;
+
 /**
- * A meal's stats, under its entries: its totals, and a slim bar of its macronutrients by the energy each gives (DR-48).
- * The bar is as long as the meal's share of `largest`, the most any meal of the day has, so meals compare at a glance.
- * A meal whose entries are all deleted has none.
+ * A meal's summary, under its entries (DR-48): its energy, and a bar of its protein, carbs and fat, each block as wide as
+ * the energy it gives and printing its grams, then its energy. It sits under Amount to Fat, leaving the meal and food columns empty so it
+ * reads as a summary of the rows above rather than another row. The bar is as long as the meal's share of `largest`,
+ * the most any meal of the day has, so meals compare at a glance. A meal whose entries are all deleted has none.
  */
 function mealStats(live: readonly DiaryEntry[], sum: ReturnType<typeof sumProfiles>, largest: number): HTMLElement | undefined {
   if (live.length === 0) return undefined;
   const values = macroKcal(sum);
   const whole = values.reduce((a, b) => a + b, 0);
-  const name = mealName(live[0]!);
-  const width = largest > 0 ? (whole / largest) * 100 : 0;
+  const grams = MACROS.map((m) => fmtGrams(sum.nutrients[m] ?? 0));
+  const energy = `${fmtEnergy(sum.energyKcal)} ${energyLabel()}`;
+  const parts = MACRO_SERIES.flatMap((s, i) => (values[i]! > 0 ? [i] : []));
+  const label = `${mealName(live[0]!)}: ${energy}; ${MACRO_SERIES.map((s, i) => `${s.name.toLowerCase()} ${grams[i]}`).join(", ")}`;
   return el(
     "tr",
     { class: "meal-stats" },
-    el("th", { scope: "row" }, name),
+    el("td", { colspan: 2 }),
     el(
       "td",
-      { colspan: 2 },
+      { colspan: 5 },
       el(
         "div",
-        // With no macronutrients at all the bar is a line of text, which keeps the cell's width.
-        { class: "meal-bar", style: whole > 0 ? `width: ${Number(width.toFixed(2))}%` : undefined },
-        segmentedBar({
-          title: `${name} by macronutrient`,
-          series: MACRO_SERIES,
-          values,
-          // Grams, the unit the diary uses; the blocks give each one's share of the energy.
-          format: (_, i) => fmtGrams(sum.nutrients[MACROS[i]!] ?? 0),
-          emptyText: "No protein, carbs or fat recorded.",
-          compact: true,
-        }),
+        { class: "meal-summary" },
+        whole > 0
+          ? el(
+              "div",
+              { class: "meal-bar", role: "img", "aria-label": label, style: `--share: ${Number((whole / largest).toFixed(4))}` },
+              ...parts.map((i) =>
+                el(
+                  "div",
+                  { class: `meal-seg seg-${MACRO_SERIES[i]!.key}`, style: `flex-grow: ${values[i]}; background: var(${MACRO_SERIES[i]!.color})`, title: `${MACRO_SERIES[i]!.name} ${grams[i]}` },
+                  values[i]! / largest >= MIN_LABELLED_SHARE ? grams[i] : "",
+                ),
+              ),
+            )
+          : el("span", { class: "meal-none" }, "No protein, carbs or fat recorded"),
+        // After the bar's end, so that the bar starts under Amount like the figures above it.
+        el("span", { class: "meal-energy", "aria-hidden": whole > 0 ? "true" : undefined }, energy),
       ),
     ),
-    el("td", { class: "num" }, fmtEnergy(sum.energyKcal)),
-    el("td", { class: "num" }, fmtGrams(sum.nutrients.protein)),
-    el("td", { class: "num" }, fmtGrams(sum.nutrients.carbohydrates)),
-    el("td", { class: "num" }, fmtGrams(sum.nutrients.fat)),
     el("td", {}),
   );
 }
