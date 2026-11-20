@@ -4,7 +4,7 @@ import { nutrientsForAmount, type FoodItem } from "../core/food";
 import { kjToKcal } from "../core/nutrients";
 import { byName, tooManyIngredients, type SavedMeal } from "../core/meal";
 import { batchProfile, FRACTION_EPSILON, leftOf, parseFraction, portionProfile, type Prep, type PrepIngredient } from "../core/prep";
-import { civilDate, dayLabel, toDateTimeLocalValue } from "../core/time";
+import { civilDate, dayLabel, onCivilDate, toDateTimeLocalValue } from "../core/time";
 import type { BaseUnit } from "../core/units";
 import { MEAL_TYPES, type LogDraft } from "../health/mapping";
 import type { MealType } from "../health/types";
@@ -229,6 +229,8 @@ export function createLogForm(
   /** Names the day the entry goes on, when it isn't today: logging on the wrong day is easy to miss. */
   const submitDay = el("span", { class: "submit-day", hidden: true });
   const submit = el("button", { type: "submit", class: "primary" }, submitLabel, submitDay);
+  /** Next to a log button for another day: logs the entry for today instead, at the same clock time. */
+  const submitToday = el("button", { type: "button", class: "primary", hidden: true, onclick: () => void logNow(todayTime()) }, "Log entry");
   const prepButtons = el("span", { class: "actions", hidden: true }, eatRest, discard);
   const status = el("p", { class: "status form-status", role: "status" });
   const offlineNote = el("p", { class: "status error", hidden: true }, "Logging needs a connection.");
@@ -255,7 +257,7 @@ export function createLogForm(
     mealFields,
     el("div", { class: "row" }, field("Meal", mealSelect), field("Time", time)),
     preview,
-    el("div", { class: "actions" }, submit, prepButtons),
+    el("div", { class: "actions" }, submit, submitToday, prepButtons),
   );
 
   /** Changes when the search would find other preps, or show other amounts left. */
@@ -265,7 +267,7 @@ export function createLogForm(
   const prepBusy = () => (prep ? prepState.busy.has(prep.id) : false);
 
   const syncSubmit = () => {
-    submit.disabled = saving || offline || prepBusy();
+    submit.disabled = submitToday.disabled = saving || offline || prepBusy();
     submit.classList.toggle("saving", saving);
     eatRest.disabled = discard.disabled = saving || offline || prepBusy();
     offlineNote.hidden = !offline;
@@ -358,6 +360,11 @@ export function createLogForm(
   // The time follows the clock (on the viewed day) until the user picks one, so a page left open logs at "now".
   let timeTouched = false;
   const chosenTime = () => (timeTouched ? new Date(time.value) : defaultTime());
+  /** The chosen time's clock time, today. */
+  const todayTime = () => {
+    const when = chosenTime();
+    return Number.isNaN(when.getTime()) ? when : onCivilDate(civilDate(new Date()), when);
+  };
 
   /** Marks the log button when the entry would go on another day than today: the viewed day, or a time typed for another. */
   const syncDay = () => {
@@ -369,6 +376,7 @@ export function createLogForm(
     submit.classList.toggle("other-day", other);
     submitDay.hidden = !other;
     submitDay.textContent = other ? ` for ${label === "Yesterday" ? "yesterday" : label}` : "";
+    submitToday.hidden = !other;
   };
   time.addEventListener("input", () => {
     timeTouched = true;
@@ -392,7 +400,7 @@ export function createLogForm(
     foodFields.hidden = Boolean(prep || meal);
     prepFields.hidden = prepButtons.hidden = !prep;
     mealFields.hidden = !meal;
-    submitLabel.textContent = prep ? "Log portion" : meal ? "Log meal" : "Log entry";
+    submitLabel.textContent = submitToday.textContent = prep ? "Log portion" : meal ? "Log meal" : "Log entry";
     syncDay();
     renderOnHand(hasChoice);
     syncSubmit();
@@ -617,10 +625,9 @@ export function createLogForm(
     combobox.refresh();
   }
 
-  async function eatPrep(rest: boolean) {
+  async function eatPrep(rest: boolean, when = chosenTime()) {
     const p = prep;
     if (!p || !prepActions || saving || offline || prepBusy()) return;
-    const when = chosenTime();
     if (Number.isNaN(when.getTime())) return say("Enter a valid time.", true);
     let fraction: number | null = null;
     if (!rest) {
@@ -668,10 +675,9 @@ export function createLogForm(
     }
   }
 
-  async function submitMeal() {
+  async function submitMeal(when: Date) {
     const m = meal;
     if (!m || !logMeal || saving || offline) return;
-    const when = chosenTime();
     const read = ingredients.read();
     const invalid = read.problem ?? (read.ingredients.length === 0 ? "Add an ingredient, or reset to the saved meal." : Number.isNaN(when.getTime()) ? "Enter a valid time." : undefined);
     if (invalid) return say(invalid, true);
@@ -707,14 +713,18 @@ export function createLogForm(
   // A page left open past midnight: today, and so the day named, has moved since the button was last marked.
   form.addEventListener("focusin", syncDay);
 
-  form.addEventListener("submit", async (ev) => {
+  form.addEventListener("submit", (ev) => {
     ev.preventDefault();
-    if (prep) return eatPrep(false);
-    if (meal) return submitMeal();
+    void logNow(chosenTime());
+  });
+
+  /** Logs what is chosen at `when`. */
+  async function logNow(when: Date) {
+    if (prep) return eatPrep(false, when);
+    if (meal) return submitMeal(when);
     // Enter leaves the focus in the field, so the typed unit has not moved yet.
     amount.settle();
     const food = currentFood();
-    const when = chosenTime();
     const invalid = validationError() ?? (Number.isNaN(when.getTime()) ? "Enter a valid time." : undefined);
     const read = amount.read();
     if (food && !invalid && read.state === "typing") {
@@ -741,7 +751,7 @@ export function createLogForm(
       saving = false;
       syncSubmit();
     }
-  });
+  }
 
   syncSources();
   refreshAll();
