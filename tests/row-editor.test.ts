@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FoodItem, FoodRef } from "../src/core/food";
 import type { FoodCatalog } from "../src/food/catalog";
 import { addCivilDays, civilDate } from "../src/core/time";
-import { AS_LOGGED_UNIT, buildNutritionLogPoint, entryDay, toDiaryEntry, type DiaryEntry, type EntryEdit } from "../src/health/mapping";
+import { AS_LOGGED_UNIT, buildNutritionLogPoint, toDiaryEntry, type DiaryEntry, type EntryEdit } from "../src/health/mapping";
 import type { DataPoint } from "../src/health/types";
 import { createRowEditor } from "../src/ui/row-editor";
 
@@ -121,16 +121,16 @@ describe("row editor", () => {
   it("moves the entry to another day, keeping its amount and meal", () => {
     const e = entry();
     const { day, pickDay, save, onSave } = open(e, catalog(undefined).catalog);
-    expect(day.value).toBe(entryDay(e));
+    expect(day.value).toBe(e.day);
     expect(day.max).toBe(civilDate(new Date()));
     expect(save.disabled).toBe(true);
-    const earlier = addCivilDays(entryDay(e), -2);
+    const earlier = addCivilDays(e.day, -2);
     pickDay(earlier);
     expect(save.disabled).toBe(false);
     save.click();
     expect(onSave).toHaveBeenCalledWith({ day: earlier });
     // Back on its own day, there is nothing to save.
-    pickDay(entryDay(e));
+    pickDay(e.day);
     expect(save.disabled).toBe(true);
   });
 

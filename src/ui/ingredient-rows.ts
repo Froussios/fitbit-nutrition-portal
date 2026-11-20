@@ -268,6 +268,7 @@ export function createIngredientRows(opts: IngredientRowsOptions): IngredientRow
           const at = rows.indexOf(row);
           row.version++;
           amount.dispose();
+          combobox.dispose();
           rows = rows.filter((x) => x !== row);
           row.element.remove();
           syncAdd();
@@ -319,6 +320,7 @@ export function createIngredientRows(opts: IngredientRowsOptions): IngredientRow
     for (const r of rows) {
       r.version++;
       r.amount.dispose();
+      r.combobox.dispose();
     }
     rows = [];
     list.replaceChildren();

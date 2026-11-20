@@ -248,9 +248,10 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
   index build) keeps every other request static, so food search does not use the Functions allowance. A Pages deploy replaces
   the whole site, so API changes ship only through the Food index workflow. It creates the database if needed, applies
   `migrations/` first with `CLOUDFLARE_D1_TOKEN`, then deploys with the Pages token, since attaching a database needs no
-  D1 permission. Without that secret, or if it can't reach D1, it warns and leaves the API out, still publishing the
-  index. If preparing or deploying the API fails anyway, it publishes the index without it and fails the run (README,
-  Food index).
+  D1 permission. Without that secret it warns and leaves the API out, still publishing the index. With it, a token that
+  can't reach D1, or a failure to prepare or deploy the API, fails the run before anything is deployed, so the live site
+  never loses its API (README, Food index; #133). A deploy can fail after the migrations were applied, leaving the previous
+  Functions live on the new schema, so every migration must keep working with the `functions/` before it.
 
 ### 4.6 Saved meals
 

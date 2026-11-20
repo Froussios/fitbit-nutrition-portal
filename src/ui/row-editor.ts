@@ -5,7 +5,7 @@ import { civilDate } from "../core/time";
 import { convertQuantity, type Measurable } from "../core/units";
 import { describeError, logger } from "../debug/log";
 import type { FoodCatalog } from "../food/catalog";
-import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, canConvertLogged, editedNutritionLogPoint, entryDay, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, toDiaryEntry, type AmountEdit, type DiaryEntry, type EntryEdit } from "../health/mapping";
+import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, canConvertLogged, editedNutritionLogPoint, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, toDiaryEntry, type AmountEdit, type DiaryEntry, type EntryEdit } from "../health/mapping";
 import type { MealType } from "../health/types";
 import { createAmountField } from "./amount-field";
 import { el, errorMessage, singleTabStop } from "./dom";
@@ -101,7 +101,7 @@ export function createRowEditor({ catalog, entry, unitNames, offline: startOffli
   mealSelect.value = meal0 ?? "";
 
   // There is no diary after today, so an entry can't be moved there. The date field enforces it only in its picker.
-  const day0 = entryDay(entry);
+  const day0 = entry.day;
   const dayInput = el("input", { id: "edit-day", type: "date", value: day0, max: civilDate(new Date()), required: true, "aria-label": `Day for ${entry.displayName}` });
   singleTabStop(dayInput);
   const dayProblem = el("div", { class: "edit-error", hidden: true });

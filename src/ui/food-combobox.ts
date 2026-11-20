@@ -49,6 +49,8 @@ export interface FoodCombobox {
   showChoice(text: string): void;
   /** Searches again, after what `extras` or `searchFoods` would answer has changed. */
   refresh(): void;
+  /** Stops following the catalogue's changes, for a field that is being removed. */
+  dispose(): void;
 }
 
 /** Shows a "Searching…" hint only when a search takes longer than this. */
@@ -235,7 +237,7 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
     controller.setQuery(foods() ? text : "");
   };
   // Rows must not move under a row the user has already picked with the arrow keys: the next keystroke updates them.
-  catalog.onChange?.(() => controller.invalidate(state.open && state.active < 0));
+  const unfollow = catalog.onChange?.(() => controller.invalidate(state.open && state.active < 0));
 
   const choose = (row: number) => {
     if (row < extras.length) {
@@ -336,6 +338,9 @@ export function createFoodCombobox(catalog: FoodCatalog, opts: FoodComboboxOptio
     },
     refresh() {
       if (!hasChoice) search(state.query);
+    },
+    dispose() {
+      unfollow?.();
     },
   };
 }

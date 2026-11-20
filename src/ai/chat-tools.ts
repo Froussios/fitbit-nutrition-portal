@@ -19,7 +19,6 @@ import {
   buildNutritionLogPoint,
   canConvertLogged,
   editedNutritionLogPoint,
-  entryDay,
   isLoggedAmount,
   loggedAmount,
   toDiaryEntry,
@@ -217,7 +216,7 @@ export function createChatTools(host: ChatHost, handles: ChatHandles = new ChatH
     if (step.day) {
       const day = dayOf(step.day);
       if (typeof day !== "string") return day;
-      if (day !== entryDay(entry)) {
+      if (day !== entry.day) {
         edit.day = day;
         changed = true;
       }
@@ -283,7 +282,7 @@ export function outcomeText(
 export function describeDone(proposal: Proposal, today: string): string {
   switch (proposal.kind) {
     case "log":
-      return `logged ${proposal.preview.displayName}, ${proposal.preview.amount ?? "as one entry"}, ${dayWords(entryDay(proposal.preview), today)}.`;
+      return `logged ${proposal.preview.displayName}, ${proposal.preview.amount ?? "as one entry"}, ${dayWords(proposal.preview.day, today)}.`;
     case "edit":
       return `changed ${proposal.entry.displayName}.`;
     case "delete":
