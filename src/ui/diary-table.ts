@@ -134,8 +134,6 @@ function macroKcal(p: ReturnType<typeof sumProfiles>): number[] {
   return MACROS.map((m) => (p.nutrients[m] ?? 0) * KCAL_PER_GRAM[m]);
 }
 
-const macroKcalSum = (p: ReturnType<typeof sumProfiles>) => macroKcal(p).reduce((a, b) => a + b, 0);
-
 /** "Breakfast", "Before lunch", "No meal": the meal named on its own, as a heading for its stats. */
 function mealName(e: DiaryEntry): string {
   const label = e.mealType === "MEAL_TYPE_UNSPECIFIED" ? "no meal" : mealLabel(e.mealType);
@@ -147,9 +145,8 @@ function mealName(e: DiaryEntry): string {
  * The bar is as long as the meal's share of `largest`, the most any meal of the day has, so meals compare at a glance.
  * A meal whose entries are all deleted has none.
  */
-function mealStats(live: readonly DiaryEntry[], largest: number): HTMLElement | undefined {
+function mealStats(live: readonly DiaryEntry[], sum: ReturnType<typeof sumProfiles>, largest: number): HTMLElement | undefined {
   if (live.length === 0) return undefined;
-  const sum = sumProfiles(live.map((e) => e.profile));
   const values = macroKcal(sum);
   const whole = values.reduce((a, b) => a + b, 0);
   const name = mealName(live[0]!);
@@ -191,8 +188,13 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
 
   const total = sumProfiles(entries.map((e) => e.profile));
   const deletedIds = new Set(deleted.map((e) => e.id));
+  // Each meal's rows, deleted ones included, and the sum of the rest, which its stats show.
+  const meals = mealGroups([...entries, ...deleted].sort(byMeal)).map((rows) => {
+    const live = rows.filter((e) => !deletedIds.has(e.id));
+    return { rows, live, sum: sumProfiles(live.map((e) => e.profile)) };
+  });
   // The meal with the most energy from its macronutrients: its bar is the full width, and every other meal's is to scale.
-  const largest = Math.max(0, ...mealGroups([...entries].sort(byMeal)).map((rows) => macroKcalSum(sumProfiles(rows.map((e) => e.profile)))));
+  const largest = Math.max(0, ...meals.map(({ sum }) => macroKcal(sum).reduce((a, b) => a + b, 0)));
   // No time column: entries are grouped by meal, and a time that disagrees with its meal only confuses.
   const head = ["Meal", "Food", "Amount", energyLabel(), "Protein", "Carbs", "Fat", ""];
 
@@ -203,7 +205,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
       "table",
       {},
       el("thead", {}, el("tr", {}, ...head.map((h, i) => el("th", { scope: "col", class: i >= 2 && i <= 6 ? "num" : undefined }, h)))),
-      ...mealGroups([...entries, ...deleted].sort(byMeal)).map((rows) =>
+      ...meals.map(({ rows, live, sum }) =>
         el(
           "tbody",
           {},
@@ -301,7 +303,7 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
               ),
             );
           }),
-          mealStats(rows.filter((e) => !deletedIds.has(e.id)), largest),
+          mealStats(live, sum, largest),
         ),
       ),
       el(

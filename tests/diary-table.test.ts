@@ -229,3 +229,13 @@ describe("diary table meal stats", () => {
     expect(barWidth(stats(t)[0]!)).toBe("100%");
   });
 });
+
+describe("diary table meal stats with meal types the API adds later", () => {
+  it("keeps each unknown meal type's entries together, under one stats row", () => {
+    const at = (id: string, mealType: string, iso: string): DiaryEntry => ({ ...entry(`e-abc-ab12-off-${id}`), mealType: mealType as DiaryEntry["mealType"], start: new Date(iso) });
+    const entries = [at("1", "BRUNCH", "2026-11-07T10:00:00Z"), at("2", "SUPPER", "2026-11-07T11:00:00Z"), at("3", "BRUNCH", "2026-11-07T12:00:00Z")];
+    const t = renderDiaryTable({ entries, pendingIds: new Set(), deleted: [], busy: new Map(), offline: false, onEdit: vi.fn(), onDelete: vi.fn(), onUndo: vi.fn(), onRepeat: vi.fn() });
+    expect(t.querySelectorAll("tbody")).toHaveLength(2);
+    expect([...t.querySelectorAll("tr.meal-stats th")].map((th) => th.textContent)).toEqual(["Brunch", "Supper"]);
+  });
+});
