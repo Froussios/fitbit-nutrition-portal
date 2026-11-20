@@ -212,8 +212,8 @@ export interface ColumnMarker {
   readonly color: string;
   /** One per column, in the columns' order; undefined draws no line on that column. */
   readonly values: readonly (number | undefined)[];
-  /** A word after its name on one column, e.g. "so far" for today's calories burnt. Such a column's line is dashed. */
-  readonly noteFor?: (index: number) => string | undefined;
+  /** Whether a column's figure is still growing, such as today's calories burnt: its line is dashed. */
+  readonly partialFor?: (index: number) => boolean;
 }
 
 const W = 460;
@@ -241,8 +241,7 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
     const v = marker?.values[i];
     return v !== undefined && v > 0 ? v : undefined;
   });
-  const markNote = (i: number) => marker?.noteFor?.(i);
-  const markName = (i: number) => [marker?.name, markNote(i)].filter(Boolean).join(" ");
+  const markName = marker?.name ?? "";
   const scale = niceScale(Math.max(0, ...totals, ...marks.map((v) => v ?? 0)));
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
@@ -270,7 +269,7 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
         .map(({ s, v }) => el("div", { class: "chart-tooltip-row" }, el("span", { class: "chart-line-key", style: `background: ${fill(s)}` }), el("strong", {}, format(v)), ` ${s.name}`)),
       el("div", { class: "chart-tooltip-row chart-tooltip-total" }, el("strong", {}, formatTotal(totals[i]!)), " total"),
       ...(marker && marks[i] !== undefined
-        ? [el("div", { class: "chart-tooltip-row" }, el("span", { class: "chart-line-key", style: `background: var(${marker.color})` }), el("strong", {}, formatTotal(marks[i]!)), ` ${markName(i)}`)]
+        ? [el("div", { class: "chart-tooltip-row" }, el("span", { class: "chart-line-key", style: `background: var(${marker.color})` }), el("strong", {}, formatTotal(marks[i]!)), ` ${markName}`)]
         : []),
       ...(c.note ? [el("div", { class: "chart-tooltip-note" }, c.note)] : []),
     );
@@ -294,7 +293,7 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
       class: `chart-column${c.current ? " current" : ""}`,
       tabindex: 0,
       role: "img",
-      "aria-label": `${c.title}: ${series.map((s, k) => `${s.name} ${format(c.values[k]!)}`).join(", ")}; total ${formatTotal(totals[i]!)}${marks[i] !== undefined ? `; ${markName(i)} ${formatTotal(marks[i]!)}` : ""}${c.note ? `; ${c.note}` : ""}`,
+      "aria-label": `${c.title}: ${series.map((s, k) => `${s.name} ${format(c.values[k]!)}`).join(", ")}; total ${formatTotal(totals[i]!)}${marks[i] !== undefined ? `; ${markName} ${formatTotal(marks[i]!)}` : ""}${c.note ? `; ${c.note}` : ""}`,
     });
     // The hit target is the whole band, from the top of the plot to the day's label, not just the bar.
     column.append(svg("rect", { class: "chart-hit", x: PAD.left + band * i, y: PAD.top, width: band, height: plotH + PAD.bottom }));
@@ -314,7 +313,7 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
     if (marker && mark !== undefined) {
       // Wider than the bar, with a halo of the surface so that it shows over the parts as well as above them.
       const line = { x1: x - MARK_OVERHANG, x2: x + barW + MARK_OVERHANG, y1: y(mark), y2: y(mark) };
-      column.append(svg("line", { ...line, class: "chart-marker-halo" }), svg("line", { ...line, class: `chart-marker${markNote(i) ? " partial" : ""}`, style: `stroke: var(${marker.color})` }));
+      column.append(svg("line", { ...line, class: "chart-marker-halo" }), svg("line", { ...line, class: `chart-marker${marker.partialFor?.(i) ? " partial" : ""}`, style: `stroke: var(${marker.color})` }));
     }
     column.append(svg("text", { x: x + barW / 2, y: H - 6, class: "chart-tick chart-day", "text-anchor": "middle" }, c.label));
     column.addEventListener("pointerenter", () => showTip(i, column));
@@ -337,7 +336,7 @@ export function stackedColumns({ title, series, columns, format, formatTotal, to
         c.title,
         ...c.values.map((v) => format(v)),
         formatTotal(totals[i]!),
-        ...(marker ? [marks[i] === undefined ? "–" : `${formatTotal(marks[i]!)}${markNote(i) ? ` (${markNote(i)})` : ""}`] : []),
+        ...(marker ? [marks[i] === undefined ? "–" : formatTotal(marks[i]!)] : []),
       ]),
     ),
   );
