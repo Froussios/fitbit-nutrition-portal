@@ -187,7 +187,7 @@ describe("diary table meal stats", () => {
   }
   const stats = (t: HTMLElement) => [...t.querySelectorAll<HTMLTableRowElement>("tr.meal-stats")];
   const share = (row: Element) => row.querySelector(".meal-bar")?.getAttribute("style")?.match(/--share: ([\d.]+)/)?.[1];
-  const named = (row: Element) => (row.querySelector(".meal-bar") ?? row.querySelector("[aria-label]"))?.getAttribute("aria-label")?.split(":")[0];
+  const named = (row: Element) => row.querySelector(".meal-bar")?.getAttribute("aria-label")?.split(":")[0];
 
   it("closes each meal's entries with a summary under Amount to Fat, without the meal's name", () => {
     const t = table([meal("1", "BREAKFAST", 10, 60, 5), meal("2", "LUNCH", 20, 30, 10, 400), meal("3", "BREAKFAST", 5, 10, 2, 100)]);
@@ -231,7 +231,9 @@ describe("diary table meal stats", () => {
     const t = table([meal("1", "BREAKFAST", 10, 60, 5), { ...meal("2", "MEAL_TYPE_UNSPECIFIED", 0, 0, 0), profile: { energyKcal: 120, nutrients: {} } }]);
     const none = stats(t)[1]!;
     expect(none.querySelector(".meal-bar")).toBeNull();
-    expect(none.querySelector(".meal-none")!.textContent).toBe("No protein, carbs or fat recorded");
+    // The meal's name, hidden but for screen readers: with no bar, nothing else in the row says which meal it sums.
+    expect(none.querySelector(".meal-none")!.textContent).toBe("No meal: No protein, carbs or fat recorded");
+    expect(none.querySelector(".meal-none .visually-hidden")!.textContent).toBe("No meal: ");
     expect(none.querySelector(".meal-energy")!.textContent).toBe("120 kcal");
     expect(share(stats(t)[0]!)).toBe("1");
   });

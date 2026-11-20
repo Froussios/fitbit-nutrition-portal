@@ -293,7 +293,8 @@ tbody tr:has(+ tr.meal-stats) td { border-bottom: none; }
 .meal-seg {
   flex: 1 1 0; min-width: 0; border-radius: 4px; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  color: #ffffff; font-size: 0.72rem; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums;
+  /* Black: at least 4.5:1 on every macronutrient colour in both themes, where white falls to 2.8:1 on fat. */
+  color: #000000; font-size: 0.72rem; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .meal-energy { flex: none; color: var(--muted); font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .meal-none { color: var(--muted); font-size: 0.8rem; }
