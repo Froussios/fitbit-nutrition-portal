@@ -286,9 +286,8 @@ tr.pending { opacity: 0.7; }
  * after Fat, the meal's energy.
  */
 tbody tr.meal-stats { background: none; }
-tr.meal-stats td { padding-block: 2px 10px; vertical-align: middle; }
-/* No line between a meal's last entry and its summary: they read as one block. */
-tbody tr:has(+ tr.meal-stats) td { border-bottom: none; }
+/* Every entry keeps its line, the last one too, so the summary is not read as part of the entry above it. */
+tr.meal-stats td { padding-block: 8px; vertical-align: middle; }
 /* A slim bar with no text in it, as long as the meal's share of the day's largest meal. */
 .meal-bar { display: flex; gap: 2px; height: 10px; min-width: 4px; }
 .meal-seg { flex: 1 1 0; min-width: 0; border-radius: 3px; }
