@@ -186,10 +186,10 @@ describe("diary table meal stats", () => {
     return t;
   }
   const stats = (t: HTMLElement) => [...t.querySelectorAll<HTMLTableRowElement>("tr.meal-stats")];
-  const share = (row: Element) => row.querySelector(".meal-bar")?.getAttribute("style")?.match(/--share: ([\d.]+)/)?.[1];
+  const share = (row: Element) => row.querySelector<HTMLElement>(".meal-bar")?.style.width;
   const named = (row: Element) => row.querySelector(".meal-bar")?.getAttribute("aria-label")?.split(":")[0];
 
-  it("closes each meal's entries with a summary under Amount to Fat, without the meal's name", () => {
+  it("closes each meal's entries with a bar under Amount to Fat and the energy after it, without the meal's name", () => {
     const t = table([meal("1", "BREAKFAST", 10, 60, 5), meal("2", "LUNCH", 20, 30, 10, 400), meal("3", "BREAKFAST", 5, 10, 2, 100)]);
     const bodies = [...t.querySelectorAll("tbody")];
     expect(bodies).toHaveLength(2);
@@ -198,32 +198,31 @@ describe("diary table meal stats", () => {
     expect([...bodies[1]!.children].map((r) => r.classList.contains("meal-stats"))).toEqual([false, true]);
     const [breakfast] = stats(t);
     const cells = [...breakfast!.children];
-    // Meal and Food empty, then the summary across Amount, energy, Protein, Carbs and Fat, then the actions column.
+    // Meal and Food empty, then the bar across Amount, energy, Protein, Carbs and Fat, then the energy in the last column.
     expect(cells.map((c) => c.getAttribute("colspan"))).toEqual(["2", "5", null]);
     expect(cells[0]!.textContent).toBe("");
     expect(breakfast!.textContent).not.toContain("Breakfast");
-    expect(breakfast!.querySelector(".meal-energy")!.textContent).toBe("400 kcal");
-    expect([...breakfast!.querySelectorAll(".meal-seg")].map((s) => s.textContent)).toEqual(["15 g", "70 g", "7 g"]);
+    expect(cells[1]!.querySelector(".meal-bar")).not.toBeNull();
+    expect(cells[2]!.querySelector(".meal-sum-energy")!.textContent).toBe("400 kcal");
+    // Nothing printed in the bar: the grams are in the blocks' tooltips.
+    expect([...breakfast!.querySelectorAll(".meal-seg")].map((s) => s.textContent)).toEqual(["", "", ""]);
+    expect([...breakfast!.querySelectorAll<HTMLElement>(".meal-seg")].map((s) => s.title)).toEqual(["Protein 15 g", "Carbs 70 g", "Fat 7 g"]);
     expect(breakfast!.querySelector(".meal-bar")!.getAttribute("aria-label")).toBe("Breakfast: 400 kcal; protein 15 g, carbs 70 g, fat 7 g");
   });
 
   it("scales each meal's macronutrient bar to the largest meal, which alone fills the width", () => {
     // Breakfast: 10 g protein, 60 g carbs, 5 g fat = 40 + 240 + 45 = 325 kcal. Lunch twice that, dinner a fifth of lunch.
     const t = table([meal("1", "BREAKFAST", 10, 60, 5), meal("2", "LUNCH", 20, 120, 10), meal("3", "DINNER", 8, 20, 2)]);
-    expect(stats(t).map(share)).toEqual(["0.5", "1", "0.2"]);
+    expect(stats(t).map(share)).toEqual(["50%", "100%", "20%"]);
     const segments = [...stats(t)[0]!.querySelectorAll<HTMLElement>(".meal-seg")];
     expect(segments.map((s) => s.style.flexGrow)).toEqual(["40", "240", "45"]);
-    // A block under a tenth of the largest bar prints no grams; its tooltip still has them.
-    const dinner = [...stats(t)[2]!.querySelectorAll<HTMLElement>(".meal-seg")];
-    expect(dinner.map((s) => s.textContent)).toEqual(["", "20 g", ""]);
-    expect(dinner.map((s) => s.title)).toEqual(["Protein 8 g", "Carbs 20 g", "Fat 2 g"]);
   });
 
   it("leaves deleted entries out of the stats, and a meal with only deleted entries has none", () => {
     const deleted = [meal("4", "LUNCH", 100, 100, 100), meal("5", "DINNER", 1, 1, 1)];
     const t = table([meal("1", "BREAKFAST", 10, 60, 5), meal("2", "LUNCH", 20, 120, 10)], deleted);
     expect(stats(t).map(named)).toEqual(["Breakfast", "Lunch"]);
-    expect(stats(t).map(share)).toEqual(["0.5", "1"]);
+    expect(stats(t).map(share)).toEqual(["50%", "100%"]);
     expect(t.querySelectorAll("tbody")).toHaveLength(3);
   });
 
@@ -234,8 +233,8 @@ describe("diary table meal stats", () => {
     // The meal's name, hidden but for screen readers: with no bar, nothing else in the row says which meal it sums.
     expect(none.querySelector(".meal-none")!.textContent).toBe("No meal: No protein, carbs or fat recorded");
     expect(none.querySelector(".meal-none .visually-hidden")!.textContent).toBe("No meal: ");
-    expect(none.querySelector(".meal-energy")!.textContent).toBe("120 kcal");
-    expect(share(stats(t)[0]!)).toBe("1");
+    expect(none.querySelector(".meal-sum-energy")!.textContent).toBe("120 kcal");
+    expect(share(stats(t)[0]!)).toBe("100%");
   });
 });
 

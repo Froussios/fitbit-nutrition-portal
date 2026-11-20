@@ -280,23 +280,18 @@ tbody td:last-child { padding: 0; }
 tr.pending { opacity: 0.7; }
 /*
  * Each meal's summary closes its entries (DR-48): no meal name and nothing under Meal or Food, so it reads as a summary of
- * the rows above. Under Amount to Fat, the meal's energy and a bar of its macronutrients, as long as its share of the
- * day's largest meal.
+ * the rows above. Under Amount to Fat, a bar of its macronutrients, as long as its share of the day's largest meal;
+ * after Fat, the meal's energy.
  */
 tbody tr.meal-stats { background: none; }
-tr.meal-stats td { padding-block: 2px 10px; }
+tr.meal-stats td { padding-block: 2px 10px; vertical-align: middle; }
 /* No line between a meal's last entry and its summary: they read as one block. */
 tbody tr:has(+ tr.meal-stats) td { border-bottom: none; }
-.meal-summary { display: flex; align-items: center; gap: 8px; }
-/* The largest meal's bar (--share: 1) leaves room for its energy after it; every other bar is to the same scale. */
-.meal-bar { flex: none; display: flex; gap: 2px; height: 18px; width: calc((100% - 6em) * var(--share)); min-width: 4px; }
-.meal-seg {
-  flex: 1 1 0; min-width: 0; border-radius: 4px; overflow: hidden;
-  display: flex; align-items: center; justify-content: center;
-  /* Black: at least 4.5:1 on every macronutrient colour in both themes, where white falls to 2.8:1 on fat. */
-  color: #000000; font-size: 0.72rem; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums;
-}
-.meal-energy { flex: none; color: var(--muted); font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A slim bar with no text in it, as long as the meal's share of the day's largest meal. */
+.meal-bar { display: flex; gap: 2px; height: 10px; min-width: 4px; }
+.meal-seg { flex: 1 1 0; min-width: 0; border-radius: 3px; }
+/* In the column after Fat, where it keeps its place whatever the bar's length. */
+.meal-sum-energy { display: block; padding-left: 8px; color: var(--muted); font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .meal-none { color: var(--muted); font-size: 0.8rem; }
 /* A row being edited keeps its height and the table's width. If the window is too narrow for that, Save and Cancel stay in view. */
 tr.editing td { padding-block: 0; }
