@@ -181,6 +181,24 @@ describe("log form", () => {
     expect((onSubmit.mock.calls[0]![0] as { time: Date }).time).toEqual(new Date(2026, 10, 11, 8, 30));
   });
 
+  it("empties the form after a portion even when the preps reload while it saves", async () => {
+    const { form, $, visible, actions } = setUp();
+    let finish!: () => void;
+    vi.mocked(actions.eat).mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve({ text: "Logged.", error: false, eaten: true }))));
+    form.choosePrep(PREPS[0]!);
+    const portion = $<HTMLInputElement>("#portion");
+    portion.value = "1/6";
+    portion.dispatchEvent(new Event("input"));
+    form.element.dispatchEvent(new Event("submit", { cancelable: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    // A reload lands mid-save, with a new object for the same prep.
+    form.setPreps({ available: true, preps: PREPS.map((p) => ({ ...p })), busy: new Set() });
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(portion.value).toBe("");
+    expect(visible("#portion")).toBe(false);
+  });
+
   it("logs a portion for today with the regular button beside one for another day", async () => {
     const { form, $, actions } = setUp();
     form.choosePrep(PREPS[0]!);
@@ -217,6 +235,7 @@ describe("log form", () => {
     [...form.element.querySelectorAll<HTMLElement>("[role=option]")].find((o) => o.textContent?.includes("Custom food"))!.click();
     const energy = $<HTMLInputElement>("#c-energy");
     energy.value = "400";
+    $<HTMLSelectElement>("#c-energy-unit").value = "kcal";
     energy.dispatchEvent(new Event("input", { bubbles: true }));
     qty.value = "50";
     qty.dispatchEvent(new Event("input"));
@@ -225,6 +244,7 @@ describe("log form", () => {
     expect(onSubmit).toHaveBeenCalledTimes(2);
     expect($<HTMLInputElement>("#c-name").value).toBe("");
     expect(energy.value).toBe("0");
+    expect($<HTMLSelectElement>("#c-energy-unit").value).toBe("kcal"); // kept, like the meal
     expect(visible("#c-name")).toBe(false);
   });
 

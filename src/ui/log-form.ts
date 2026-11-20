@@ -470,20 +470,6 @@ export function createLogForm(
     refreshPreview();
   };
 
-  /** Empties the custom food's fields, so the next custom food starts blank. */
-  const clearCustom = () => {
-    cName.value = "";
-    cBasis.selectedIndex = cEnergyUnit.selectedIndex = 0;
-    for (const input of [cEnergy, cProtein, cCarbs, cFat]) input.value = "0";
-  };
-
-  /** After an entry is logged: the form starts again from the search. The meal picked and the status stay (DR-17). */
-  const clearLogged = () => {
-    clearCustom();
-    amount.clear();
-    clearChoice();
-  };
-
   /** Forgets the choice, leaving the search empty. */
   const clearChoice = () => {
     choice++;
@@ -495,6 +481,20 @@ export function createLogForm(
     portion.value = "";
     combobox.reset();
     refreshAll();
+  };
+
+  /** Empties the custom food's fields, so the next custom food starts blank. Its energy unit stays, like the meal. */
+  const clearCustom = () => {
+    cName.value = "";
+    cBasis.selectedIndex = 0;
+    for (const input of [cEnergy, cProtein, cCarbs, cFat]) input.value = "0";
+  };
+
+  /** After an entry is logged: the form starts again from the search. The meal picked and the status stay (DR-17). */
+  const clearLogged = () => {
+    clearCustom();
+    amount.clear();
+    clearChoice();
   };
 
   function choosePrep(p: Prep) {
@@ -662,7 +662,7 @@ export function createLogForm(
       if (outcome.eaten) {
         // After an error the prep stays chosen, so the message keeps its context; the portion goes, so it isn't eaten twice.
         if (outcome.error) portion.value = "";
-        else if (prep === p) clearLogged();
+        else if (prep?.id === p.id) clearLogged();
         resetTime();
       }
     } catch (e) {
@@ -703,7 +703,7 @@ export function createLogForm(
     try {
       await logMeal(m, read.ingredients, (mealSelect.value || undefined) as MealType | undefined, when);
       say(`Logged ${m.name}.`, false);
-      if (meal === m) clearLogged();
+      if (meal?.id === m.id) clearLogged();
       resetTime();
     } catch (e) {
       say(errorMessage(e), true);

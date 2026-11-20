@@ -151,8 +151,8 @@ Only the Australian foods have few serving measures until AUSNUT is added.
 **Decision.** The form preselects "No meal" and the app then leaves `mealType` out of the entry. Breakfast, lunch,
 dinner and snack stay available. The meal picked stays picked for the next entry, until the user changes it or
 reloads the page, since consecutive entries are usually from the same meal. Everything else empties once an entry is
-logged: the food, amount and custom food, the portion and prep, or the saved meal, so the form starts again from the
-search. A portion that counts as eaten despite an error leaves the prep chosen beside the message, with the portion
+logged: the food, amount and custom food (but for its energy unit, which stays too), the portion and prep, or the
+saved meal, so the form starts again from the search. A portion that counts as eaten despite an error leaves the prep chosen beside the message, with the portion
 cleared. The app no longer guesses the meal from the time of day, and no longer offers or writes `ANYTIME`.
 **Why.** Owner decision (6 November 2026). The API marks `mealType` as optional, and describes `ANYTIME` as legacy
 while listing only the other four values for this field. The form first returned to "No meal" after each entry; the
