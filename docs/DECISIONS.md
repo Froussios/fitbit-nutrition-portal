@@ -375,7 +375,9 @@ beyond that.
 
 ### DR-33 The log button names a day other than today, and an edit can move an entry to another day
 **Decision.** When an entry would go on another day than today (the day shown, or a time typed for another day), the log
-button turns amber and names the day: "Log entry for yesterday", "Log meal for Monday, 16 Nov 2026". The row editor
+button turns amber and names the day: "Log entry for yesterday", "Log meal for Monday, 16 Nov 2026". Beside it, the
+regular log button logs the entry for today instead, at the same clock time, which can be later than now, as a time
+typed for today can (owner request, 20 November 2026). The row editor
 (DR-22) has a date field under the meal, up to today. A new day keeps the entry's local clock time and length, with the
 local UTC offsets of the new day, so a move across a daylight saving change keeps the clock time; the clock time itself
 still cannot be edited. A moved entry leaves the day shown, and a note under the heading says where it went, with a

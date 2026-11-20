@@ -158,6 +158,43 @@ describe("log form", () => {
     expect(submit.classList.contains("other-day")).toBe(true);
   });
 
+  it("offers the regular log button next to one for another day, which logs today at the same clock time", async () => {
+    const { form, $, type, onSubmit } = setUp();
+    await type("Chickpeas");
+    [...form.element.querySelectorAll<HTMLElement>("[role=option]")].find((o) => o.textContent?.includes("Chickpeas"))!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    const qty = $<HTMLInputElement>("#qty");
+    qty.value = "100";
+    qty.dispatchEvent(new Event("input"));
+    const today = [...form.element.querySelectorAll<HTMLButtonElement>(".actions button.primary")].find((b) => b.type === "button")!;
+    expect(today.hidden).toBe(true);
+
+    const time = $<HTMLInputElement>("#time");
+    time.value = "2026-11-09T08:30";
+    time.dispatchEvent(new Event("input"));
+    expect(today.hidden).toBe(false);
+    expect(today.textContent).toBe("Log entry");
+    today.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect((onSubmit.mock.calls[0]![0] as { time: Date }).time).toEqual(new Date(2026, 10, 11, 8, 30));
+  });
+
+  it("logs a portion for today with the regular button beside one for another day", async () => {
+    const { form, $, actions } = setUp();
+    form.choosePrep(PREPS[0]!);
+    const portion = $<HTMLInputElement>("#portion");
+    portion.value = "1/6";
+    portion.dispatchEvent(new Event("input"));
+    const time = $<HTMLInputElement>("#time");
+    time.value = "2026-11-10T12:15";
+    time.dispatchEvent(new Event("input"));
+    const today = [...form.element.querySelectorAll<HTMLButtonElement>(".actions button.primary")].find((b) => b.type === "button")!;
+    expect(today.textContent).toBe("Log portion");
+    today.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(actions.eat).toHaveBeenCalledWith(PREPS[0], 1 / 6, undefined, new Date(2026, 10, 11, 12, 15));
+  });
+
   it("keeps the meal for the next food logged", async () => {
     const { form, $, type, onSubmit } = setUp();
     const logFood = async (name: string) => {
