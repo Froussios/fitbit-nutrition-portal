@@ -96,7 +96,7 @@ async function startApp(day?: string) {
   return services;
 }
 
-const rows = () => [...document.querySelectorAll(".diary tbody tr")].map((r) => r.querySelector("td:nth-child(2)")?.textContent);
+const rows = () => [...document.querySelectorAll(".diary tbody tr:not(.meal-stats)")].map((r) => r.querySelector("td:nth-child(2)")?.textContent);
 const onDay = (diary: Map<string, Stored>, day: string) => [...diary.values()].filter((p) => civilDate(new Date(p.nutritionLog.interval.startTime)) === day);
 
 afterEach(() => {

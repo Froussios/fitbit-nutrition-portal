@@ -278,6 +278,15 @@ tfoot th, tfoot td { font-weight: 600; border-bottom: none; }
 tbody td:last-child { padding: 0; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.pending { opacity: 0.7; }
+/* Each meal's stats close its entries (DR-48): unstriped, quieter than the entries, with a slim bar of its macronutrients. */
+tbody tr.meal-stats { background: none; }
+tr.meal-stats th, tr.meal-stats td { padding-block: 6px; color: var(--muted); font-size: 0.82rem; }
+tr.meal-stats th { font-weight: 600; }
+tbody tr.meal-stats td { vertical-align: middle; }
+/* As wide as the meal's share of the day's largest meal: only that one fills the cell. */
+.meal-bar { min-width: 4px; }
+.meal-bar .chart.segmented.compact { margin: 0; }
+.meal-bar .chart-empty { font-size: inherit; white-space: normal; }
 /* A row being edited keeps its height and the table's width. If the window is too narrow for that, Save and Cancel stay in view. */
 tr.editing td { padding-block: 0; }
 /* Their controls make these the widest cells in their columns, so a little less padding keeps the table its width. */

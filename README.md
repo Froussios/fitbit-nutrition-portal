@@ -14,6 +14,8 @@ This is the MVP, a proof of concept (milestone M0):
    full for you to accept or reject (DR-41). A button on each row opens the chat about that entry.
 3. See a day's whole Google Health nutrition diary, whichever app logged each entry, with amounts and
    totals. Arrows beside the day step back to earlier days, a calendar button jumps to any day, a Today button jumps back, and new entries go on the day shown: the log button turns amber and names the day when it isn't today.
+   Each meal closes with its totals and a slim bar of its protein, carbs and fat, drawn to scale: only the day's largest
+   meal fills the width.
    The page URL names the day (`?day=2026-11-09`), so a day can be linked to; without it the diary shows today. Entries made by this app can be edited (amount, meal, and day, which moves the entry to another day), with the pencil button or a double-click on the row (Escape or a click outside the row cancels), and deleted. Deleting asks for no confirmation: a
    deleted entry stays crossed out with an undo button until the page is reloaded. Any entry, from any day and any
    app, can be logged again for today with the button beside it (same food, amount and meal, at the current time),
