@@ -470,6 +470,20 @@ export function createLogForm(
     refreshPreview();
   };
 
+  /** Empties the custom food's fields, so the next custom food starts blank. */
+  const clearCustom = () => {
+    cName.value = "";
+    cBasis.selectedIndex = cEnergyUnit.selectedIndex = 0;
+    for (const input of [cEnergy, cProtein, cCarbs, cFat]) input.value = "0";
+  };
+
+  /** After an entry is logged: the form starts again from the search. The meal picked and the status stay (DR-17). */
+  const clearLogged = () => {
+    clearCustom();
+    amount.clear();
+    clearChoice();
+  };
+
   /** Forgets the choice, leaving the search empty. */
   const clearChoice = () => {
     choice++;
@@ -646,7 +660,9 @@ export function createLogForm(
       const outcome = await prepActions.eat(p, fraction, (mealSelect.value || undefined) as MealType | undefined, when);
       say(outcome.text, outcome.error);
       if (outcome.eaten) {
-        portion.value = "";
+        // After an error the prep stays chosen, so the message keeps its context; the portion goes, so it isn't eaten twice.
+        if (outcome.error) portion.value = "";
+        else if (prep === p) clearLogged();
         resetTime();
       }
     } catch (e) {
@@ -687,8 +703,7 @@ export function createLogForm(
     try {
       await logMeal(m, read.ingredients, (mealSelect.value || undefined) as MealType | undefined, when);
       say(`Logged ${m.name}.`, false);
-      // The next one starts from the meal as saved.
-      if (meal === m) resetMeal();
+      if (meal === m) clearLogged();
       resetTime();
     } catch (e) {
       say(errorMessage(e), true);
@@ -740,10 +755,13 @@ export function createLogForm(
     saving = true;
     syncSubmit();
     say("Saving to Google Health…", false);
+    const mine = choice;
     try {
       await onSubmit({ food, quantity: read.quantity, unit: read.unit, ...(mealSelect.value ? { mealType: mealSelect.value as MealType } : {}), time: when });
       say(`Logged ${food.name}.`, false);
-      amount.forgetTyping();
+      // Unless the user already moved on to another food while this one was saving.
+      if (mine === choice) clearLogged();
+      else amount.forgetTyping();
       resetTime();
     } catch (e) {
       say(errorMessage(e), true);

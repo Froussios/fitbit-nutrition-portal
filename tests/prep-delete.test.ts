@@ -120,16 +120,16 @@ describe.each<Ids>(["ours", "google, answered", "google, unanswered"])("deleting
     const { portions } = await startApp(ids);
     await eat("1/4");
     expect(portions).toHaveLength(1);
-    expect(document.querySelector(".prep-left")?.textContent).toBe("75% left");
+    expect(document.querySelector(".prep .prep-left")?.textContent).toBe("75% left");
 
     button(/^Delete Chili \(1\/4\)/)!.click();
     await settle();
     expect(portions).toHaveLength(0);
-    expect(document.querySelector(".prep-left")?.textContent).toBe("100% left");
+    expect(document.querySelector(".prep .prep-left")?.textContent).toBe("100% left");
 
     button(/^Undo deleting Chili \(1\/4\)/)!.click();
     await settle();
     expect(portions).toHaveLength(1);
-    expect(document.querySelector(".prep-left")?.textContent).toBe("75% left");
+    expect(document.querySelector(".prep .prep-left")?.textContent).toBe("75% left");
   });
 });
