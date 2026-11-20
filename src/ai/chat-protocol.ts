@@ -14,7 +14,7 @@ import { kcalToKj, type NutrientProfile } from "../core/nutrients";
 import { formatAmount, formatNumber } from "../core/units";
 import { SOURCE_TAGS } from "../core/food";
 import type { FoodSummary } from "../core/food-summary";
-import { isSavedMeal, mealLabel, type DiaryEntry } from "../health/mapping";
+import { entryTime, isSavedMeal, mealLabel, type DiaryEntry } from "../health/mapping";
 import type { MealType } from "../health/types";
 
 export const CHAT_ACTIONS = ["reply", "read_day", "read_days", "search_food", "log_food", "change_entry", "delete_entry"] as const;
@@ -254,10 +254,14 @@ export function profileText(p: NutrientProfile, unit: EnergyUnitName): string {
   return `${energyText(p.energyKcal, unit)} (protein ${grams(n.protein)}, carbs ${grams(n.carbohydrates)}, fat ${grams(n.fat)})`;
 }
 
-/** A clock time such as "8:05 am". Fixed English wording, whatever the locale. */
-export function clockTime(d: Date): string {
-  const h = d.getHours();
-  const m = String(d.getMinutes()).padStart(2, "0");
+/**
+ * An entry's clock time such as "8:05 am", on the clock where it was logged, as its day is (`entryTime`). Fixed English
+ * wording, whatever the locale.
+ */
+export function clockTime(e: Pick<DiaryEntry, "start" | "point">): string {
+  const interval = e.point.nutritionLog?.interval;
+  const { hours: h, minutes } = interval ? entryTime(interval) : { hours: e.start.getHours(), minutes: e.start.getMinutes() };
+  const m = String(minutes).padStart(2, "0");
   return `${h % 12 || 12}:${m} ${h < 12 ? "am" : "pm"}`;
 }
 
@@ -281,7 +285,7 @@ export function describeEntry(handle: string, e: DiaryEntry, unit: EnergyUnitNam
   const complete = missing.length ? `incomplete, not recorded: ${missing.join(", ")}` : "complete";
   // A saved meal has no amount of its own, which is not something missing (DR-44).
   const amount = e.amount ?? (isSavedMeal(e) ? "a saved meal, logged as one entry with no amount of its own" : "no amount");
-  return `${handle}: ${e.displayName}, ${amount}, ${meal}, ${entryProfileText(e, unit)}, ${complete}, at ${clockTime(e.start)}, ${ownerText(e)}`;
+  return `${handle}: ${e.displayName}, ${amount}, ${meal}, ${entryProfileText(e, unit)}, ${complete}, at ${clockTime(e)}, ${ownerText(e)}`;
 }
 
 /**

@@ -82,7 +82,7 @@ function unavailableText(state: AiState): string {
 export function entryLine(e: DiaryEntry, today: string): string {
   const meal = e.mealType === "MEAL_TYPE_UNSPECIFIED" ? "no meal" : mealLabel(e.mealType);
   const amount = e.amount ?? (isSavedMeal(e) ? SAVED_MEAL_AMOUNT : undefined);
-  return [e.displayName, amount, meal, `${dayLabel(e.day, today)}, ${clockTime(e.start)}`].filter(Boolean).join(" · ");
+  return [e.displayName, amount, meal, `${dayLabel(e.day, today)}, ${clockTime(e)}`].filter(Boolean).join(" · ");
 }
 
 export function createChatPanel(model: ChatModel, ai: AiSwitch, host: ChatPanelHost): ChatPanel {

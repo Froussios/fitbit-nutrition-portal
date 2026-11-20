@@ -24,7 +24,7 @@ export interface ProposalCard {
 }
 
 const mealText = (e: DiaryEntry) => (e.mealType === "MEAL_TYPE_UNSPECIFIED" ? "No meal" : mealLabel(e.mealType));
-const whenText = (e: DiaryEntry, today: string) => `${dayLabel(e.day, today)}, ${clockTime(e.start)}`;
+const whenText = (e: DiaryEntry, today: string) => `${dayLabel(e.day, today)}, ${clockTime(e)}`;
 
 /** What identifies an entry to the user: everything its diary row shows, and when it was eaten. */
 function facts(e: DiaryEntry, today: string): [string, string][] {

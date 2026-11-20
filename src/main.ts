@@ -1095,6 +1095,7 @@ class App {
 
   private resetPreps() {
     this.preps = [];
+    this.prepReload = false;
     this.prepError = "";
     this.prepDiscarded.clear();
     this.prepBusy.clear();
@@ -1265,6 +1266,7 @@ class App {
 
   private resetMeals() {
     this.meals = [];
+    this.mealsReload = false;
     this.mealsError = "";
     this.mealsDeleted = [];
     this.mealBusy.clear();

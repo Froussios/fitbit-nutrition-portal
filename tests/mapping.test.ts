@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { FoodItem } from "../src/core/food";
 import { PORTION_PREFIX, selectableUnits } from "../src/core/units";
 import { SAMPLE_FOODS } from "../src/food/sample-foods";
-import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, buildPortionPoint, byMeal, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryDay, entryFingerprint, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, countedStep, incrementedNutritionLogPoint, stepAfterEdit, reconcilePending, repeatedNutritionLogPoint, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
+import { AS_LOGGED_UNIT, asLoggedMeasure, basicMeasure, buildNutritionLogPoint, buildPortionPoint, byMeal, canConvertLogged, copyNutritionLogPoint, editedNutritionLogPoint, entryDay, entryFingerprint, entryTime, findServingUnits, isLoggedAmount, loggedAmount, mealLabel, MEAL_TYPES, NUTRITION_LOG_PARENT, countedStep, incrementedNutritionLogPoint, stepAfterEdit, reconcilePending, repeatedNutritionLogPoint, toDiaryEntries, toDiaryEntry, toLoggedFoods, unitNamesOf, withoutEntries } from "../src/health/mapping";
 import type { DataPoint, MealType, NutritionLog } from "../src/health/types";
 
 const oats = SAMPLE_FOODS.find((f) => f.ref.id === "oats")!;
@@ -299,16 +299,21 @@ describe("the day an entry is on (#133)", () => {
   it("is the date on the clock where it was logged, as Google lists it, not the browser's", () => {
     process.env.TZ = "Australia/Perth";
     expect(toDiaryEntry(point(interval))!.day).toBe("2026-11-18");
+    // The time of day is on the same clock, so the chat never says "Wednesday, 9:30 pm".
+    expect(entryTime(interval)).toEqual({ hours: 0, minutes: 30 });
   });
 
   it("is Google's own civil start time when it sends one", () => {
     process.env.TZ = "Australia/Perth";
-    expect(entryDay({ ...interval, civilStartTime: { date: { year: 2026, month: 11, day: 18 }, time: { hours: 0, minutes: 30 } } })).toBe("2026-11-18");
+    const civil = { ...interval, civilStartTime: { date: { year: 2026, month: 11, day: 18 }, time: { hours: 0, minutes: 30 } } };
+    expect(entryDay(civil)).toBe("2026-11-18");
+    expect(entryTime(civil)).toEqual({ hours: 0, minutes: 30 });
   });
 
   it("falls back to the browser's clock without an offset it can read", () => {
     process.env.TZ = "Australia/Perth";
     expect(entryDay({ ...interval, startUtcOffset: "" })).toBe("2026-11-17");
+    expect(entryTime({ ...interval, startUtcOffset: "" })).toEqual({ hours: 21, minutes: 30 });
   });
 });
 

@@ -2,7 +2,7 @@ import { canReload, foodLabel, nutrientsForAmount, type FoodItem, type FoodRef }
 import { entryStep, idFromName, parseEntryId } from "../core/ids";
 import type { LoggedFood } from "../core/logged-foods";
 import { NUTRIENT_KEYS, NUTRIENTS, type NutrientKey, type NutrientProfile } from "../core/nutrients";
-import { civilDate, civilDateOf, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../core/time";
+import { civilDate, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../core/time";
 import { formatAmount, formatMeasurementLabel, formatNumber, metricAmount, PORTION_PREFIX, toBaseAmount, type BaseUnit, type Measurable } from "../core/units";
 import type { DataPoint, EnergyQuantity, MealType, NutrientQuantity, NutritionLog, WeightQuantity } from "./types";
 
@@ -324,18 +324,38 @@ function atNewAmount(log: NutritionLog, edit: AmountEdit, opts: EditOptions): Nu
   return out;
 }
 
+type StartInterval = Pick<NutritionLog["interval"], "startTime" | "startUtcOffset" | "civilStartTime">;
+
+/**
+ * When an entry started, on the clock where it was logged, as the UTC fields of a Date (#133): from Google's own civil
+ * start time when it sends one, else from the start and its UTC offset. Undefined without an offset that can be read.
+ */
+function ownClock(interval: StartInterval): Date | undefined {
+  const civil = interval.civilStartTime;
+  if (civil) return new Date(Date.UTC(civil.date.year, civil.date.month - 1, civil.date.day, civil.time?.hours ?? 0, civil.time?.minutes ?? 0, civil.time?.seconds ?? 0));
+  try {
+    const at = Date.parse(interval.startTime) + parseDurationSeconds(interval.startUtcOffset) * 1000;
+    return Number.isNaN(at) ? undefined : new Date(at);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The civil day an entry is on, as Google lists it: the date on the clock where it was logged, whatever this browser's
- * time zone (#133). From Google's own civil start time when it sends one, else from the start and its UTC offset.
+ * time zone. Without an offset that can be read, the browser's own clock is the best guess.
  */
-export function entryDay(interval: Pick<NutritionLog["interval"], "startTime" | "startUtcOffset" | "civilStartTime">): string {
-  if (interval.civilStartTime) return civilDateOf(interval.civilStartTime);
-  try {
-    return new Date(Date.parse(interval.startTime) + parseDurationSeconds(interval.startUtcOffset) * 1000).toISOString().slice(0, 10);
-  } catch {
-    // No offset, or one that can't be read: the browser's own clock is the best guess.
-    return civilDate(new Date(interval.startTime));
-  }
+export function entryDay(interval: StartInterval): string {
+  const own = ownClock(interval);
+  return own ? own.toISOString().slice(0, 10) : civilDate(new Date(interval.startTime));
+}
+
+/** The time of day an entry started, on the same clock as `entryDay`, so that the two always agree. */
+export function entryTime(interval: StartInterval): { readonly hours: number; readonly minutes: number } {
+  const own = ownClock(interval);
+  if (own) return { hours: own.getUTCHours(), minutes: own.getUTCMinutes() };
+  const local = new Date(interval.startTime);
+  return { hours: local.getHours(), minutes: local.getMinutes() };
 }
 
 /**

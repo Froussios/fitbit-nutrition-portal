@@ -250,7 +250,8 @@ portions(user_id, id, prep_id, fraction, entry_id, state, eaten_at, created_at) 
   `migrations/` first with `CLOUDFLARE_D1_TOKEN`, then deploys with the Pages token, since attaching a database needs no
   D1 permission. Without that secret it warns and leaves the API out, still publishing the index. With it, a token that
   can't reach D1, or a failure to prepare or deploy the API, fails the run before anything is deployed, so the live site
-  never loses its API (README, Food index; #133).
+  never loses its API (README, Food index; #133). A deploy can fail after the migrations were applied, leaving the previous
+  Functions live on the new schema, so every migration must keep working with the `functions/` before it.
 
 ### 4.6 Saved meals
 
