@@ -574,9 +574,12 @@ function mealRank(type: MealType): number {
   return i < 0 ? MEAL_ORDER.length : i;
 }
 
-/** The diary's row order: by meal, then chronological within a meal. */
+/**
+ * The diary's row order: by meal, then chronological within a meal. Meal types the API adds later share a rank, so they
+ * are kept apart by name: each meal's entries stay together, for its stats under them (DR-48).
+ */
 export function byMeal(a: DiaryEntry, b: DiaryEntry): number {
-  return mealRank(a.mealType) - mealRank(b.mealType) || byTime(a, b);
+  return mealRank(a.mealType) - mealRank(b.mealType) || (a.mealType < b.mealType ? -1 : a.mealType > b.mealType ? 1 : 0) || byTime(a, b);
 }
 
 /** Entries in chronological order (the API returns newest first). */

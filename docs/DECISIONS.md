@@ -658,3 +658,22 @@ horizontally.
 day's figures appear twice on the page, in brief beside the log and in full in the dashboard.
 **Reopen if.** The log card's content is ever shorter than the summary at rest (it would scroll), the owner wants the
 summary on a phone above the log or hidden, or targets are added (DR-38).
+
+### DR-48 Each meal's stats close its entries in the diary, with a bar of its macronutrients to scale
+**Decision.** The diary's entries stay grouped by meal type, in the table's meal order, and each meal is now a
+`tbody` of its own, closed by a quieter, unstriped stats row: the meal's name, a slim bar of its protein, carbs and fat,
+and its energy and grams in the table's own columns. Like the dashboard's bar by macronutrient (DR-38), each block is
+as wide as the energy that macronutrient gives by the Atwater factors, with no percentages or legend, and every figure in
+its tooltips and accessible name. The bar's whole length is the meal's energy from macronutrients as a share of the
+largest meal's, so only that meal fills the cell and the others compare at a glance. Deleted entries count in neither
+a meal's stats nor the scale, and a meal whose entries are all deleted has no stats row. A meal with no protein, carbs
+or fat recorded says so instead of a bar. Meal types are not merged as the dashboard merges them into snacks: the rows
+above each stats row are what it sums.
+**Why.** Owner request (20 November 2026): per-meal stats between the entries, with a horizontal bar breaking down the
+macros; the bars must stay proportional between meals rather than each fill the width, and only the largest meal may.
+**Consequence.** The diary is one short row taller per meal. A meal's bar is scaled by the energy its macronutrients
+give, not its logged energy, so a meal of energy-only entries from another app has no bar, and two meals of similar
+logged energy can differ a little in length.
+**Reopen if.** The owner wants the bars scaled by logged energy or by grams, the stats above a meal's entries, or meal
+types merged as on the dashboard.
+

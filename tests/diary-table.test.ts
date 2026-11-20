@@ -172,3 +172,70 @@ describe("diary table Amount", () => {
     }
   });
 });
+
+describe("diary table meal stats", () => {
+  const meal = (id: string, mealType: DiaryEntry["mealType"], protein: number, carbohydrates: number, fat: number, energyKcal = 300): DiaryEntry => ({
+    ...entry(`e-abc-ab12-off-${id}`),
+    mealType,
+    profile: { energyKcal, nutrients: { protein, carbohydrates, fat } },
+  });
+
+  function table(entries: DiaryEntry[], deleted: DiaryEntry[] = []) {
+    const t = renderDiaryTable({ entries, pendingIds: new Set(), deleted, busy: new Map(), offline: false, onEdit: vi.fn(), onDelete: vi.fn(), onUndo: vi.fn(), onRepeat: vi.fn() });
+    document.body.replaceChildren(t);
+    return t;
+  }
+  const stats = (t: HTMLElement) => [...t.querySelectorAll<HTMLTableRowElement>("tr.meal-stats")];
+  const cells = (row: Element) => [...row.children].map((c) => c.textContent);
+  const barWidth = (row: Element) => row.querySelector<HTMLElement>(".meal-bar")!.style.width;
+
+  it("closes each meal's entries with its totals", () => {
+    const t = table([meal("1", "BREAKFAST", 10, 60, 5), meal("2", "LUNCH", 20, 30, 10, 400), meal("3", "BREAKFAST", 5, 10, 2, 100)]);
+    const bodies = [...t.querySelectorAll("tbody")];
+    expect(bodies).toHaveLength(2);
+    // Breakfast's two entries, then its stats; lunch's one, then its stats.
+    expect([...bodies[0]!.children].map((r) => r.classList.contains("meal-stats"))).toEqual([false, false, true]);
+    expect([...bodies[1]!.children].map((r) => r.classList.contains("meal-stats"))).toEqual([false, true]);
+    const [breakfast, lunch] = stats(t);
+    expect(cells(breakfast!)).toEqual(["Breakfast", "Breakfast by macronutrient", "400", "15 g", "70 g", "7 g", ""]);
+    expect(cells(lunch!)[0]).toBe("Lunch");
+    expect(cells(lunch!)[2]).toBe("400");
+  });
+
+  it("scales each meal's macronutrient bar to the largest meal, which alone fills the width", () => {
+    // Breakfast: 10 g protein, 60 g carbs, 5 g fat = 40 + 240 + 45 = 325 kcal. Lunch twice that, dinner a fifth of lunch.
+    const t = table([meal("1", "BREAKFAST", 10, 60, 5), meal("2", "LUNCH", 20, 120, 10), meal("3", "DINNER", 8, 20, 2)]);
+    expect(stats(t).map(barWidth)).toEqual(["50%", "100%", "20%"]);
+    const segments = [...stats(t)[0]!.querySelectorAll<HTMLElement>(".seg")];
+    expect(segments.map((s) => s.style.flexGrow)).toEqual(["40", "240", "45"]);
+    expect(stats(t)[0]!.querySelector(".seg-bar")!.getAttribute("aria-label")).toBe("Breakfast by macronutrient: Protein 10 g, 12%; Carbs 60 g, 74%; Fat 5 g, 14%");
+  });
+
+  it("leaves deleted entries out of the stats, and a meal with only deleted entries has none", () => {
+    const deleted = [meal("4", "LUNCH", 100, 100, 100), meal("5", "DINNER", 1, 1, 1)];
+    const t = table([meal("1", "BREAKFAST", 10, 60, 5), meal("2", "LUNCH", 20, 120, 10)], deleted);
+    expect(stats(t).map((r) => cells(r)[0])).toEqual(["Breakfast", "Lunch"]);
+    expect(stats(t).map(barWidth)).toEqual(["50%", "100%"]);
+    expect(t.querySelectorAll("tbody")).toHaveLength(3);
+  });
+
+  it("says when a meal recorded no macronutrients, without a bar", () => {
+    const t = table([meal("1", "BREAKFAST", 10, 60, 5), { ...meal("2", "MEAL_TYPE_UNSPECIFIED", 0, 0, 0), profile: { energyKcal: 120, nutrients: {} } }]);
+    const none = stats(t)[1]!;
+    expect(cells(none)[0]).toBe("No meal");
+    expect(none.querySelector(".seg")).toBeNull();
+    expect(none.querySelector(".chart-empty")!.textContent).toBe("No protein, carbs or fat recorded.");
+    expect(barWidth(none)).toBe("");
+    expect(barWidth(stats(t)[0]!)).toBe("100%");
+  });
+});
+
+describe("diary table meal stats with meal types the API adds later", () => {
+  it("keeps each unknown meal type's entries together, under one stats row", () => {
+    const at = (id: string, mealType: string, iso: string): DiaryEntry => ({ ...entry(`e-abc-ab12-off-${id}`), mealType: mealType as DiaryEntry["mealType"], start: new Date(iso) });
+    const entries = [at("1", "BRUNCH", "2026-11-07T10:00:00Z"), at("2", "SUPPER", "2026-11-07T11:00:00Z"), at("3", "BRUNCH", "2026-11-07T12:00:00Z")];
+    const t = renderDiaryTable({ entries, pendingIds: new Set(), deleted: [], busy: new Map(), offline: false, onEdit: vi.fn(), onDelete: vi.fn(), onUndo: vi.fn(), onRepeat: vi.fn() });
+    expect(t.querySelectorAll("tbody")).toHaveLength(2);
+    expect([...t.querySelectorAll("tr.meal-stats th")].map((th) => th.textContent)).toEqual(["Brunch", "Supper"]);
+  });
+});

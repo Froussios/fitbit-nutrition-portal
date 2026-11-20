@@ -1,5 +1,8 @@
+import { KCAL_PER_GRAM, MACROS } from "../core/dashboard";
 import { sumProfiles } from "../core/nutrients";
 import { byMeal, isSavedMeal, mealLabel, type DiaryEntry } from "../health/mapping";
+import { segmentedBar } from "./charts";
+import { MACRO_SERIES } from "./dashboard";
 import { el } from "./dom";
 import { formatAmount } from "../core/units";
 import { amountText, energyLabel, fmtEnergy, fmtGrams } from "./format";
@@ -115,6 +118,69 @@ function amountCell(e: DiaryEntry): HTMLElement | string {
   return e.amount === undefined && isSavedMeal(e) ? el("span", { class: "from-meal", title: "Logged from a saved meal, as one entry with no amount of its own" }, text) : text;
 }
 
+/** Consecutive entries of the same meal, in the table's order: each meal is a tbody of its own, closed by its stats. */
+function mealGroups(sorted: readonly DiaryEntry[]): DiaryEntry[][] {
+  const groups: DiaryEntry[][] = [];
+  for (const e of sorted) {
+    const last = groups.at(-1);
+    if (last && last[0]!.mealType === e.mealType) last.push(e);
+    else groups.push([e]);
+  }
+  return groups;
+}
+
+/** The energy each macronutrient gives, in kcal, by the Atwater factors, as on the dashboard's bar by macronutrient. */
+function macroKcal(p: ReturnType<typeof sumProfiles>): number[] {
+  return MACROS.map((m) => (p.nutrients[m] ?? 0) * KCAL_PER_GRAM[m]);
+}
+
+/** "Breakfast", "Before lunch", "No meal": the meal named on its own, as a heading for its stats. */
+function mealName(e: DiaryEntry): string {
+  const label = e.mealType === "MEAL_TYPE_UNSPECIFIED" ? "no meal" : mealLabel(e.mealType);
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
+ * A meal's stats, under its entries: its totals, and a slim bar of its macronutrients by the energy each gives (DR-48).
+ * The bar is as long as the meal's share of `largest`, the most any meal of the day has, so meals compare at a glance.
+ * A meal whose entries are all deleted has none.
+ */
+function mealStats(live: readonly DiaryEntry[], sum: ReturnType<typeof sumProfiles>, largest: number): HTMLElement | undefined {
+  if (live.length === 0) return undefined;
+  const values = macroKcal(sum);
+  const whole = values.reduce((a, b) => a + b, 0);
+  const name = mealName(live[0]!);
+  const width = largest > 0 ? (whole / largest) * 100 : 0;
+  return el(
+    "tr",
+    { class: "meal-stats" },
+    el("th", { scope: "row" }, name),
+    el(
+      "td",
+      { colspan: 2 },
+      el(
+        "div",
+        // With no macronutrients at all the bar is a line of text, which keeps the cell's width.
+        { class: "meal-bar", style: whole > 0 ? `width: ${Number(width.toFixed(2))}%` : undefined },
+        segmentedBar({
+          title: `${name} by macronutrient`,
+          series: MACRO_SERIES,
+          values,
+          // Grams, the unit the diary uses; the blocks give each one's share of the energy.
+          format: (_, i) => fmtGrams(sum.nutrients[MACROS[i]!] ?? 0),
+          emptyText: "No protein, carbs or fat recorded.",
+          compact: true,
+        }),
+      ),
+    ),
+    el("td", { class: "num" }, fmtEnergy(sum.energyKcal)),
+    el("td", { class: "num" }, fmtGrams(sum.nutrients.protein)),
+    el("td", { class: "num" }, fmtGrams(sum.nutrients.carbohydrates)),
+    el("td", { class: "num" }, fmtGrams(sum.nutrients.fat)),
+    el("td", {}),
+  );
+}
+
 export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, editing, onEdit, onDelete, onUndo, onRepeat, today = false, onIncrement, emptyText = "Nothing logged today yet.", onAsk }: DiaryTableOptions): HTMLElement {
   if (entries.length === 0 && deleted.length === 0) {
     return el("p", { class: "empty" }, emptyText);
@@ -122,6 +188,13 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
 
   const total = sumProfiles(entries.map((e) => e.profile));
   const deletedIds = new Set(deleted.map((e) => e.id));
+  // Each meal's rows, deleted ones included, and the sum of the rest, which its stats show.
+  const meals = mealGroups([...entries, ...deleted].sort(byMeal)).map((rows) => {
+    const live = rows.filter((e) => !deletedIds.has(e.id));
+    return { rows, live, sum: sumProfiles(live.map((e) => e.profile)) };
+  });
+  // The meal with the most energy from its macronutrients: its bar is the full width, and every other meal's is to scale.
+  const largest = Math.max(0, ...meals.map(({ sum }) => macroKcal(sum).reduce((a, b) => a + b, 0)));
   // No time column: entries are grouped by meal, and a time that disagrees with its meal only confuses.
   const head = ["Meal", "Food", "Amount", energyLabel(), "Protein", "Carbs", "Fat", ""];
 
@@ -132,103 +205,106 @@ export function renderDiaryTable({ entries, pendingIds, deleted, busy, offline, 
       "table",
       {},
       el("thead", {}, el("tr", {}, ...head.map((h, i) => el("th", { scope: "col", class: i >= 2 && i <= 6 ? "num" : undefined }, h)))),
-      el(
-        "tbody",
-        {},
-        ...[...entries, ...deleted].sort(byMeal).map((e) => {
-          const editor = editing?.id === e.id ? editing : undefined;
-          // Whether the row has an Edit button (a meal prep share is changed from its batch), and whether it is enabled.
-          // A double-click on the row opens the editor under the same conditions.
-          const hasEdit = e.own && !deletedIds.has(e.id) && e.ref?.source !== "prep";
-          const canEdit = !offline && !busy.has(e.id) && !editing;
-          const editable = hasEdit && canEdit;
-          // On today's entries, + adds one more of what was logged (DR-37). It replaces the entry, like an edit.
-          const step = today && onIncrement && !deletedIds.has(e.id) ? e.increment : undefined;
-          const stepText = step && `${formatAmount(step.amount)} ${step.unit}`;
-          const incrementButton =
-            step &&
-            el(
-              "button",
-              { type: "button", class: "icon increment", "data-entry-increment": e.id, title: offline ? "Changing needs a connection" : `Add ${stepText}`, "aria-label": `Add ${stepText} to ${e.displayName}`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onIncrement?.(e) },
-              `+${stepText}`,
-            );
-          // Any entry can be logged again, whichever app logged it, but a meal prep share would need a portion of its batch.
-          const repeatButton =
-            !deletedIds.has(e.id) &&
-            e.ref?.source !== "prep" &&
-            el(
-              "button",
-              { type: "button", class: "icon repeat", "data-entry-repeat": e.id, title: offline ? "Logging needs a connection" : "Log again today", "aria-label": `Log ${e.displayName} again today`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onRepeat(e) },
-              repeatIcon(),
-            );
-          // Any entry can be asked about, whichever app logged it: the chat says what it can't change.
-          const askButton =
-            onAsk &&
-            !deletedIds.has(e.id) &&
-            el(
-              "button",
-              { type: "button", class: "icon ask", "data-entry-ask": e.id, title: "Ask the chat about this entry", "aria-label": `Ask the chat about ${e.displayName}`, onclick: () => onAsk(e) },
-              askIcon(),
-            );
-          return el(
-            "tr",
-            {
-              class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busy.has(e.id)) && "pending", editor && "editing"].filter(Boolean).join(" ") || undefined,
-              // A double-click anywhere on the row but its buttons opens it for editing, like its Edit button.
-              ondblclick: editable
-                ? (ev: Event) => {
-                    if (ev.target instanceof Element && ev.target.closest("button, [popover]")) return;
-                    // The double-click also selected a word, which would stay highlighted behind the editor.
-                    window.getSelection()?.removeAllRanges();
-                    onEdit(e);
-                  }
-                : undefined,
-            },
-            el("td", {}, editor ? el("div", { class: "when-edit" }, editor.meal, editor.day) : mealLabel(e.mealType)),
-            el("td", {}, e.displayName, rowTag(e.id, deletedIds, busy, pendingIds)),
-            el("td", { class: "num" }, editor ? editor.amount : amountCell(e)),
-            el("td", { class: "num" }, editor ? editor.energy : fmtEnergy(e.profile.energyKcal)),
-            el("td", { class: "num" }, editor ? editor.protein : fmtGrams(e.profile.nutrients.protein)),
-            el("td", { class: "num" }, editor ? editor.carbs : fmtGrams(e.profile.nutrients.carbohydrates)),
-            el("td", { class: "num" }, editor ? editor.fat : fmtGrams(e.profile.nutrients.fat)),
-            el(
-              "td",
-              {},
+      ...meals.map(({ rows, live, sum }) =>
+        el(
+          "tbody",
+          {},
+          ...rows.map((e) => {
+            const editor = editing?.id === e.id ? editing : undefined;
+            // Whether the row has an Edit button (a meal prep share is changed from its batch), and whether it is enabled.
+            // A double-click on the row opens the editor under the same conditions.
+            const hasEdit = e.own && !deletedIds.has(e.id) && e.ref?.source !== "prep";
+            const canEdit = !offline && !busy.has(e.id) && !editing;
+            const editable = hasEdit && canEdit;
+            // On today's entries, + adds one more of what was logged (DR-37). It replaces the entry, like an edit.
+            const step = today && onIncrement && !deletedIds.has(e.id) ? e.increment : undefined;
+            const stepText = step && `${formatAmount(step.amount)} ${step.unit}`;
+            const incrementButton =
+              step &&
               el(
-                "div",
-                { class: "row-actions" },
-                editor
-                  ? editor.actions
-                  : // The write scope only covers entries this app created.
-                    !e.own
-                  ? [askButton, repeatButton, notOwnedMark(e)]
-                  : deletedIds.has(e.id)
-                    ? el(
-                        "button",
-                        { type: "button", class: "icon undo", "data-entry": e.id, title: offline ? "Undoing needs a connection" : "Undo delete (logs this entry again)", "aria-label": `Undo deleting ${e.displayName}`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onUndo(e) },
-                        // U+FE0E: as text, because some phones would otherwise draw this one as an emoji.
-                        "↩\uFE0E",
-                      )
-                    : [
-                        incrementButton,
-                        askButton,
-                        repeatButton,
-                        hasEdit &&
-                        el(
+                "button",
+                { type: "button", class: "icon increment", "data-entry-increment": e.id, title: offline ? "Changing needs a connection" : `Add ${stepText}`, "aria-label": `Add ${stepText} to ${e.displayName}`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onIncrement?.(e) },
+                `+${stepText}`,
+              );
+            // Any entry can be logged again, whichever app logged it, but a meal prep share would need a portion of its batch.
+            const repeatButton =
+              !deletedIds.has(e.id) &&
+              e.ref?.source !== "prep" &&
+              el(
+                "button",
+                { type: "button", class: "icon repeat", "data-entry-repeat": e.id, title: offline ? "Logging needs a connection" : "Log again today", "aria-label": `Log ${e.displayName} again today`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onRepeat(e) },
+                repeatIcon(),
+              );
+            // Any entry can be asked about, whichever app logged it: the chat says what it can't change.
+            const askButton =
+              onAsk &&
+              !deletedIds.has(e.id) &&
+              el(
+                "button",
+                { type: "button", class: "icon ask", "data-entry-ask": e.id, title: "Ask the chat about this entry", "aria-label": `Ask the chat about ${e.displayName}`, onclick: () => onAsk(e) },
+                askIcon(),
+              );
+            return el(
+              "tr",
+              {
+                class: [deletedIds.has(e.id) && "deleted", (pendingIds.has(e.id) || busy.has(e.id)) && "pending", editor && "editing"].filter(Boolean).join(" ") || undefined,
+                // A double-click anywhere on the row but its buttons opens it for editing, like its Edit button.
+                ondblclick: editable
+                  ? (ev: Event) => {
+                      if (ev.target instanceof Element && ev.target.closest("button, [popover]")) return;
+                      // The double-click also selected a word, which would stay highlighted behind the editor.
+                      window.getSelection()?.removeAllRanges();
+                      onEdit(e);
+                    }
+                  : undefined,
+              },
+              el("td", {}, editor ? el("div", { class: "when-edit" }, editor.meal, editor.day) : mealLabel(e.mealType)),
+              el("td", {}, e.displayName, rowTag(e.id, deletedIds, busy, pendingIds)),
+              el("td", { class: "num" }, editor ? editor.amount : amountCell(e)),
+              el("td", { class: "num" }, editor ? editor.energy : fmtEnergy(e.profile.energyKcal)),
+              el("td", { class: "num" }, editor ? editor.protein : fmtGrams(e.profile.nutrients.protein)),
+              el("td", { class: "num" }, editor ? editor.carbs : fmtGrams(e.profile.nutrients.carbohydrates)),
+              el("td", { class: "num" }, editor ? editor.fat : fmtGrams(e.profile.nutrients.fat)),
+              el(
+                "td",
+                {},
+                el(
+                  "div",
+                  { class: "row-actions" },
+                  editor
+                    ? editor.actions
+                    : // The write scope only covers entries this app created.
+                      !e.own
+                    ? [askButton, repeatButton, notOwnedMark(e)]
+                    : deletedIds.has(e.id)
+                      ? el(
                           "button",
-                          { type: "button", class: "icon edit", "data-entry-edit": e.id, title: offline ? "Editing needs a connection" : editing ? "Finish the edit you started first" : "Edit entry", "aria-label": `Edit ${e.displayName}`, disabled: !canEdit, onclick: () => onEdit(e) },
-                          pencilIcon(),
-                        ),
-                        el(
-                          "button",
-                          { type: "button", class: "icon", "data-entry": e.id, title: offline ? "Deleting needs a connection" : "Delete entry", "aria-label": `Delete ${e.displayName}`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onDelete(e) },
-                          "✕",
-                        ),
-                      ],
+                          { type: "button", class: "icon undo", "data-entry": e.id, title: offline ? "Undoing needs a connection" : "Undo delete (logs this entry again)", "aria-label": `Undo deleting ${e.displayName}`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onUndo(e) },
+                          // U+FE0E: as text, because some phones would otherwise draw this one as an emoji.
+                          "↩\uFE0E",
+                        )
+                      : [
+                          incrementButton,
+                          askButton,
+                          repeatButton,
+                          hasEdit &&
+                          el(
+                            "button",
+                            { type: "button", class: "icon edit", "data-entry-edit": e.id, title: offline ? "Editing needs a connection" : editing ? "Finish the edit you started first" : "Edit entry", "aria-label": `Edit ${e.displayName}`, disabled: !canEdit, onclick: () => onEdit(e) },
+                            pencilIcon(),
+                          ),
+                          el(
+                            "button",
+                            { type: "button", class: "icon", "data-entry": e.id, title: offline ? "Deleting needs a connection" : "Delete entry", "aria-label": `Delete ${e.displayName}`, "aria-busy": String(busy.has(e.id)), disabled: offline || busy.has(e.id), onclick: () => onDelete(e) },
+                            "✕",
+                          ),
+                        ],
+                ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
+          mealStats(live, sum, largest),
+        ),
       ),
       el(
         "tfoot",
