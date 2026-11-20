@@ -53,8 +53,6 @@ function stat(label: string, value: string, tint: string, note?: string): HTMLEl
   return el("div", { class: `stat stat-${tint}` }, el("div", { class: "stat-label" }, label), el("div", { class: "stat-value" }, value), note && el("div", { class: "stat-note" }, note));
 }
 
-/** "burnt" or, for today, whose figure is still growing, "burnt so far". */
-const burntWords = (day: string, today: string) => (day === today ? "burnt so far" : "burnt");
 
 /** Civil date `day` in parts, as `formatCivilDate` writes it: "Thursday", "19", "Nov", "2026". */
 function dateParts(day: string): { weekday: string; date: string; month: string; year: string } {
@@ -72,13 +70,12 @@ function shortDay(day: string): string {
 function daySection(day: string, today: string, entries: readonly DashboardEntry[] | undefined, burnt: number | undefined): HTMLElement {
   const heading = el("h3", {}, dayLabel(day, today));
   if (!entries) return el("section", { class: "dash-day" }, heading, el("p", { class: "status" }, "Loading…"));
-  const words = burntWords(day, today);
   if (entries.length === 0)
     return el(
       "section",
       { class: "dash-day" },
       heading,
-      el("p", { class: "empty" }, day === today ? "Nothing logged today yet." : "Nothing logged on this day.", burnt !== undefined && ` ${energy(burnt)} ${words}.`),
+      el("p", { class: "empty" }, day === today ? "Nothing logged today yet." : "Nothing logged on this day.", burnt !== undefined && ` ${energy(burnt)} burnt.`),
     );
   const t = totals(entries);
   const fromMacros = macroEnergy(t);
@@ -87,7 +84,7 @@ function daySection(day: string, today: string, entries: readonly DashboardEntry
     "section",
     { class: "dash-day" },
     heading,
-    el("div", { class: "stats" }, stat("Energy", energy(t.energyKcal), "energy", burnt !== undefined ? `of ${energy(burnt)} ${words}` : undefined), ...MACROS.map((m) => stat(MACRO_NAMES[m], grams(t.grams[m]), m))),
+    el("div", { class: "stats" }, stat("Energy", energy(t.energyKcal), "energy", burnt !== undefined ? `of ${energy(burnt)} burnt` : undefined), ...MACROS.map((m) => stat(MACRO_NAMES[m], grams(t.grams[m]), m))),
     segmentedBar({
       title: "Energy by macronutrient",
       series: MACRO_SERIES,
@@ -103,7 +100,7 @@ function daySection(day: string, today: string, entries: readonly DashboardEntry
       format: (kcal) => energy(kcal),
       emptyText: "No energy logged.",
       ...(burnt !== undefined
-        ? { reference: { name: words[0]!.toUpperCase() + words.slice(1), color: BURNT_COLOR, value: burnt, format: energy, above: "more than eaten", below: "less than eaten" } }
+        ? { reference: { name: "Burnt", color: BURNT_COLOR, value: burnt, format: energy, above: "more than eaten", below: "less than eaten" } }
         : {}),
     }),
   );
@@ -166,7 +163,8 @@ function weekSection(day: string, today: string, entries: readonly DashboardEntr
                   const kcal = burnt.get(d.day);
                   return kcal === undefined ? undefined : energyValue(kcal);
                 }),
-                noteFor: (i: number) => (days[i]!.day === today ? "so far" : undefined),
+                // Today's figure is still growing.
+                partialFor: (i: number) => days[i]!.day === today,
               },
             }
           : {}),
@@ -184,9 +182,19 @@ export function dayTotalsHeading(day: string, today: string): string {
 }
 
 /**
- * The viewed day's totals in a few lines, for the card beside the log (DR-47): the energy eaten against the calories
- * burnt, a slim bar of energy by meal drawn up to the calories burnt, and the grams of each macronutrient. The
- * dashboard below has the same day in full.
+ * "340 kcal deficit" when more was burnt than eaten, "200 kcal surplus" when less, or "Even" when they round to the
+ * same figure.
+ */
+function balance(eatenKcal: number, burntKcal: number): HTMLElement {
+  const gap = burntKcal - eatenKcal;
+  if (fmtEnergy(Math.abs(gap)) === "0") return el("p", { class: "day-delta" }, el("strong", {}, "Even"));
+  return el("p", { class: "day-delta" }, el("strong", {}, energy(Math.abs(gap))), gap > 0 ? " deficit" : " surplus");
+}
+
+/**
+ * The viewed day's totals in a few lines, for the card beside the log (DR-47): the difference between the calories
+ * burnt and the energy eaten, with both beside it alike; a slim bar of energy by meal drawn up to the calories burnt;
+ * and the grams of each macronutrient. The dashboard below has the same day in full.
  */
 export function renderDaySummary({
   day,
@@ -200,19 +208,30 @@ export function renderDaySummary({
 }): HTMLElement {
   if (!dayEntries) return el("div", { class: "day-summary" }, el("p", { class: dayStatus ? "status error" : "status" }, dayStatus || "Loading…"));
   const kcal = burnt?.get(day);
-  const words = burntWords(day, today);
   if (dayEntries.length === 0)
     return el(
       "div",
       { class: "day-summary" },
-      el("p", { class: "empty" }, day === today ? "Nothing logged today yet." : "Nothing logged on this day.", kcal !== undefined && ` ${energy(kcal)} ${words}.`),
+      el("p", { class: "empty" }, day === today ? "Nothing logged today yet." : "Nothing logged on this day.", kcal !== undefined && ` ${energy(kcal)} burnt.`),
     );
   const t = totals(dayEntries);
   const meals = byMealGroup(dayEntries);
   return el(
     "div",
     { class: "day-summary" },
-    el("p", { class: "day-energy" }, el("strong", {}, energy(t.energyKcal)), kcal !== undefined ? ` of ${energy(kcal)} ${words}` : " eaten"),
+    el(
+      "div",
+      { class: "day-balance" },
+      // The difference is the strongest figure; eaten and burnt are beside it, alike (DR-47).
+      kcal !== undefined ? balance(t.energyKcal, kcal) : el("p", { class: "day-delta" }, el("strong", {}, energy(t.energyKcal)), " eaten"),
+      kcal !== undefined &&
+        el(
+          "dl",
+          { class: "day-inout" },
+          el("div", {}, el("dt", {}, "Eaten"), el("dd", {}, energy(t.energyKcal))),
+          el("div", {}, el("dt", {}, "Burnt"), el("dd", {}, energy(kcal))),
+        ),
+    ),
     segmentedBar({
       title: "Energy by meal",
       series: MEAL_SERIES,
@@ -221,7 +240,7 @@ export function renderDaySummary({
       emptyText: "No energy logged.",
       compact: true,
       ...(kcal !== undefined
-        ? { reference: { name: words[0]!.toUpperCase() + words.slice(1), color: BURNT_COLOR, value: kcal, format: energy, above: "more than eaten", below: "less than eaten" } }
+        ? { reference: { name: "Burnt", color: BURNT_COLOR, value: kcal, format: energy, above: "more than eaten", below: "less than eaten" } }
         : {}),
     }),
     el(

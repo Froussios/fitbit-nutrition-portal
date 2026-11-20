@@ -623,8 +623,8 @@ colours stronger, weaker or gone.
 **Decision.** Sign-in also asks for `googlehealth.activity_and_fitness.readonly`, which the user may untick on
 Google's consent screen like the nutrition read scope (DR-04). With it, each week listing (DR-38) is joined by one
 `dailyRollUp` of `total-calories` over the same 7 days, today's window ending at the current local time (V13). The
-figures are drawn into the charts there are, not given a row of their own: under the day's energy, "of 2,300 kcal burnt
-so far" (or "burnt" for a past day); on the bar of energy by meal, a marker where the calories burnt fall, with an
+figures are drawn into the charts there are, not given a row of their own: under the day's energy, "of 2,300 kcal burnt"
+(first "burnt so far" for today; the owner found it unnecessary, 20 November 2026); on the bar of energy by meal, a marker where the calories burnt fall, with an
 outlined gap up to it while less was eaten, and the difference in the legend; on each day's energy column, a line at
 its calories burnt, dashed for today, with the figure in the tooltip and a Burnt column in the table. The week's summary
 adds the average burnt over the complete days recorded, leaving today out. Without the scope nothing is asked and the
@@ -644,7 +644,9 @@ owner wants the time of the last sync shown, a target derived from the calories 
 ### DR-47 The day's totals sit beside the log, without making the page taller
 **Decision.** A totals card sits to the right of the log card (38% of the row, at least 270px), headed "Today's
 totals", "Yesterday's totals" or "Totals for Tue 17 Nov" after the day shown. It sums the day up in three lines: the
-energy eaten, against the calories burnt so far when DR-46's scope is granted; a slim bar of energy by meal (no
+difference between the calories burnt and the energy eaten as its strongest figure ("340 kcal deficit", "200 kcal
+surplus" or "Even"), with Eaten and Burnt beside it in the same type as each other (only the energy eaten, without
+DR-46's scope); a slim bar of energy by meal (no
 percentages or legend, every figure in its tooltips and accessible name), drawn up to the calories burnt with its marker;
 and the grams of protein, carbs and fat. Without the scope it has DR-46's "Show calories burnt" link, moved here from
 the dashboard's note. If the day could not be loaded it says so. The log card alone sets
@@ -653,7 +655,8 @@ content ever overflows, which it does not at rest. Below 720px for the row, on a
 under the log. The Dashboard card below keeps the day in full and the week (DR-38).
 **Why.** Owner request (20 November 2026): the dashboard is a major motivation to keep logging, so the day's totals
 should be seen often, next to the logging section; they must not take vertical space, and the form has room to spare
-horizontally.
+horizontally. Then: the energy eaten was in a strong font and the calories burnt understated, so make them equal; the
+strongest number is the difference; "so far" is unnecessary.
 **Consequence.** The log form is narrower on wide screens. On a phone the summary adds about 120px under the log. The
 day's figures appear twice on the page, in brief beside the log and in full in the dashboard.
 **Reopen if.** The log card's content is ever shorter than the summary at rest (it would scroll), the owner wants the

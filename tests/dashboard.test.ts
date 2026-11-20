@@ -153,20 +153,20 @@ describe("dashboard view", () => {
       [day, 1500],
     ]);
 
-    it("sets today's energy against what was burnt so far, on the tile and the bar by meal", () => {
+    it("sets today's energy against what was burnt, on the tile and the bar by meal", () => {
       setEnergyUnit("kcal");
       const view = renderDashboard({ day, today: day, dayEntries, weekEntries: week, weekStatus: "", burnt });
-      expect(view.querySelector(".stat-energy .stat-note")?.textContent).toBe("of 1,500 kcal burnt so far");
+      expect(view.querySelector(".stat-energy .stat-note")?.textContent).toBe("of 1,500 kcal burnt");
       const meals = view.querySelectorAll(".seg-bar")[1]!;
       // 1,200 eaten of 1,500 burnt: an outlined gap of 300 up to the marker at the bar's end.
       expect(meals.querySelector<HTMLElement>(".seg-rest")?.style.flexGrow).toBe("300");
       expect(meals.querySelector<HTMLElement>(".seg-marker")?.style.left).toBe("100%");
-      expect(meals.getAttribute("aria-label")).toBe("Energy by meal: Breakfast 400 kcal, 33%; Dinner 800 kcal, 67%; Burnt so far 1,500 kcal, 300 kcal more than eaten");
+      expect(meals.getAttribute("aria-label")).toBe("Energy by meal: Breakfast 400 kcal, 33%; Dinner 800 kcal, 67%; Burnt 1,500 kcal, 300 kcal more than eaten");
       // The macronutrient bar is in grams' shares and has no reference.
       expect(view.querySelectorAll(".seg-bar")[0]!.querySelector(".seg-marker")).toBeNull();
     });
 
-    it("marks where the calories burnt fall when more was eaten, and says burnt without so far for a past day", () => {
+    it("marks where the calories burnt fall when more was eaten", () => {
       const view = renderDashboard({ day, today: "2026-11-20", dayEntries, weekEntries: week, weekStatus: "", burnt: new Map([[day, 1000]]) });
       expect(view.querySelector(".stat-energy .stat-note")?.textContent).toBe("of 1,000 kcal burnt");
       const meals = view.querySelectorAll(".seg-bar")[1]!;
@@ -190,17 +190,19 @@ describe("dashboard view", () => {
       const [macros, energy] = view.querySelectorAll(".chart.columns");
       expect(macros!.querySelectorAll(".chart-marker")).toHaveLength(0);
       expect(energy!.querySelectorAll(".chart-marker")).toHaveLength(3);
+      // Only today's line is dashed: its figure is still growing.
+      expect([...energy!.querySelectorAll(".chart-marker")].map((l) => l.classList.contains("partial"))).toEqual([false, false, true]);
       expect(energy!.querySelector(".chart-legend-marker")?.textContent).toBe("Burnt");
       const columns = energy!.querySelectorAll(".chart-column");
       expect(columns[6]!.getAttribute("aria-label")).toBe(
-        "Thursday, 19 Nov 2026: Breakfast 400 kcal, Lunch 0 kcal, Dinner 800 kcal, Snacks 0 kcal, Other 0 kcal; total 1,200 kcal; Burnt so far 1,500 kcal",
+        "Thursday, 19 Nov 2026: Breakfast 400 kcal, Lunch 0 kcal, Dinner 800 kcal, Snacks 0 kcal, Other 0 kcal; total 1,200 kcal; Burnt 1,500 kcal",
       );
       // The axis reaches the highest line, 2,500, above every column.
       expect([...energy!.querySelectorAll(".chart-grid text")].map((t) => t.textContent).at(-1)).toBe("2,500");
       columns[2]!.dispatchEvent(new Event("focus"));
       expect(energy!.querySelector(".chart-tooltip")?.textContent).toContain("2,300 kcal Burnt");
       const rows = [...energy!.querySelectorAll("tbody tr")].map((r) => [...r.children].map((c) => c.textContent).at(-1));
-      expect(rows).toEqual(["–", "–", "2,300 kcal", "–", "–", "2,500 kcal", "1,500 kcal (so far)"]);
+      expect(rows).toEqual(["–", "–", "2,300 kcal", "–", "–", "2,500 kcal", "1,500 kcal"]);
       expect(energy!.querySelectorAll("thead th")[7]?.textContent).toBe("Burnt");
       expect(view.textContent).toContain("Burnt 2,400 kcal a day, over the 2 complete days recorded.");
     });
@@ -208,15 +210,15 @@ describe("dashboard view", () => {
     it("charts calories burnt in kJ when that is the chosen unit", () => {
       setEnergyUnit("kj");
       const view = renderDashboard({ day, today: day, dayEntries, weekEntries: week, weekStatus: "", burnt });
-      expect(view.querySelector(".stat-energy .stat-note")?.textContent).toBe("of 6,276 kJ burnt so far");
+      expect(view.querySelector(".stat-energy .stat-note")?.textContent).toBe("of 6,276 kJ burnt");
       const rows = [...view.querySelectorAll(".chart.columns")[1]!.querySelectorAll("tbody tr")].map((r) => [...r.children].map((c) => c.textContent).at(-1));
-      expect(rows[6]).toBe("6,276 kJ (so far)");
+      expect(rows[6]).toBe("6,276 kJ");
       setEnergyUnit("kcal");
     });
 
     it("says what was burnt on a day with nothing logged", () => {
       const view = renderDashboard({ day, today: day, dayEntries: [], weekEntries: [], weekStatus: "", burnt });
-      expect(view.querySelector(".dash-day .empty")?.textContent).toBe("Nothing logged today yet. 1,500 kcal burnt so far.");
+      expect(view.querySelector(".dash-day .empty")?.textContent).toBe("Nothing logged today yet. 1,500 kcal burnt.");
     });
 
     it("leaves calories burnt out entirely without them, and says when they failed", () => {
@@ -240,7 +242,9 @@ describe("dashboard view", () => {
     it("sums the day up in a line of energy, a slim bar by meal and the grams of each macronutrient", () => {
       setEnergyUnit("kcal");
       const view = renderDaySummary({ day, today: day, dayEntries });
-      expect(view.querySelector(".day-energy")?.textContent).toBe("1,200 kcal eaten");
+      // Without calories burnt, the energy eaten is the figure that stands out.
+      expect(view.querySelector(".day-delta")?.textContent).toBe("1,200 kcal eaten");
+      expect(view.querySelector(".day-inout")).toBeNull();
       const bar = view.querySelector(".chart.segmented.compact")!;
       // No percentages or legend; the title and every figure are still in the accessible name.
       expect([...bar.querySelectorAll(".seg")].map((s) => s.textContent)).toEqual(["", ""]);
@@ -250,15 +254,25 @@ describe("dashboard view", () => {
       expect([...view.querySelectorAll(".day-macros li")].map((li) => li.textContent)).toEqual(["Protein 60 g", "Carbs 110 g", "Fat 40 g"]);
     });
 
-    it("sets the energy against what was burnt so far, with the marker on the bar", () => {
+    it("leads with the difference, with eaten and burnt beside it alike, and the marker on the bar", () => {
       const view = renderDaySummary({ day, today: day, dayEntries, burnt: new Map([[day, 1500]]) });
-      expect(view.querySelector(".day-energy")?.textContent).toBe("1,200 kcal of 1,500 kcal burnt so far");
+      expect(view.querySelector(".day-delta")?.textContent).toBe("300 kcal deficit");
+      expect([...view.querySelectorAll(".day-inout > div")].map((d) => d.textContent)).toEqual(["Eaten1,200 kcal", "Burnt1,500 kcal"]);
+      expect(view.textContent).not.toContain("so far");
       expect(view.querySelector<HTMLElement>(".seg-rest")?.style.flexGrow).toBe("300");
       expect(view.querySelector(".seg-marker")).not.toBeNull();
     });
 
+    it("says surplus when more was eaten than burnt, and even when they round to the same figure", () => {
+      expect(renderDaySummary({ day, today: day, dayEntries, burnt: new Map([[day, 1000]]) }).querySelector(".day-delta")?.textContent).toBe("200 kcal surplus");
+      expect(renderDaySummary({ day, today: day, dayEntries, burnt: new Map([[day, 1200.4]]) }).querySelector(".day-delta")?.textContent).toBe("Even");
+      setEnergyUnit("kj");
+      expect(renderDaySummary({ day, today: day, dayEntries, burnt: new Map([[day, 1500]]) }).querySelector(".day-delta")?.textContent).toBe("1,255 kJ deficit");
+      setEnergyUnit("kcal");
+    });
+
     it("says when nothing is logged or the day is loading", () => {
-      expect(renderDaySummary({ day, today: day, dayEntries: [], burnt: new Map([[day, 900]]) }).textContent).toBe("Nothing logged today yet. 900 kcal burnt so far.");
+      expect(renderDaySummary({ day, today: day, dayEntries: [], burnt: new Map([[day, 900]]) }).textContent).toBe("Nothing logged today yet. 900 kcal burnt.");
       expect(renderDaySummary({ day, today: "2026-11-20", dayEntries: [] }).textContent).toBe("Nothing logged on this day.");
       expect(renderDaySummary({ day, today: day, dayEntries: undefined }).textContent).toBe("Loading…");
       const failed = renderDaySummary({ day, today: day, dayEntries: undefined, dayStatus: "The day could not be loaded." });
