@@ -266,6 +266,13 @@ describe("dashboard view", () => {
     it("says surplus when more was eaten than burnt, and even when they round to the same figure", () => {
       expect(renderDaySummary({ day, today: day, dayEntries, burnt: new Map([[day, 1000]]) }).querySelector(".day-delta")?.textContent).toBe("200 kcal surplus");
       expect(renderDaySummary({ day, today: day, dayEntries, burnt: new Map([[day, 1200.4]]) }).querySelector(".day-delta")?.textContent).toBe("Even");
+      // Worked out from the figures as shown: 1,199.6 and 1,200.4 both show as 1,200, so they are even, not 1 apart.
+      const close = [{ ...dayEntries[0]!, profile: { energyKcal: 1199.6, nutrients: {} } }];
+      const view = renderDaySummary({ day, today: day, dayEntries: close, burnt: new Map([[day, 1200.4]]) });
+      expect([...view.querySelectorAll(".day-inout dd")].map((d) => d.textContent)).toEqual(["1,200 kcal", "1,200 kcal"]);
+      expect(view.querySelector(".day-delta")?.textContent).toBe("Even");
+      // 1,200.4 and 1,500.6 show as 1,200 and 1,501: the headline says 301, not the raw 300.2 rounded to 300.
+      expect(renderDaySummary({ day, today: day, dayEntries: [{ ...dayEntries[0]!, profile: { energyKcal: 1200.4, nutrients: {} } }], burnt: new Map([[day, 1500.6]]) }).querySelector(".day-delta")?.textContent).toBe("301 kcal deficit");
       setEnergyUnit("kj");
       expect(renderDaySummary({ day, today: day, dayEntries, burnt: new Map([[day, 1500]]) }).querySelector(".day-delta")?.textContent).toBe("1,255 kJ deficit");
       setEnergyUnit("kcal");

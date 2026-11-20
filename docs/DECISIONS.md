@@ -620,36 +620,36 @@ cards without their background and borders. The wash stays under 10%, so text ke
 colours stronger, weaker or gone.
 
 ### DR-46 Calories burnt, with an optional permission, are set against the energy eaten on the dashboard
-**Decision.** Sign-in also asks for `googlehealth.activity_and_fitness.readonly`, which the user may untick on
-Google's consent screen like the nutrition read scope (DR-04). With it, each week listing (DR-38) is joined by one
-`dailyRollUp` of `total-calories` over the same 7 days, today's window ending at the current local time (V13). The
-figures are drawn into the charts there are, not given a row of their own: under the day's energy, "of 2,300 kcal burnt"
-(first "burnt so far" for today; the owner found it unnecessary, 20 November 2026); on the bar of energy by meal, a marker where the calories burnt fall, with an
-outlined gap up to it while less was eaten, and the difference in the legend; on each day's energy column, a line at
-its calories burnt, dashed for today, with the figure in the tooltip and a Burnt column in the table. The week's summary
-adds the average burnt over the complete days recorded, leaving today out. Without the scope nothing is asked and the
-dashboard is as before, with a "Show calories burnt" link to sign in again and tick it (in the totals card beside the
-log since DR-47; first in the dashboard's note). A failed roll-up only adds a note under the week's summary.
-**Why.** Owner request (19 November 2026): pull the total calories burnt to compare calories in with calories out;
-the connection must be optional, and skipped when the user doesn't agree; calories burnt should inform the graphs and
-the dashboard rather than be a row; "burnt so far" for today, because the current day is the only one the user can
-still act on.
+**Decision.** Sign-in also asks for `googlehealth.activity_and_fitness.readonly`, which the user may untick on Google's
+consent screen like the nutrition read scope (DR-04). With it, each week listing (DR-38) is joined by one `dailyRollUp`
+of `total-calories` over the same 7 days, today's window ending at the current local time (V13). The figures are drawn
+into the charts there are, not given a row of their own: under the day's energy, "of 2,300 kcal burnt" (first "burnt so
+far" for today; the owner found it unnecessary, 20 November 2026); on the bar of energy by meal, a marker where the
+calories burnt fall, with an outlined gap up to it while less was eaten, and the difference in the legend; on each day's
+energy column, a line at its calories burnt, dashed for today, with the figure in the tooltip and a Burnt column in the
+table. The week's summary adds the average burnt over the complete days recorded, leaving today out. Without the scope
+nothing is asked and the dashboard is as before, with a "Show calories burnt" link to sign in again and tick it (in the
+totals card beside the log since DR-47; first in the dashboard's note). A failed roll-up only adds a note under the
+week's summary.
+**Why.** Owner request (19 November 2026): pull the total calories burnt to compare calories in with calories out; the
+connection must be optional, and skipped when the user doesn't agree; calories burnt should inform the graphs and the
+dashboard rather than be a row; "burnt so far" for today, because the current day is the only one the user can still act
+on.
 **Consequence.** One more request to Google Health per diary load, polling included, when the scope is granted. The
-OAuth consent screen's data access needs the new scope added (README). Today's figure lags behind the last device
-sync. The roll-up leaves out time a wearable was not worn; whether a day without one has a resting estimate is not
-known yet (V13). Wrist estimates of energy are rough, so a day's difference is a guide, not a measurement.
+OAuth consent screen's data access needs the new scope added (README). Today's figure lags behind the last device sync.
+The roll-up leaves out time a wearable was not worn; whether a day without one has a resting estimate is not known yet
+(V13). Wrist estimates of energy are rough, so a day's difference is a guide, not a measurement.
 **Reopen if.** V13's open points turn out otherwise (another scope, or today's figure projected to the day's end), the
 owner wants the time of the last sync shown, a target derived from the calories burnt, or a longer range than 14 days.
 
 ### DR-47 The day's totals sit beside the log, without making the page taller
-**Decision.** A totals card sits to the right of the log card (38% of the row, at least 270px), headed "Today's
-totals", "Yesterday's totals" or "Totals for Tue 17 Nov" after the day shown. It sums the day up in three lines: the
-difference between the calories burnt and the energy eaten as its strongest figure ("340 kcal deficit", "200 kcal
-surplus" or "Even"), with Eaten and Burnt beside it in the same type as each other (only the energy eaten, without
-DR-46's scope); a slim bar of energy by meal (no
-percentages or legend, every figure in its tooltips and accessible name), drawn up to the calories burnt with its marker;
-and the grams of protein, carbs and fat. Without the scope it has DR-46's "Show calories burnt" link, moved here from
-the dashboard's note. If the day could not be loaded it says so. The log card alone sets
+**Decision.** A totals card sits to the right of the log card (38% of the row, at least 270px), headed "Today's totals",
+"Yesterday's totals" or "Totals for Tue 17 Nov" after the day shown. It sums the day up in three lines: the difference
+between the calories burnt and the energy eaten as its strongest figure ("340 kcal deficit", "200 kcal surplus" or
+"Even"), with Eaten and Burnt beside it in the same type as each other (only the energy eaten, without DR-46's scope); a
+slim bar of energy by meal (no percentages or legend, every figure in its tooltips and accessible name), drawn up to the
+calories burnt with its marker; and the grams of protein, carbs and fat. Without the scope it has DR-46's "Show calories
+burnt" link, moved here from the dashboard's note. If the day could not be loaded it says so. The log card alone sets
 the row's height: the totals card is sized as if empty (`contain: size`), stretched to the row and scrolls only if its
 content ever overflows, which it does not at rest. Below 720px for the row, on a phone or beside the open chat, it goes
 under the log. The Dashboard card below keeps the day in full and the week (DR-38).

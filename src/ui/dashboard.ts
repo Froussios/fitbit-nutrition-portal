@@ -182,13 +182,14 @@ export function dayTotalsHeading(day: string, today: string): string {
 }
 
 /**
- * "340 kcal deficit" when more was burnt than eaten, "200 kcal surplus" when less, or "Even" when they round to the
- * same figure.
+ * "340 kcal deficit" when more was burnt than eaten, "200 kcal surplus" when less, or "Even" when both show the same
+ * figure.
  */
 function balance(eatenKcal: number, burntKcal: number): HTMLElement {
-  const gap = burntKcal - eatenKcal;
-  if (fmtEnergy(Math.abs(gap)) === "0") return el("p", { class: "day-delta" }, el("strong", {}, "Even"));
-  return el("p", { class: "day-delta" }, el("strong", {}, energy(Math.abs(gap))), gap > 0 ? " deficit" : " surplus");
+  // From the figures as shown beside it, in the chosen unit, so that it is always Burnt − Eaten as the reader sees them.
+  const gap = Math.round(energyValue(burntKcal)) - Math.round(energyValue(eatenKcal));
+  if (gap === 0) return el("p", { class: "day-delta" }, el("strong", {}, "Even"));
+  return el("p", { class: "day-delta" }, el("strong", {}, energyShown(Math.abs(gap))), gap > 0 ? " deficit" : " surplus");
 }
 
 /**
