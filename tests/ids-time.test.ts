@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { copiedEntryId, entryStep, ID_PATTERN, idFromName, newEntryId, parseEntryId } from "../src/core/ids";
-import { addCivilDays, civilDate, civilDateOf, civilDateTime, dayLabel, formatCivilDate, nextCivilDate, nutritionDayFilter, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../src/core/time";
+import { addCivilDays, civilDate, civilDateOf, civilDateTime, dayLabel, formatCivilDate, formatShortDate, nextCivilDate, nutritionDayFilter, onCivilDate, parseDurationSeconds, utcOffsetDuration } from "../src/core/time";
 
 describe("entry ids", () => {
   const now = Date.UTC(2026, 10, 1, 8, 30);
@@ -104,6 +104,13 @@ describe("time helpers", () => {
     expect(formatCivilDate("2026-11-12")).toBe("Thursday, 12 Nov 2026");
     expect(formatCivilDate("2024-02-29")).toBe("Thursday, 29 Feb 2024");
     expect(formatCivilDate("2027-01-03")).toBe("Sunday, 3 Jan 2027");
+  });
+
+  it("writes a civil date in the locale's short form, on that date whatever the time zone", () => {
+    expect(formatShortDate("2026-11-09", "en-GB")).toBe("09/11/2026");
+    expect(formatShortDate("2026-11-09", "en-US")).toBe("11/09/2026");
+    expect(formatShortDate("2026-11-09", "de-DE")).toBe("09.11.2026");
+    expect(formatShortDate("2026-01-01", "en-GB")).toBe("01/01/2026");
   });
 
   it("builds the day filter on civil start time", () => {

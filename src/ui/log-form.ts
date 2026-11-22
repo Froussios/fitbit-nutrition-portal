@@ -4,7 +4,7 @@ import { nutrientsForAmount, type FoodItem } from "../core/food";
 import { kjToKcal } from "../core/nutrients";
 import { byName, tooManyIngredients, type SavedMeal } from "../core/meal";
 import { batchProfile, FRACTION_EPSILON, leftOf, parseFraction, portionProfile, type Prep, type PrepIngredient } from "../core/prep";
-import { civilDate, dayLabel, onCivilDate, toDateTimeLocalValue } from "../core/time";
+import { addCivilDays, civilDate, formatShortDate, onCivilDate, toDateTimeLocalValue } from "../core/time";
 import type { BaseUnit } from "../core/units";
 import { MEAL_TYPES, type LogDraft } from "../health/mapping";
 import type { MealType } from "../health/types";
@@ -366,17 +366,23 @@ export function createLogForm(
     return Number.isNaN(when.getTime()) ? when : onCivilDate(civilDate(new Date()), when);
   };
 
-  /** Marks the log button when the entry would go on another day than today: the viewed day, or a time typed for another. */
+  /**
+   * Marks the log button when the entry would go on another day than today (the viewed day, or a time typed for
+   * another) and names that day briefly, beside a button for today: "Log for 09/11/2026" and "Log for today".
+   */
   const syncDay = () => {
     const when = chosenTime();
     const today = civilDate(new Date());
     const day = Number.isNaN(when.getTime()) ? today : civilDate(when);
     const other = day !== today;
-    const label = dayLabel(day, today);
+    // "entry" says nothing once the button names a day; a portion or a meal still says what is logged.
+    const label = prep ? "Log portion" : meal ? "Log meal" : other ? "Log" : "Log entry";
     submit.classList.toggle("other-day", other);
+    submitLabel.textContent = label;
     submitDay.hidden = !other;
-    submitDay.textContent = other ? ` for ${label === "Yesterday" ? "yesterday" : label}` : "";
+    submitDay.textContent = other ? ` for ${day === addCivilDays(today, -1) ? "yesterday" : formatShortDate(day)}` : "";
     submitToday.hidden = !other;
+    submitToday.textContent = `${label} for today`;
   };
   time.addEventListener("input", () => {
     timeTouched = true;
@@ -400,7 +406,6 @@ export function createLogForm(
     foodFields.hidden = Boolean(prep || meal);
     prepFields.hidden = prepButtons.hidden = !prep;
     mealFields.hidden = !meal;
-    submitLabel.textContent = submitToday.textContent = prep ? "Log portion" : meal ? "Log meal" : "Log entry";
     syncDay();
     renderOnHand(hasChoice);
     syncSubmit();
