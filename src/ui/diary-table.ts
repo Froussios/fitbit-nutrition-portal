@@ -67,7 +67,7 @@ function repeatIcon(): SVGElement {
   const path = document.createElementNS(SVG_NS, "path");
   path.setAttribute("fill", "none");
   path.setAttribute("stroke", "currentColor");
-  path.setAttribute("stroke-width", "1.5");
+  path.setAttribute("stroke-width", "1.75");
   path.setAttribute("stroke-linecap", "round");
   path.setAttribute("stroke-linejoin", "round");
   path.setAttribute("d", "M13.75 8A5.75 5.75 0 1 1 11.6 3.5M12 1.25V3.9H9.35M8 5.75v4.5M5.75 8h4.5");
