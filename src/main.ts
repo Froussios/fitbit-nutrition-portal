@@ -297,8 +297,11 @@ class App {
     });
     // Hiding the chat ends it, so the model is not left holding the diary; showing it puts its buttons back.
     this.chatSetting.onChange(() => {
+      // Closing an open chat moves focus to its header button, which the redraw then removes: the tickbox gets it back.
+      const focused = document.activeElement;
       if (!this.chatSetting.isOn()) this.chat.reset();
       this.render();
+      if (focused instanceof HTMLElement && focused.isConnected && document.activeElement !== focused) focused.focus();
     });
     // The ID token, never the access token: it proves who the user is and can't use the diary (DR-24).
     this.prepApi = new PrepApi(new URL("api/", FOOD_INDEX_URL).href, () => this.auth.getIdToken());
