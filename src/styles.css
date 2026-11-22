@@ -581,9 +581,9 @@ button.day-pick svg { display: block; width: 1em; height: 1em; }
  * The day's totals beside the log (DR-47, DR-49). The log card alone sets the row's height: the totals card is sized as
  * if empty (a size container) and stretched to the row, so it never makes the page taller. What it shows follows the
  * height it is given: at rest the difference, a small ring and the macronutrients; taller, as when a food is picked, a
- * larger ring, then the ring's legend, then the week. It scrolls in the card if it ever overflows. Below 720px for the
- * row (a phone, or beside the open chat) the log takes the whole width and the summary goes under it, with the legend
- * but not the week, which the dashboard has.
+ * larger ring, then the ring's legend, then the week, whose columns stop growing at 160px. It scrolls in the card if
+ * it ever overflows. Below 720px for the row (a phone, or beside the open chat) the log takes the whole width and the
+ * summary goes under it, with the legend but not the week, which the dashboard has.
  */
 .log-area { container: log-area / inline-size; }
 .log-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(270px, 38%); gap: 16px; margin-bottom: 16px; }
@@ -633,7 +633,8 @@ button.day-pick svg { display: block; width: 1em; height: 1em; }
 .day-week { flex: 1 1 auto; min-height: 0; display: none; flex-direction: column; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
 .day-week-head { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 2px; font-size: 0.8rem; }
 .day-week-head span { color: var(--muted); text-align: right; }
-.day-week-days { flex: 1 1 auto; min-height: 0; list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding: 0; margin: 0; }
+/* No taller than this, however long the log card is, as with a saved meal's ingredients: the space left is under it. */
+.day-week-days { flex: 1 1 auto; min-height: 0; max-height: 160px; list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding: 0; margin: 0; }
 .day-week-day { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 0; font-size: 0.72rem; color: var(--muted); }
 .day-week-day.current { color: var(--text); font-weight: 700; }
 /* The top margin leaves room for a difference over the tallest column. */
