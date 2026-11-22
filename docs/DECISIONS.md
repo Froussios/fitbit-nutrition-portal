@@ -721,6 +721,9 @@ line); it never scrolls in the heights checked. The week is drawn twice on a wid
 dashboard. A meal under 1% of the ring is a sliver.
 **Reopen if.** The log card's height at rest changes enough that the card scrolls or leaves space again, the owner
 wants the week or the legend at other heights, or targets are added (DR-38).
+**Amended** (22 November 2026, owner request): the week's columns grow with the card only up to 160px. A long log card,
+as with a saved meal's ingredients, stretched them over the whole height; the space past 160px is now left empty under
+the week.
 
 ### DR-50 The chat is hidden behind its own setting, off by default, and is likely to be removed
 **Decision.** A "Show the chat (experimental)" tickbox in the settings panel (DR-40), kept on each device and off by
@@ -734,4 +737,3 @@ enough, so it stays as it is.
 **Consequence.** Nobody sees the chat unless they ask for it. Its code stays, so it can come back or be removed cleanly
 in one change.
 **Reopen if.** The chat is removed, or Chrome's built-in model becomes capable enough to bring it back by default.
-
