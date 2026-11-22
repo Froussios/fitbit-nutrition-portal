@@ -59,18 +59,18 @@ function pencilIcon(): SVGElement {
   return svg;
 }
 
-/** Two sheets, the front one with a plus: another of this entry. */
+/** A circling arrow around a plus: one more of this entry (the plus keeps it from reading as reload). */
 function repeatIcon(): SVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 16 16");
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS(SVG_NS, "path");
-  path.setAttribute("fill", "currentColor");
-  path.setAttribute("fill-rule", "evenodd");
-  path.setAttribute(
-    "d",
-    "M2.5 1A1.5 1.5 0 0 0 1 2.5v7A1.5 1.5 0 0 0 2.5 11H4V9.5H2.5v-7h7V4H11V2.5A1.5 1.5 0 0 0 9.5 1ZM6.5 5A1.5 1.5 0 0 0 5 6.5v7A1.5 1.5 0 0 0 6.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 13.5 5Zm2.75 2h1.5v2.25H13v1.5h-2.25V13h-1.5v-2.25H7v-1.5h2.25Z",
-  );
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.5");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  path.setAttribute("d", "M13.75 8A5.75 5.75 0 1 1 11.6 3.5M12 1.25V3.9H9.35M8 5.75v4.5M5.75 8h4.5");
   svg.append(path);
   return svg;
 }
