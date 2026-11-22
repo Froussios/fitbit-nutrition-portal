@@ -4,6 +4,7 @@ import type { FoodItem } from "../src/core/food";
 import type { SavedMeal } from "../src/core/meal";
 import type { Prep, PrepIngredient } from "../src/core/prep";
 import { LocalFoodCatalog } from "../src/food/catalog";
+import { formatShortDate } from "../src/core/time";
 import { createLogForm, MAX_MEALS_ON_HAND, type LogFormPrepActions, type LogMeal } from "../src/ui/log-form";
 import { rescaleSaved } from "../src/ui/ingredient-rows";
 import { createPrepBuilder } from "../src/ui/prep-builder";
@@ -141,7 +142,7 @@ describe("log form", () => {
     const time = $<HTMLInputElement>("#time");
     time.value = "2026-11-09T08:30";
     time.dispatchEvent(new Event("input"));
-    expect(submit.textContent).toBe("Log entry for Monday, 9 Nov 2026");
+    expect(submit.textContent).toBe(`Log for ${formatShortDate("2026-11-09")}`);
     expect(submit.classList.contains("other-day")).toBe(true);
     time.value = "2026-11-11T08:30";
     time.dispatchEvent(new Event("input"));
@@ -157,6 +158,8 @@ describe("log form", () => {
     vi.setSystemTime(new Date(2026, 10, 12, 0, 5));
     form.element.dispatchEvent(new FocusEvent("focusin"));
     expect(submit.textContent).toBe("Log portion for yesterday");
+    const today = [...form.element.querySelectorAll<HTMLButtonElement>(".actions button.primary")].find((b) => b.type === "button")!;
+    expect(today.textContent).toBe("Log portion for today");
     expect(submit.classList.contains("other-day")).toBe(true);
   });
 
@@ -175,7 +178,7 @@ describe("log form", () => {
     time.value = "2026-11-09T08:30";
     time.dispatchEvent(new Event("input"));
     expect(today.hidden).toBe(false);
-    expect(today.textContent).toBe("Log entry");
+    expect(today.textContent).toBe("Log for today");
     today.click();
     await vi.advanceTimersByTimeAsync(0);
     expect((onSubmit.mock.calls[0]![0] as { time: Date }).time).toEqual(new Date(2026, 10, 11, 8, 30));
@@ -209,7 +212,7 @@ describe("log form", () => {
     time.value = "2026-11-10T12:15";
     time.dispatchEvent(new Event("input"));
     const today = [...form.element.querySelectorAll<HTMLButtonElement>(".actions button.primary")].find((b) => b.type === "button")!;
-    expect(today.textContent).toBe("Log portion");
+    expect(today.textContent).toBe("Log portion for today");
     today.click();
     await vi.advanceTimersByTimeAsync(0);
     expect(actions.eat).toHaveBeenCalledWith(PREPS[0], 1 / 6, undefined, new Date(2026, 10, 11, 12, 15));
