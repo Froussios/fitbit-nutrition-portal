@@ -107,10 +107,10 @@ describe("time helpers", () => {
   });
 
   it("writes a civil date in the locale's short form, on that date whatever the time zone", () => {
-    expect(formatShortDate("2026-11-09", "en-GB")).toBe("09/11/2026");
-    expect(formatShortDate("2026-11-09", "en-US")).toBe("11/09/2026");
-    expect(formatShortDate("2026-11-09", "de-DE")).toBe("09.11.2026");
-    expect(formatShortDate("2026-01-01", "en-GB")).toBe("01/01/2026");
+    expect(formatShortDate("2026-11-09", "en-GB")).toBe("9 Nov 2026");
+    expect(formatShortDate("2026-11-09", "en-US")).toBe("Nov 9, 2026");
+    expect(formatShortDate("2026-11-09", "de-DE")).toBe("9. Nov. 2026");
+    expect(formatShortDate("2026-01-01", "en-GB")).toBe("1 Jan 2026");
   });
 
   it("builds the day filter on civil start time", () => {

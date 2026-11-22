@@ -62,10 +62,13 @@ export function formatCivilDate(date: string): string {
   return `${WEEKDAYS[weekday]}, ${d} ${MONTHS[m - 1]} ${y}`;
 }
 
-/** Civil date `date` (YYYY-MM-DD) in the locale's short numeric form: 09/11/2026 in the UK, 11/09/2026 in the US. */
+/**
+ * Civil date `date` (YYYY-MM-DD) in the locale's short form, with the month abbreviated so day and month can't be
+ * mistaken for each other: "9 Nov 2026" in the UK, "Nov 9, 2026" in the US, "9. Nov. 2026" in Germany.
+ */
 export function formatShortDate(date: string, locales?: Intl.LocalesArgument): string {
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  return new Intl.DateTimeFormat(locales, { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)));
+  return new Intl.DateTimeFormat(locales, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)));
 }
 
 /** A heading for civil date `date` seen on `today`: "Today", "Yesterday", or the date written out (`formatCivilDate`). */
