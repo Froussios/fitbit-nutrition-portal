@@ -718,3 +718,6 @@ line); it never scrolls in the heights checked. The week is drawn twice on a wid
 dashboard. A meal under 1% of the ring is a sliver.
 **Reopen if.** The log card's height at rest changes enough that the card scrolls or leaves space again, the owner
 wants the week or the legend at other heights, or targets are added (DR-38).
+**Amended** (22 November 2026, owner request): the week's columns grow with the card only up to 160px. A long log card,
+as with a saved meal's ingredients, stretched them over the whole height; the space past 160px is now left empty under
+the week.

@@ -166,8 +166,10 @@ eaten and the calories burnt, with both beside it, a ring of energy by meal draw
 (`ringChart`), and each macronutrient's grams and share of the energy. It is redrawn with the dashboard from the same
 figures, the week's included. The log card alone sets the height of their row: the totals card is a CSS size container
 (`container: day-card / size`) stretched to the row, so it never makes the page taller, and container queries on its
-height show a larger ring and the ring's legend from 250px, and the 7 days ending on the day from 340px. Below 720px for
-the row it goes under the log, with the legend but not the week (DR-47, DR-49).
+height show a larger ring and the ring's legend from 250px, and the 7 days ending on the day from 340px. The week's
+columns grow with the card up to 160px and no further, so a long log card, as with a saved meal's ingredients, leaves
+space under them rather than stretching them. Below 720px for the row it goes under the log, with the legend but not the
+week (DR-47, DR-49).
 
 Food search also reads the newest 300 of this app's own entries (`self-sources`), once per page load in the
 background, to favour foods logged before ([FOOD_SEARCH.md](FOOD_SEARCH.md#14-foods-logged-before)).
