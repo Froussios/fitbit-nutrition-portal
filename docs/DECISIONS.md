@@ -526,6 +526,7 @@ not available here or could not start, show only while the panel is open.
 **Reopen if.** The settings outgrow a small panel, or some need explaining at length: then a settings page.
 
 ### DR-41 A chat beside the diary, run by the on-device model, proposes changes for the user to accept
+Revised by DR-50: the chat is hidden unless its own setting is ticked, and is likely to be removed.
 **Decision.** A Chat button in the page header opens a panel on the right of the page. A speech-bubble button on each
 diary row opens it on that entry: a new chat, with the model told about that entry first. The chat uses Chrome's
 built-in model (DR-26), only while the AI setting is on and the model is ready, and turning the setting off ends the
@@ -720,3 +721,17 @@ line); it never scrolls in the heights checked. The week is drawn twice on a wid
 dashboard. A meal under 1% of the ring is a sliver.
 **Reopen if.** The log card's height at rest changes enough that the card scrolls or leaves space again, the owner
 wants the week or the legend at other heights, or targets are added (DR-38).
+
+### DR-50 The chat is hidden behind its own setting, off by default, and is likely to be removed
+**Decision.** A "Show the chat (experimental)" tickbox in the settings panel (DR-40), kept on each device and off by
+default, shows the chat (DR-41): its Chat button in the header and its button on each diary row. Unticking it ends any
+chat and hides both. The chat still needs the AI setting (DR-26) and a ready model as well. The AI setting is
+unchanged: with the chat hidden, the model still reads the amounts the rules refuse. Where the model can't run, the
+tickbox is disabled.
+**Why.** Owner decision (22 November 2026): the built-in model is not capable enough for a chat, which will probably be
+deprecated; until then it should be behind a setting. Reading amounts is a much smaller task, and the model does it well
+enough, so it stays as it is.
+**Consequence.** Nobody sees the chat unless they ask for it. Its code stays, so it can come back or be removed cleanly
+in one change.
+**Reopen if.** The chat is removed, or Chrome's built-in model becomes capable enough to bring it back by default.
+
