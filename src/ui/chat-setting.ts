@@ -8,7 +8,7 @@ const ABOUT = "Shows the chat beside the diary (DR-41). It is experimental and m
 export interface ChatSetting {
   /** The tickbox, for the settings panel. Kept for the life of the page. */
   readonly element: HTMLElement;
-  /** Whether the user has asked for the chat. Off until they do (DR-50). */
+  /** Whether the user has asked for the chat, and it can run here. Off until they ask (DR-50). */
   isOn(): boolean;
   /** `listener` runs when the user ticks or unticks it. */
   onChange(listener: () => void): void;
@@ -55,7 +55,8 @@ export function createChatSetting(ai: { getState(): AiState; onChange(listener: 
 
   return {
     element: el("div", { class: "ai-control" }, label),
-    isOn: () => on,
+    // A choice saved where the model could run means nothing where it can't, as the disabled tickbox shows.
+    isOn: () => on && ai.getState().kind !== "unsupported",
     onChange(listener) {
       listeners.push(listener);
     },

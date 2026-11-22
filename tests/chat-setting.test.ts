@@ -57,6 +57,14 @@ describe("chat setting", () => {
     expect(box(setting.element).disabled).toBe(true);
   });
 
+  it("counts as off where the model can't run, even if it was saved as on", () => {
+    const state = ai("ready");
+    const setting = createChatSetting(state, memoryStorage({ "foodDiary.chat": "on" }));
+    expect(setting.isOn()).toBe(true);
+    state.set("unsupported");
+    expect(setting.isOn()).toBe(false);
+  });
+
   it("works without storage, for the page's life", () => {
     const throwing = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
     const setting = createChatSetting(ai("ready"), throwing);
