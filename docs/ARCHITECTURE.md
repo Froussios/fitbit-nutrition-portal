@@ -304,8 +304,9 @@ meals(user_id, id, name, ingredients, created_at, updated_at)   -- PRIMARY KEY (
 ### 4.7 Chat
 
 DR-41. The chat is a panel on the right of the page (`src/ui/chat-panel.ts`), opened from the header, or from a diary
-row's speech-bubble button for a new chat about that entry. It uses Chrome's built-in model only while the AI setting
-is on and the model is ready.
+row's speech-bubble button for a new chat about that entry. Both are hidden unless "Show the chat (experimental)" is
+ticked in the settings (`src/ui/chat-setting.ts`, DR-50), which is off by default. It uses Chrome's built-in model only
+while the AI setting is also on and the model is ready.
 
 * **Turns** (`src/ai/chat-agent.ts`). Each user message starts a loop: the model answers with one action as JSON,
   constrained by `stepSchema` (`src/ai/chat-protocol.ts`), the app runs it and sends back the result as text, until the

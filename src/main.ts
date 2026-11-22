@@ -25,6 +25,7 @@ import { createLogForm, type LogForm, type PrepOutcome } from "./ui/log-form";
 import { createEntryCard, type EntryCard } from "./ui/entry-card";
 import { amountAi } from "./ai/amount-ai";
 import { createAiSetting } from "./ui/ai-setting";
+import { createChatSetting } from "./ui/chat-setting";
 import { createRowEditor, type RowEditor } from "./ui/row-editor";
 import { createDebugPanel } from "./ui/debug-panel";
 import { createSettingsMenu } from "./ui/settings-menu";
@@ -153,6 +154,8 @@ class App {
   /** The diary row being edited. Its controls outlive redraws of the table, so a refresh keeps what the user typed. */
   private editor?: RowEditor;
   private readonly aiSetting = createAiSetting(amountAi);
+  /** Whether the chat is shown at all (DR-50). Off by default, and separate from the AI setting, which also reads amounts. */
+  private readonly chatSetting = createChatSetting(amountAi, typeof localStorage === "undefined" ? undefined : localStorage);
   /** The chat on the right of the page (DR-41). Kept for the life of the page, outside the redrawn root. */
   private readonly chat: ChatPanel;
   /** The gear in the header and its panel of settings (DR-40). */
@@ -291,6 +294,14 @@ class App {
       if (chatAvailable === this.chat.available) return;
       chatAvailable = this.chat.available;
       this.renderDiary();
+    });
+    // Hiding the chat ends it, so the model is not left holding the diary; showing it puts its buttons back.
+    this.chatSetting.onChange(() => {
+      // Closing an open chat moves focus to its header button, which the redraw then removes: the tickbox gets it back.
+      const focused = document.activeElement;
+      if (!this.chatSetting.isOn()) this.chat.reset();
+      this.render();
+      if (focused instanceof HTMLElement && focused.isConnected && document.activeElement !== focused) focused.focus();
     });
     // The ID token, never the access token: it proves who the user is and can't use the diary (DR-24).
     this.prepApi = new PrepApi(new URL("api/", FOOD_INDEX_URL).href, () => this.auth.getIdToken());
@@ -1594,6 +1605,7 @@ class App {
     this.settings.setItems([
       signedIn && (this.energyControl ??= this.energySetting()),
       signedIn && this.aiSetting,
+      signedIn && this.chatSetting.element,
       !isClientIdBuiltIn() && (this.clientIdLink ??= el("button", { type: "button", class: "link", onclick: () => (this.settings.close(), renderSetup(true)) }, "OAuth client ID")),
     ]);
     const header = el(
@@ -1603,7 +1615,7 @@ class App {
       el(
         "div",
         { class: "account" },
-        signedIn && this.ready && this.chat.toggle,
+        signedIn && this.ready && this.chatSetting.isOn() && this.chat.toggle,
         signedIn && el("button", { type: "button", onclick: () => this.signOut() }, "Sign out"),
         this.settings.element,
       ),
@@ -1793,7 +1805,7 @@ class App {
           onRepeat: (e) => void this.repeatToday(e),
           today: day === today,
           onIncrement: (e) => void this.increment(e),
-          ...(this.chat.available ? { onAsk: (e: DiaryEntry) => this.chat.open(e) } : {}),
+          ...(this.chatSetting.isOn() && this.chat.available ? { onAsk: (e: DiaryEntry) => this.chat.open(e) } : {}),
         }),
     );
     this.diary.querySelector(".table-wrap")?.scrollTo({ left: scrollLeft });
