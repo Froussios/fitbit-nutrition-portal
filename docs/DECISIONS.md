@@ -378,11 +378,12 @@ beyond that.
 
 ### DR-33 The log button names a day other than today, and an edit can move an entry to another day
 **Decision.** When an entry would go on another day than today (the day shown, or a time typed for another day), the log
-button turns amber and names the day: "Log for yesterday", "Log meal for 16/11/2026". Beside it, "Log for today" ("Log
+button turns amber and names the day: "Log for yesterday", "Log meal for 16 Nov 2026". Beside it, "Log for today" ("Log
 portion for today", "Log meal for today") logs the entry for today instead, at the same clock time, which can be later
-than now, as a time typed for today can (owner request, 20 November 2026). The day is the locale's short numeric date
-(16/11/2026 in the UK, 11/16/2026 in the US): the button only has to signal that it is not today, and "entry" is dropped
-from both buttons as the day says more (owner request, 22 November 2026). The row editor
+than now, as a time typed for today can (owner request, 20 November 2026). The day is the locale's short date with the
+month abbreviated (16 Nov 2026 in the UK, Nov 16, 2026 in the US): the button only has to signal that it is not today,
+but an all-numeric date reads either way round, and "entry" is dropped from both buttons as the day says more (owner
+request, 22 November 2026). The row editor
 (DR-22) has a date field under the meal, up to today. A new day keeps the entry's local clock time and length, with the
 local UTC offsets of the new day, so a move across a daylight saving change keeps the clock time; the clock time itself
 still cannot be edited. A moved entry leaves the day shown, and a note under the heading says where it went, with a

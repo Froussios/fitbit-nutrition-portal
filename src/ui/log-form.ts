@@ -368,7 +368,7 @@ export function createLogForm(
 
   /**
    * Marks the log button when the entry would go on another day than today (the viewed day, or a time typed for
-   * another) and names that day briefly, beside a button for today: "Log for 09/11/2026" and "Log for today".
+   * another) and names that day briefly, beside a button for today: "Log for 9 Nov 2026" and "Log for today".
    */
   const syncDay = () => {
     const when = chosenTime();
